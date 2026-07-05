@@ -1,4 +1,5 @@
 import { Hero } from '@/components/Hero'
+import { CompatibleWith } from '@/components/CompatibleWith'
 import { WorkspacePreview } from '@/components/WorkspacePreview'
 import { Features } from '@/components/Features'
 import { UseCases } from '@/components/UseCases'
@@ -9,6 +10,7 @@ export function LandingPage() {
   return (
     <>
       <Hero />
+      <CompatibleWith />
       <WorkspacePreview />
       <Features />
       <UseCases />

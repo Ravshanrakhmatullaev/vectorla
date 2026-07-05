@@ -104,12 +104,23 @@ export interface Translation {
     badge: string
     title: string
     description: string
-    startVectorizing: string
-    viewDemo: string
+    primaryCta: string
+    secondaryCta: string
+    rating: string
+    dragDropTitle: string
+    dragDropSubtitle: string
+    browseFiles: string
+    workflow: {
+      upload: string
+      trace: string
+      export: string
+    }
     original: string
     vectorized: string
     dragHint: string
-    uploadImage: string
+  }
+  compatibleWith: {
+    title: string
   }
   trustBadges: Record<TrustBadgeId, string>
   workspace: {
@@ -182,12 +193,23 @@ export const translations: Record<Language, Translation> = {
       title: 'Transform any image into perfect vectors.',
       description:
         'AI-powered vectorization built for designers, print shops, CNC, laser cutting, stickers, logos and production-ready graphics.',
-      startVectorizing: 'Start Vectorizing',
-      viewDemo: 'View Demo',
+      primaryCta: 'Upload Image',
+      secondaryCta: 'Watch Demo',
+      rating: 'Rated 4.9/5 by 2,000+ creators',
+      dragDropTitle: 'Drag & drop your image',
+      dragDropSubtitle: 'or click to browse — PNG, JPG, SVG up to 10MB',
+      browseFiles: 'Browse files',
+      workflow: {
+        upload: 'Upload',
+        trace: 'Trace',
+        export: 'Export',
+      },
       original: 'Original',
       vectorized: 'Vectorized',
       dragHint: 'Drag the handle to compare — upload your own image to try it live.',
-      uploadImage: 'Upload an image',
+    },
+    compatibleWith: {
+      title: 'Compatible with',
     },
     trustBadges: {
       browserBased: 'Browser-based',
@@ -457,12 +479,23 @@ export const translations: Record<Language, Translation> = {
       title: "Har qanday tasvirni mukammal vektorga aylantiring.",
       description:
         "Dizaynerlar, bosmaxonalar, CNC, lazer kesish, stikerlar, logotiplar va ishlab chiqarishga tayyor grafikalar uchun AI asosidagi vektorlashtirish.",
-      startVectorizing: 'Vektorlashtirishni boshlash',
-      viewDemo: "Demo ko'rish",
+      primaryCta: 'Rasm yuklash',
+      secondaryCta: "Demoni ko'rish",
+      rating: "2,000+ ijodkor tomonidan 4.9/5 baholangan",
+      dragDropTitle: 'Rasmingizni shu yerga tashlang',
+      dragDropSubtitle: "yoki tanlash uchun bosing — PNG, JPG, SVG, 10MB gacha",
+      browseFiles: 'Fayl tanlash',
+      workflow: {
+        upload: 'Yuklash',
+        trace: 'Chizish',
+        export: 'Eksport',
+      },
       original: 'Original',
       vectorized: 'Vektorlashtirilgan',
       dragHint: "Solishtirish uchun dastakni suring — jonli sinab ko'rish uchun o'z tasviringizni yuklang.",
-      uploadImage: 'Rasm yuklash',
+    },
+    compatibleWith: {
+      title: 'Bilan mos keladi',
     },
     trustBadges: {
       browserBased: 'Brauzer orqali',
@@ -742,13 +775,24 @@ export const translations: Record<Language, Translation> = {
       title: 'Превратите любое изображение в идеальный вектор.',
       description:
         'Векторизация на основе ИИ для дизайнеров, типографий, ЧПУ, лазерной резки, стикеров, логотипов и графики, готовой к печати.',
-      startVectorizing: 'Начать векторизацию',
-      viewDemo: 'Посмотреть демо',
+      primaryCta: 'Загрузить изображение',
+      secondaryCta: 'Смотреть демо',
+      rating: 'Оценка 4,9/5 от 2 000+ авторов',
+      dragDropTitle: 'Перетащите изображение сюда',
+      dragDropSubtitle: 'или нажмите, чтобы выбрать файл — PNG, JPG, SVG до 10 МБ',
+      browseFiles: 'Выбрать файл',
+      workflow: {
+        upload: 'Загрузка',
+        trace: 'Трассировка',
+        export: 'Экспорт',
+      },
       original: 'Оригинал',
       vectorized: 'Вектор',
       dragHint:
         'Перетащите ползунок для сравнения — загрузите своё изображение, чтобы попробовать вживую.',
-      uploadImage: 'Загрузить изображение',
+    },
+    compatibleWith: {
+      title: 'Совместимо с',
     },
     trustBadges: {
       browserBased: 'Работает в браузере',
