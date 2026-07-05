@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="mask-icon" href="/favicon.svg" color="#6D28D9" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#6D28D9" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0b0a10" />
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('vectorla-theme');
+          var theme =
+            stored === 'light' || stored === 'dark'
+              ? stored
+              : window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light';
+          document.documentElement.setAttribute('data-theme', theme);
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      })();
+    </script>
+
+    <title>Vectorla — AI Print-Ready Vector Platform</title>
+    <meta
+      name="description"
+      content="Vectorla converts raster images into clean, production-ready vector files for designers, print shops, advertising agencies, CNC/laser users, sticker makers, and branding companies."
+    />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Vectorla" />
+    <meta property="og:title" content="Vectorla — AI Print-Ready Vector Platform" />
+    <meta
+      property="og:description"
+      content="Transform any image into perfect, production-ready vectors. Built for designers, print shops, CNC, laser cutting, and stickers."
+    />
+    <meta property="og:url" content="https://vectorla.app" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Vectorla — AI Print-Ready Vector Platform" />
+    <meta
+      name="twitter:description"
+      content="Transform any image into perfect, production-ready vectors."
+    />
+
+    <link rel="canonical" href="https://vectorla.app" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "name": "Vectorla — AI Print-Ready Vector Platform",
+  "short_name": "Vectorla",
+  "description": "Convert raster images into clean, production-ready vector files for designers, print shops, CNC/laser users, and sticker makers.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#6D28D9",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
