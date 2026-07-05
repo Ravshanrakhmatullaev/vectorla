@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { UploadCloud, Play } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { trustBadges } from '@/data/trustBadges'
+import { useLanguage } from '@/lib/language'
 
 /** Illustrative mark used only for the before/after demo — not a real upload yet. */
 function DemoMark({ crisp }: { crisp: boolean }) {
@@ -35,6 +36,7 @@ export function Hero() {
   const [splitPct, setSplitPct] = useState(52)
   const containerRef = useRef<HTMLDivElement>(null)
   const draggingRef = useRef(false)
+  const { t } = useLanguage()
 
   function updateFromClientX(clientX: number) {
     const el = containerRef.current
@@ -55,26 +57,25 @@ export function Hero() {
       <div className="mx-auto max-w-3xl text-center">
         <span className="mb-5 inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-subtle)] px-3.5 py-1.5 text-xs font-semibold text-[var(--ink-muted)]">
           <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
-          AI Print-Ready Vector Platform
+          {t.hero.badge}
         </span>
 
         <h1 className="font-[family-name:var(--font-display)] text-4xl font-bold tracking-tight text-[var(--ink)] sm:text-6xl">
-          Transform any image into perfect vectors.
+          {t.hero.title}
         </h1>
 
         <p className="mx-auto mt-5 max-w-xl text-base text-[var(--ink-muted)] sm:text-lg">
-          AI-powered vectorization built for designers, print shops, CNC, laser cutting,
-          stickers, logos and production-ready graphics.
+          {t.hero.description}
         </p>
 
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <Button size="lg">
             <UploadCloud size={18} />
-            Start Vectorizing
+            {t.hero.startVectorizing}
           </Button>
           <Button variant="secondary" size="lg">
             <Play size={16} />
-            View Demo
+            {t.hero.viewDemo}
           </Button>
         </div>
       </div>
@@ -133,20 +134,18 @@ export function Hero() {
             </div>
 
             <span className="absolute left-3 top-3 rounded-md bg-black/55 px-2 py-1 text-[11px] font-medium text-white">
-              Original
+              {t.hero.original}
             </span>
             <span className="absolute right-3 top-3 rounded-md bg-black/55 px-2 py-1 text-[11px] font-medium text-white">
-              Vectorized
+              {t.hero.vectorized}
             </span>
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3 px-2 pt-3">
-            <p className="text-xs text-[var(--ink-faint)]">
-              Drag the handle to compare — upload your own image to try it live.
-            </p>
+            <p className="text-xs text-[var(--ink-faint)]">{t.hero.dragHint}</p>
             <Button variant="secondary" size="sm">
               <UploadCloud size={14} />
-              Upload an image
+              {t.hero.uploadImage}
             </Button>
           </div>
         </div>
@@ -155,9 +154,9 @@ export function Hero() {
       {/* trust badges */}
       <div className="mx-auto mt-10 flex max-w-4xl flex-wrap items-center justify-center gap-x-8 gap-y-3">
         {trustBadges.map((badge) => (
-          <div key={badge.label} className="flex items-center gap-2 text-sm text-[var(--ink-muted)]">
+          <div key={badge.id} className="flex items-center gap-2 text-sm text-[var(--ink-muted)]">
             <badge.icon size={15} className="text-[var(--accent)]" />
-            {badge.label}
+            {t.trustBadges[badge.id]}
           </div>
         ))}
       </div>

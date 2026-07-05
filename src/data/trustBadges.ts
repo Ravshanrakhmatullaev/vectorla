@@ -1,15 +1,16 @@
 import type { LucideIcon } from 'lucide-react'
 import { MonitorSmartphone, Printer, FileCode2, Lock, Zap } from 'lucide-react'
+import type { TrustBadgeId } from '@/data/i18n'
 
 export interface TrustBadge {
+  id: TrustBadgeId
   icon: LucideIcon
-  label: string
 }
 
 export const trustBadges: TrustBadge[] = [
-  { icon: MonitorSmartphone, label: 'Browser-based' },
-  { icon: Printer, label: 'Print-ready' },
-  { icon: FileCode2, label: 'SVG export' },
-  { icon: Lock, label: 'Private processing' },
-  { icon: Zap, label: 'Fast preview' },
+  { id: 'browserBased', icon: MonitorSmartphone },
+  { id: 'printReady', icon: Printer },
+  { id: 'svgExport', icon: FileCode2 },
+  { id: 'privateProcessing', icon: Lock },
+  { id: 'fastPreview', icon: Zap },
 ]

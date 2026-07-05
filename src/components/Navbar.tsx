@@ -2,11 +2,14 @@ import { useState } from 'react'
 import { Menu, X } from 'lucide-react'
 import { LogoMark } from '@/components/LogoMark'
 import { ThemeToggle } from '@/components/ThemeToggle'
+import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { Button } from '@/components/ui/Button'
 import { navLinks } from '@/data/nav'
+import { useLanguage } from '@/lib/language'
 
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const { t } = useLanguage()
 
   return (
     <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--bg)]/80 backdrop-blur-md">
@@ -25,18 +28,19 @@ export function Navbar() {
               href={link.href}
               className="text-sm font-medium text-[var(--ink-muted)] transition-colors hover:text-[var(--ink)]"
             >
-              {link.label}
+              {t.nav[link.id]}
             </a>
           ))}
         </nav>
 
         <div className="hidden items-center gap-3 md:flex">
+          <LanguageSwitcher />
           <ThemeToggle />
           <Button variant="ghost" size="sm">
-            Sign in
+            {t.nav.signIn}
           </Button>
           <Button variant="primary" size="sm">
-            Start free
+            {t.nav.startFree}
           </Button>
         </div>
 
@@ -45,7 +49,7 @@ export function Navbar() {
           <button
             type="button"
             onClick={() => setMobileOpen((v) => !v)}
-            aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
+            aria-label={mobileOpen ? t.nav.closeMenu : t.nav.openMenu}
             aria-expanded={mobileOpen}
             className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--ink)]"
           >
@@ -56,6 +60,9 @@ export function Navbar() {
 
       {mobileOpen && (
         <div className="border-t border-[var(--border)] bg-[var(--bg)] px-5 py-4 md:hidden">
+          <div className="mb-3 flex justify-center border-b border-[var(--border)] pb-3">
+            <LanguageSwitcher />
+          </div>
           <nav className="flex flex-col gap-1">
             {navLinks.map((link) => (
               <a
@@ -64,16 +71,16 @@ export function Navbar() {
                 onClick={() => setMobileOpen(false)}
                 className="rounded-lg px-3 py-2.5 text-sm font-medium text-[var(--ink-muted)] hover:bg-[var(--bg-muted)] hover:text-[var(--ink)]"
               >
-                {link.label}
+                {t.nav[link.id]}
               </a>
             ))}
           </nav>
           <div className="mt-3 flex flex-col gap-2 border-t border-[var(--border)] pt-3">
             <Button variant="secondary" size="md" className="w-full">
-              Sign in
+              {t.nav.signIn}
             </Button>
             <Button variant="primary" size="md" className="w-full">
-              Start free
+              {t.nav.startFree}
             </Button>
           </div>
         </div>

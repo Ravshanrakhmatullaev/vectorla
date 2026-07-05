@@ -1,21 +1,24 @@
 import { useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { SectionHeading } from '@/components/ui/SectionHeading'
-import { faqItems } from '@/data/faq'
+import { faqOrder } from '@/data/faq'
+import { useLanguage } from '@/lib/language'
 import { cn } from '@/utils/cn'
 
 export function Faq() {
   const [openIndex, setOpenIndex] = useState<number | null>(0)
+  const { t } = useLanguage()
 
   return (
     <section id="docs" className="bg-[var(--bg-subtle)] px-5 py-20 sm:px-8">
-      <SectionHeading eyebrow="FAQ" title="Frequently asked questions" />
+      <SectionHeading eyebrow={t.faq.eyebrow} title={t.faq.title} />
 
       <div className="mx-auto mt-10 max-w-2xl">
-        {faqItems.map((item, index) => {
+        {faqOrder.map((id, index) => {
+          const item = t.faq.items[id]
           const isOpen = openIndex === index
           return (
-            <div key={item.question} className="border-b border-[var(--border)]">
+            <div key={id} className="border-b border-[var(--border)]">
               <button
                 onClick={() => setOpenIndex(isOpen ? null : index)}
                 aria-expanded={isOpen}

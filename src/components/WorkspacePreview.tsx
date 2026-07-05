@@ -10,20 +10,22 @@ import {
 import { SectionHeading } from '@/components/ui/SectionHeading'
 import { Button } from '@/components/ui/Button'
 import { workspaceSettings, workspacePresets, recentFiles, exportFormats } from '@/data/workspace'
+import { useLanguage } from '@/lib/language'
 
 // TODO(backend): wire this preview to the real vectorization engine.
 // Slider values below are local UI state only — no tracing happens yet.
 export function WorkspacePreview() {
-  const [activePreset, setActivePreset] = useState('Logo')
+  const [activePreset, setActivePreset] = useState<(typeof workspacePresets)[number]>('logo')
   const [printReady, setPrintReady] = useState(true)
   const [splitPct, setSplitPct] = useState(55)
+  const { t } = useLanguage()
 
   return (
     <section className="px-5 py-20 sm:px-8">
       <SectionHeading
-        eyebrow="Workspace"
-        title="A workspace built for production, not toy demos"
-        description="Every control a print professional expects — presets, precision settings, and print-ready validation in one place."
+        eyebrow={t.workspace.eyebrow}
+        title={t.workspace.title}
+        description={t.workspace.description}
       />
 
       <div className="mx-auto mt-12 max-w-6xl overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl shadow-black/5">
@@ -33,7 +35,7 @@ export function WorkspacePreview() {
           <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
           <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
           <span className="ml-3 text-xs font-medium text-[var(--ink-faint)]">
-            app.vectorla.app/workspace
+            {t.workspace.windowUrl}
           </span>
         </div>
 
@@ -42,11 +44,11 @@ export function WorkspacePreview() {
           <div className="border-b border-[var(--border)] p-4 lg:border-b-0 lg:border-r">
             <button className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-[var(--border-strong)] bg-[var(--bg-subtle)] px-3 py-4 text-xs font-semibold text-[var(--ink-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]">
               <UploadCloud size={16} />
-              Upload image
+              {t.workspace.uploadImage}
             </button>
 
             <p className="mb-2 mt-5 text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
-              Presets
+              {t.workspace.presetsLabel}
             </p>
             <div className="flex flex-wrap gap-1.5">
               {workspacePresets.map((preset) => (
@@ -59,13 +61,13 @@ export function WorkspacePreview() {
                       : 'bg-[var(--bg-muted)] text-[var(--ink-muted)] hover:text-[var(--ink)]'
                   }`}
                 >
-                  {preset}
+                  {t.workspace.presets[preset]}
                 </button>
               ))}
             </div>
 
             <p className="mb-2 mt-5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
-              <Clock size={11} /> Recent files
+              <Clock size={11} /> {t.workspace.recentFilesLabel}
             </p>
             <div className="flex flex-col gap-1">
               {recentFiles.map((file) => (
@@ -115,9 +117,12 @@ export function WorkspacePreview() {
               />
             </div>
             <div className="mt-3 flex items-center justify-between text-xs text-[var(--ink-faint)]">
-              <span>Preset: {activePreset}</span>
+              <span>
+                {t.workspace.presetPrefix}
+                {t.workspace.presets[activePreset]}
+              </span>
               <span className="flex items-center gap-1">
-                <Sparkles size={12} className="text-[var(--accent)]" /> Live preview
+                <Sparkles size={12} className="text-[var(--accent)]" /> {t.workspace.livePreview}
               </span>
             </div>
           </div>
@@ -125,13 +130,13 @@ export function WorkspacePreview() {
           {/* Right panel: settings */}
           <div className="p-4">
             <p className="mb-3 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
-              <SlidersHorizontal size={11} /> Vector settings
+              <SlidersHorizontal size={11} /> {t.workspace.settingsLabel}
             </p>
             <div className="flex flex-col gap-4">
               {workspaceSettings.map((setting) => (
-                <div key={setting.label}>
+                <div key={setting.id}>
                   <div className="mb-1.5 flex items-center justify-between text-xs">
-                    <span className="text-[var(--ink-muted)]">{setting.label}</span>
+                    <span className="text-[var(--ink-muted)]">{t.workspace.settings[setting.id]}</span>
                     <span className="font-mono font-medium text-[var(--accent)]">
                       {setting.value}
                       {setting.unit ?? ''}
@@ -150,7 +155,7 @@ export function WorkspacePreview() {
             <label className="mt-5 flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] px-3 py-2.5 text-xs font-medium text-[var(--ink)]">
               <span className="flex items-center gap-1.5">
                 <Printer size={13} className="text-[var(--accent)]" />
-                Print-ready mode
+                {t.workspace.printReadyMode}
               </span>
               <button
                 onClick={() => setPrintReady((v) => !v)}
@@ -168,8 +173,7 @@ export function WorkspacePreview() {
             </label>
             {printReady && (
               <p className="mt-2 text-[11px] leading-relaxed text-[var(--ink-faint)]">
-                DPI check passed &middot; CMYK-ready &middot; clean paths &middot; reduced nodes &middot;
-                transparent background &middot; cut lines included.
+                {t.workspace.printReadyDetails}
               </p>
             )}
           </div>
@@ -177,7 +181,7 @@ export function WorkspacePreview() {
 
         {/* Bottom export bar */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] px-4 py-3">
-          <span className="text-xs text-[var(--ink-faint)]">Export as:</span>
+          <span className="text-xs text-[var(--ink-faint)]">{t.workspace.exportAs}</span>
           <div className="flex flex-wrap gap-2">
             {exportFormats.map((format) => (
               <Button key={format} variant="secondary" size="sm">

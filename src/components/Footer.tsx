@@ -1,25 +1,12 @@
 import { LogoMark } from '@/components/LogoMark'
+import { useLanguage } from '@/lib/language'
+import type { FooterColumnId } from '@/data/i18n'
 
-const columns = [
-  {
-    title: 'Product',
-    links: ['Features', 'Use Cases', 'Pricing', 'Changelog'],
-  },
-  {
-    title: 'Resources',
-    links: ['Docs', 'API Reference', 'Guides', 'Support'],
-  },
-  {
-    title: 'Company',
-    links: ['About', 'Blog', 'Careers', 'Contact'],
-  },
-  {
-    title: 'Legal',
-    links: ['Privacy Policy', 'Terms of Service', 'Security'],
-  },
-]
+const columnIds: FooterColumnId[] = ['product', 'resources', 'company', 'legal']
 
 export function Footer() {
+  const { t } = useLanguage()
+
   return (
     <footer className="border-t border-[var(--border)] px-5 py-14 sm:px-8">
       <div className="mx-auto max-w-6xl">
@@ -31,35 +18,35 @@ export function Footer() {
                 Vectorla
               </span>
             </div>
-            <p className="mt-3 max-w-xs text-sm text-[var(--ink-muted)]">
-              The AI print-ready vector platform for designers, print shops, and production
-              teams.
-            </p>
+            <p className="mt-3 max-w-xs text-sm text-[var(--ink-muted)]">{t.footer.tagline}</p>
           </div>
 
-          {columns.map((col) => (
-            <div key={col.title}>
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
-                {col.title}
-              </h4>
-              <ul className="mt-3 flex flex-col gap-2.5">
-                {col.links.map((link) => (
-                  <li key={link}>
-                    <a
-                      href="#"
-                      className="text-sm text-[var(--ink-muted)] transition-colors hover:text-[var(--ink)]"
-                    >
-                      {link}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+          {columnIds.map((id) => {
+            const column = t.footer.columns[id]
+            return (
+              <div key={id}>
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
+                  {column.title}
+                </h4>
+                <ul className="mt-3 flex flex-col gap-2.5">
+                  {column.links.map((link) => (
+                    <li key={link}>
+                      <a
+                        href="#"
+                        className="text-sm text-[var(--ink-muted)] transition-colors hover:text-[var(--ink)]"
+                      >
+                        {link}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )
+          })}
         </div>
 
         <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-[var(--border)] pt-6 text-xs text-[var(--ink-faint)] sm:flex-row">
-          <span>&copy; {new Date().getFullYear()} Vectorla. All rights reserved.</span>
+          <span>{t.footer.copyright.replace('{year}', String(new Date().getFullYear()))}</span>
           <span>vectorla.app</span>
         </div>
       </div>

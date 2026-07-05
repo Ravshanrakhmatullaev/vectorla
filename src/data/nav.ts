@@ -1,12 +1,14 @@
+import type { NavId } from '@/data/i18n'
+
 export interface NavLink {
-  label: string
+  id: NavId
   href: string
 }
 
 export const navLinks: NavLink[] = [
-  { label: 'Features', href: '#features' },
-  { label: 'Use Cases', href: '#use-cases' },
-  { label: 'Pricing', href: '#pricing' },
-  { label: 'API', href: '#api' },
-  { label: 'Docs', href: '#docs' },
+  { id: 'features', href: '#features' },
+  { id: 'useCases', href: '#use-cases' },
+  { id: 'pricing', href: '#pricing' },
+  { id: 'api', href: '#api' },
+  { id: 'docs', href: '#docs' },
 ]
