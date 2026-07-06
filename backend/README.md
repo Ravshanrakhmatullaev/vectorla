@@ -82,6 +82,40 @@ Then run `supabase/schema.sql` against your Supabase project (SQL editor or
 `supabase db push`), and set the same two secrets in production with
 `wrangler secret put`.
 
+## Pricing & Credits
+
+Four plans, all sharing one credit system (`PLAN_LIMITS` in `src/config/index.ts`,
+`UserPlan` in `src/types/user.ts`):
+
+| Plan | Price | Credits/mo | Max file size | Batch size | Formats | Print-ready | API |
+|---|---|---|---|---|---|---|---|
+| Free | $0 | 10 | 5 MB | 1 (no batch) | SVG, PNG | +1 credit | No |
+| Starter | $9/mo | 100 | 25 MB | 10 | SVG, PNG, PDF | included | No |
+| Pro | $19/mo | 500 | 100 MB | 100 | all 5 formats | included | No |
+| Business | Custom | 5,000+ | 500 MB | 1,000 | all 5 + custom presets | included | Yes |
+
+**Credit costs per operation** (`CREDIT_COST_*` in `src/config/index.ts`):
+- Base conversion (1 image → 1 export format): 1 credit
+- Each additional export format on the same job: +1 credit
+- Print-ready mode (CMYK validation, cut lines): +1 credit — free/included on
+  Starter and above, since it's core to who those plans target (print shops,
+  CNC/laser users)
+- Batch jobs: no discount or premium — cost is simply credits × image count
+
+**Overage** (not implemented, documented for later): Free/Starter should
+block further conversions once credits run out until the monthly reset or an
+upgrade; Pro/Business should be able to purchase top-up credit packs. No
+Stripe integration exists yet — this is a design note, not a built feature.
+
+**Frontend is not updated yet.** The rendered pricing section
+(`src/data/pricing.ts`, `src/data/i18n.ts`'s `pricing` translations,
+`PricingPlanId` in `src/data/i18n.ts`) still reflects the old 3-tier,
+credits-free model (`free` / `pro` / `business`, "unlimited conversions" on
+Pro). Bringing the frontend in line with this table — adding the Starter
+tier, replacing "conversions" language with credits, and reconciling "Pro:
+unlimited" with a concrete 500/mo — is intentionally deferred to a future
+phase, per this phase's "do not change UI yet" scope.
+
 ## What "prepared" means here vs. what's still a decision
 
 This scaffold assumes a **server-side** vectorization pipeline (R2 + Queue +
