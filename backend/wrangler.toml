@@ -1,0 +1,29 @@
+name = "vectorla-api"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+
+# R2 bucket binding — create the bucket with:
+#   wrangler r2 bucket create vectorla-uploads
+[[r2_buckets]]
+binding = "UPLOADS_BUCKET"
+bucket_name = "vectorla-uploads"
+
+# Queue producer — create the queue with:
+#   wrangler queues create vectorla-conversions
+[[queues.producers]]
+queue = "vectorla-conversions"
+binding = "CONVERSION_QUEUE"
+
+# This same Worker also consumes the queue it produces to.
+[[queues.consumers]]
+queue = "vectorla-conversions"
+max_batch_size = 10
+max_batch_timeout = 30
+
+[vars]
+ENVIRONMENT = "development"
+
+# Supabase credentials are secrets, not vars — set them with:
+#   wrangler secret put SUPABASE_URL
+#   wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+# For local `wrangler dev`, copy .dev.vars.example to .dev.vars instead.

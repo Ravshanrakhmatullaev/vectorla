@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": ["es2022"],
+    "module": "es2022",
+    "moduleResolution": "bundler",
+    "types": ["@cloudflare/workers-types"],
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    // noUnusedLocals is intentionally off: every service class currently
+    // injects a dependency (e.g. R2Client) that no method reads yet, since
+    // every method is a stub throwing "Not implemented". Re-enable this once
+    // real implementation starts using those dependencies.
+    "noUnusedLocals": false,
+    "noUnusedParameters": true,
+
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["src"]
+}

@@ -17,6 +17,10 @@ dist-ssr
 .env.local
 .env.*.local
 
+# Cloudflare Workers backend (see backend/.dev.vars.example for the template)
+.wrangler
+backend/.dev.vars
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

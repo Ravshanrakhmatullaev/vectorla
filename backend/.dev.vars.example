@@ -1,0 +1,6 @@
+# Copy this file to .dev.vars for local `wrangler dev` — it simulates the
+# secrets that production sets via `wrangler secret put <NAME>`.
+# Never commit .dev.vars.
+
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
