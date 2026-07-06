@@ -1,5 +1,6 @@
 import { ThemeProvider } from '@/lib/theme'
 import { LanguageProvider } from '@/lib/language'
+import { DemoAssetProvider } from '@/lib/demoAsset'
 import { MainLayout } from '@/layouts/MainLayout'
 import { LandingPage } from '@/pages/LandingPage'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
@@ -11,7 +12,9 @@ function App() {
       <LanguageProvider>
         <MainLayout>
           <ErrorBoundary fallback={<ErrorFallback />}>
-            <LandingPage />
+            <DemoAssetProvider>
+              <LandingPage />
+            </DemoAssetProvider>
           </ErrorBoundary>
         </MainLayout>
       </LanguageProvider>
