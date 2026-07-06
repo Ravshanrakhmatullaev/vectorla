@@ -51,6 +51,7 @@ export function Navbar() {
             onClick={() => setMobileOpen((v) => !v)}
             aria-label={mobileOpen ? t.nav.closeMenu : t.nav.openMenu}
             aria-expanded={mobileOpen}
+            aria-controls="mobile-menu"
             className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--ink)]"
           >
             {mobileOpen ? <X size={18} /> : <Menu size={18} />}
@@ -59,7 +60,7 @@ export function Navbar() {
       </div>
 
       {mobileOpen && (
-        <div className="border-t border-[var(--border)] bg-[var(--bg)] px-5 py-4 md:hidden">
+        <div id="mobile-menu" className="border-t border-[var(--border)] bg-[var(--bg)] px-5 py-4 md:hidden">
           <div className="mb-3 flex justify-center border-b border-[var(--border)] pb-3">
             <LanguageSwitcher />
           </div>

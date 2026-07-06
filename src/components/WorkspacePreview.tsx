@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/Button'
 import { BeforeAfterArt } from '@/components/BeforeAfterArt'
 import { workspaceSettings, workspacePresets, recentFiles, exportFormats, printChecklist } from '@/data/workspace'
 import { useLanguage } from '@/lib/language'
+import { useCompareSlider } from '@/hooks/useCompareSlider'
+import { useDropzone } from '@/hooks/useDropzone'
 import { cn } from '@/utils/cn'
 
 // TODO(backend): Preview Mode only — no image is uploaded, read, or processed.
@@ -13,9 +15,8 @@ import { cn } from '@/utils/cn'
 export function WorkspacePreview() {
   const [activePreset, setActivePreset] = useState<(typeof workspacePresets)[number]>('logo')
   const [printReady, setPrintReady] = useState(true)
-  const [splitPct, setSplitPct] = useState(55)
   const [showDemo, setShowDemo] = useState(false)
-  const [isDragOver, setIsDragOver] = useState(false)
+  const { splitPct, containerRef, containerHandlers, onHandleKeyDown } = useCompareSlider(55)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { t } = useLanguage()
 
@@ -23,6 +24,8 @@ export function WorkspacePreview() {
     if (!files?.[0]) return
     setShowDemo(true)
   }
+
+  const { isDragOver, dropzoneHandlers } = useDropzone(handleFiles)
 
   return (
     <section className="px-5 py-20 sm:px-8">
@@ -86,6 +89,7 @@ export function WorkspacePreview() {
                   <button
                     key={preset}
                     onClick={() => setActivePreset(preset)}
+                    aria-pressed={activePreset === preset}
                     className={cn(
                       'rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
                       activePreset === preset
@@ -128,16 +132,7 @@ export function WorkspacePreview() {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') fileInputRef.current?.click()
                     }}
-                    onDragOver={(e) => {
-                      e.preventDefault()
-                      setIsDragOver(true)
-                    }}
-                    onDragLeave={() => setIsDragOver(false)}
-                    onDrop={(e) => {
-                      e.preventDefault()
-                      setIsDragOver(false)
-                      handleFiles(e.dataTransfer.files)
-                    }}
+                    {...dropzoneHandlers}
                     className={cn(
                       'flex h-full cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-6 text-center transition-colors',
                       isDragOver
@@ -156,23 +151,12 @@ export function WorkspacePreview() {
 
                 {showDemo && (
                   <motion.div
+                    ref={containerRef}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ duration: 0.3, ease: 'easeOut' }}
                     className="relative h-full w-full"
-                    onPointerDown={(e) => {
-                      const rect = e.currentTarget.getBoundingClientRect()
-                      const move = (ev: PointerEvent) => {
-                        const pct = ((ev.clientX - rect.left) / rect.width) * 100
-                        setSplitPct(Math.min(100, Math.max(0, pct)))
-                      }
-                      const up = () => {
-                        window.removeEventListener('pointermove', move)
-                        window.removeEventListener('pointerup', up)
-                      }
-                      window.addEventListener('pointermove', move)
-                      window.addEventListener('pointerup', up)
-                    }}
+                    {...containerHandlers}
                   >
                     <div className="absolute inset-0 flex items-center justify-center p-6">
                       <div className="h-full w-full max-w-[160px]">
@@ -188,7 +172,15 @@ export function WorkspacePreview() {
                       </div>
                     </div>
                     <div
-                      className="absolute inset-y-0 w-0.5 bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.12)]"
+                      role="slider"
+                      tabIndex={0}
+                      aria-label={t.common.compareSliderLabel}
+                      aria-orientation="horizontal"
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={Math.round(splitPct)}
+                      onKeyDown={onHandleKeyDown}
+                      className="absolute inset-y-0 w-0.5 cursor-ew-resize bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.12)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
                       style={{ left: `${splitPct}%` }}
                     />
                     <span className="absolute left-3 top-3 rounded-md bg-black/55 px-2 py-1 text-[11px] font-medium text-white">
@@ -234,7 +226,7 @@ export function WorkspacePreview() {
                         {setting.unit ?? ''}
                       </span>
                     </div>
-                    <div className="h-1.5 rounded-full bg-[var(--bg-muted)]">
+                    <div aria-hidden="true" className="h-1.5 rounded-full bg-[var(--bg-muted)]">
                       <div
                         className="h-1.5 rounded-full bg-[var(--accent)]"
                         style={{ width: `${setting.value}%` }}

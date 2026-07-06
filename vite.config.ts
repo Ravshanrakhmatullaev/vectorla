@@ -11,4 +11,17 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Vendor code changes far less often than app code — splitting it out
+        // lets browsers cache it across deploys instead of re-downloading it
+        // every time app code changes.
+        manualChunks(id) {
+          if (id.includes('node_modules/framer-motion')) return 'motion'
+          if (id.includes('node_modules/react')) return 'vendor'
+        },
+      },
+    },
+  },
 })

@@ -1,35 +1,26 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { UploadCloud, Play, Wand2, Download, Star } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { BeforeAfterArt } from '@/components/BeforeAfterArt'
 import { trustBadges } from '@/data/trustBadges'
 import { useLanguage } from '@/lib/language'
+import { useCompareSlider } from '@/hooks/useCompareSlider'
+import { useDropzone } from '@/hooks/useDropzone'
 import { cn } from '@/utils/cn'
 
 const exportBadges = ['SVG', 'EPS', 'PDF', 'AI', 'DXF']
 
 export function Hero() {
-  const [splitPct, setSplitPct] = useState(52)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const draggingRef = useRef(false)
-  const [isDragOver, setIsDragOver] = useState(false)
+  const { splitPct, containerRef, containerHandlers, onHandleKeyDown } = useCompareSlider(52)
+  const { isDragOver, dropzoneHandlers } = useDropzone()
   const [activeStep, setActiveStep] = useState(0)
   const { t } = useLanguage()
 
-  // TODO(backend): drag & drop / browse only toggle UI state — no file is read or uploaded yet.
   useEffect(() => {
     const id = setInterval(() => setActiveStep((step) => (step + 1) % 3), 1800)
     return () => clearInterval(id)
   }, [])
-
-  function updateFromClientX(clientX: number) {
-    const el = containerRef.current
-    if (!el) return
-    const rect = el.getBoundingClientRect()
-    const pct = ((clientX - rect.left) / rect.width) * 100
-    setSplitPct(Math.min(100, Math.max(0, pct)))
-  }
 
   const workflowSteps = [
     { icon: UploadCloud, label: t.hero.workflow.upload },
@@ -117,15 +108,7 @@ export function Hero() {
             <div className="relative rounded-3xl border border-white/40 bg-white/60 p-5 shadow-2xl shadow-black/10 backdrop-blur-xl dark:border-white/10 dark:bg-white/5 sm:p-6">
               {/* drag & drop area */}
               <div
-                onDragOver={(e) => {
-                  e.preventDefault()
-                  setIsDragOver(true)
-                }}
-                onDragLeave={() => setIsDragOver(false)}
-                onDrop={(e) => {
-                  e.preventDefault()
-                  setIsDragOver(false)
-                }}
+                {...dropzoneHandlers}
                 className={cn(
                   'flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed px-4 py-7 text-center transition-colors',
                   isDragOver
@@ -177,17 +160,7 @@ export function Hero() {
               <div
                 ref={containerRef}
                 className="relative mt-6 aspect-[4/3] select-none overflow-hidden rounded-xl bg-[var(--bg-subtle)]"
-                onPointerDown={(e) => {
-                  draggingRef.current = true
-                  updateFromClientX(e.clientX)
-                  ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
-                }}
-                onPointerMove={(e) => {
-                  if (draggingRef.current) updateFromClientX(e.clientX)
-                }}
-                onPointerUp={() => {
-                  draggingRef.current = false
-                }}
+                {...containerHandlers}
               >
                 <div
                   aria-hidden="true"
@@ -214,7 +187,15 @@ export function Hero() {
                   style={{ left: `${splitPct}%` }}
                 />
                 <div
-                  className="absolute top-1/2 flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow-lg"
+                  role="slider"
+                  tabIndex={0}
+                  aria-label={t.common.compareSliderLabel}
+                  aria-orientation="horizontal"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(splitPct)}
+                  onKeyDown={onHandleKeyDown}
+                  className="absolute top-1/2 flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize items-center justify-center rounded-full bg-white shadow-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
                   style={{ left: `${splitPct}%` }}
                 >
                   <div className="flex gap-0.5">

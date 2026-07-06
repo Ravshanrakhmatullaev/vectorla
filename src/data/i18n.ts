@@ -106,6 +106,12 @@ export interface Translation {
   common: {
     switchToLightMode: string
     switchToDarkMode: string
+    compareSliderLabel: string
+    skipToContent: string
+    errorTitle: string
+    errorDescription: string
+    reloadPage: string
+    loading: string
   }
   hero: {
     badge: string
@@ -201,6 +207,12 @@ export const translations: Record<Language, Translation> = {
     common: {
       switchToLightMode: 'Switch to light mode',
       switchToDarkMode: 'Switch to dark mode',
+      compareSliderLabel: 'Before and after comparison slider',
+      skipToContent: 'Skip to content',
+      errorTitle: 'Something went wrong',
+      errorDescription: 'This section failed to load. Try reloading the page.',
+      reloadPage: 'Reload page',
+      loading: 'Loading',
     },
     hero: {
       badge: 'AI Print-Ready Vector Platform',
@@ -500,6 +512,12 @@ export const translations: Record<Language, Translation> = {
     common: {
       switchToLightMode: "Yorug' rejimga o'tish",
       switchToDarkMode: "Qorong'i rejimga o'tish",
+      compareSliderLabel: "Oldin va keyin taqqoslash slayderi",
+      skipToContent: "Kontentga o'tish",
+      errorTitle: "Nimadir noto'g'ri ketdi",
+      errorDescription: "Bu bo'lim yuklanmadi. Sahifani qayta yuklab ko'ring.",
+      reloadPage: 'Sahifani qayta yuklash',
+      loading: 'Yuklanmoqda',
     },
     hero: {
       badge: 'AI asosidagi bosmaga tayyor vektor platforma',
@@ -809,6 +827,12 @@ export const translations: Record<Language, Translation> = {
     common: {
       switchToLightMode: 'Переключить на светлую тему',
       switchToDarkMode: 'Переключить на тёмную тему',
+      compareSliderLabel: 'Ползунок сравнения до и после',
+      skipToContent: 'Перейти к содержимому',
+      errorTitle: 'Что-то пошло не так',
+      errorDescription: 'Не удалось загрузить этот раздел. Попробуйте перезагрузить страницу.',
+      reloadPage: 'Перезагрузить страницу',
+      loading: 'Загрузка',
     },
     hero: {
       badge: 'Платформа для векторизации на основе ИИ',

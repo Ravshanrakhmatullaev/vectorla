@@ -25,9 +25,9 @@ export function Footer() {
             const column = t.footer.columns[id]
             return (
               <div key={id}>
-                <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
                   {column.title}
-                </h4>
+                </h2>
                 <ul className="mt-3 flex flex-col gap-2.5">
                   {column.links.map((link) => (
                     <li key={link}>

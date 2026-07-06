@@ -20,8 +20,10 @@ export function Faq() {
           return (
             <div key={id} className="border-b border-[var(--border)]">
               <button
+                id={`faq-trigger-${id}`}
                 onClick={() => setOpenIndex(isOpen ? null : index)}
                 aria-expanded={isOpen}
+                aria-controls={`faq-panel-${id}`}
                 className="flex w-full items-center justify-between gap-4 py-4 text-left"
               >
                 <span className="text-sm font-semibold text-[var(--ink)] sm:text-[15px]">
@@ -29,6 +31,7 @@ export function Faq() {
                 </span>
                 <ChevronDown
                   size={18}
+                  aria-hidden="true"
                   className={cn(
                     'flex-none text-[var(--ink-faint)] transition-transform duration-150',
                     isOpen && 'rotate-180',
@@ -36,7 +39,12 @@ export function Faq() {
                 />
               </button>
               {isOpen && (
-                <p className="max-w-xl pb-4 text-sm leading-relaxed text-[var(--ink-muted)]">
+                <p
+                  id={`faq-panel-${id}`}
+                  role="region"
+                  aria-labelledby={`faq-trigger-${id}`}
+                  className="max-w-xl pb-4 text-sm leading-relaxed text-[var(--ink-muted)]"
+                >
                   {item.answer}
                 </p>
               )}
