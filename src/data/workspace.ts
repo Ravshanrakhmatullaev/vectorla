@@ -1,4 +1,4 @@
-import type { WorkspacePresetId, WorkspaceSettingId } from '@/data/i18n'
+import type { PrintChecklistId, WorkspacePresetId, WorkspaceSettingId } from '@/data/i18n'
 
 export interface WorkspaceSetting {
   id: WorkspaceSettingId
@@ -25,4 +25,12 @@ export const workspacePresets: WorkspacePresetId[] = [
 
 export const recentFiles = ['brand-mark.png', 'signature-scan.jpg', 'sticker-design.png', 'cut-line.png']
 
-export const exportFormats = ['SVG', 'PDF', 'DXF', 'EPS', 'PNG']
+export const exportFormats = ['SVG', 'PDF', 'EPS', 'DXF', 'PNG']
+
+export const printChecklist: PrintChecklistId[] = [
+  'cmyk',
+  'cleanPaths',
+  'transparentBackground',
+  'cutLine',
+  'reducedNodes',
+]

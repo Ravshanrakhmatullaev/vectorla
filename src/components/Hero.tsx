@@ -2,39 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { UploadCloud, Play, Wand2, Download, Star } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { BeforeAfterArt } from '@/components/BeforeAfterArt'
 import { trustBadges } from '@/data/trustBadges'
 import { useLanguage } from '@/lib/language'
 import { cn } from '@/utils/cn'
 
 const exportBadges = ['SVG', 'EPS', 'PDF', 'AI', 'DXF']
-
-/** Illustrative mark used only for the before/after demo — not a real upload yet. */
-function DemoMark({ crisp }: { crisp: boolean }) {
-  return (
-    <svg
-      viewBox="0 0 200 200"
-      className="h-full w-full"
-      style={!crisp ? { filter: 'blur(1.1px) saturate(0.85)' } : undefined}
-    >
-      <defs>
-        <linearGradient id="demo-grad" x1="0" y1="0" x2="200" y2="200" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#6D28D9" />
-          <stop offset="1" stopColor="#4C1D95" />
-        </linearGradient>
-      </defs>
-      <rect x="20" y="20" width="160" height="160" rx="28" fill="url(#demo-grad)" opacity={crisp ? 1 : 0.9} />
-      <path
-        d="M60 100 L90 140 L145 65"
-        stroke="white"
-        strokeWidth={crisp ? 14 : 16}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-        opacity={crisp ? 1 : 0.85}
-      />
-    </svg>
-  )
-}
 
 export function Hero() {
   const [splitPct, setSplitPct] = useState(52)
@@ -222,17 +195,17 @@ export function Hero() {
                 />
 
                 <div className="absolute inset-0 flex items-center justify-center p-8">
-                  <div className="h-full w-full max-w-[180px] opacity-90">
-                    <DemoMark crisp={false} />
+                  <div className="h-full w-full max-w-[200px]">
+                    <BeforeAfterArt crisp={false} />
                   </div>
                 </div>
 
                 <div
-                  className="absolute inset-0 flex items-center justify-center overflow-hidden p-8"
-                  style={{ width: `${splitPct}%` }}
+                  className="absolute inset-0 flex items-center justify-center p-8"
+                  style={{ clipPath: `inset(0 ${100 - splitPct}% 0 0)` }}
                 >
-                  <div className="h-full w-full" style={{ width: '220px', maxWidth: 'none' }}>
-                    <DemoMark crisp />
+                  <div className="h-full w-full max-w-[200px]">
+                    <BeforeAfterArt crisp />
                   </div>
                 </div>
 

@@ -24,6 +24,13 @@ export type WorkspacePresetId = 'logo' | 'signature' | 'sketch' | 'icon' | 'qrCo
 
 export type WorkspaceSettingId = 'colors' | 'detail' | 'smoothness' | 'noiseRemoval' | 'curvePrecision'
 
+export type PrintChecklistId =
+  | 'cmyk'
+  | 'cleanPaths'
+  | 'transparentBackground'
+  | 'cutLine'
+  | 'reducedNodes'
+
 export type FeatureId =
   | 'aiLogoTrace'
   | 'aiQrVectorizer'
@@ -137,8 +144,15 @@ export interface Translation {
     presetPrefix: string
     livePreview: string
     printReadyMode: string
-    printReadyDetails: string
+    printChecklist: Record<PrintChecklistId, string>
     exportAs: string
+    dropTitle: string
+    dropSubtitle: string
+    browseFiles: string
+    newImage: string
+    previewModeBadge: string
+    previewModeMessage: string
+    exportDisabledNote: string
   }
   features: {
     eyebrow: string
@@ -246,9 +260,22 @@ export const translations: Record<Language, Translation> = {
       presetPrefix: 'Preset: ',
       livePreview: 'Live preview',
       printReadyMode: 'Print-ready mode',
-      printReadyDetails:
-        'DPI check passed · CMYK-ready · clean paths · reduced nodes · transparent background · cut lines included.',
+      printChecklist: {
+        cmyk: 'CMYK-ready',
+        cleanPaths: 'Clean paths',
+        transparentBackground: 'Transparent background',
+        cutLine: 'Cut line included',
+        reducedNodes: 'Reduced nodes',
+      },
       exportAs: 'Export as:',
+      dropTitle: 'Drop your image to vectorize',
+      dropSubtitle: 'or click to browse — PNG, JPG, SVG up to 10MB',
+      browseFiles: 'Browse files',
+      newImage: 'Upload another image',
+      previewModeBadge: 'Preview Mode',
+      previewModeMessage:
+        'This is a frontend preview. Real AI vectorization will be connected in the next version.',
+      exportDisabledNote: 'Available after AI processing is connected.',
     },
     features: {
       eyebrow: 'Features',
@@ -532,9 +559,22 @@ export const translations: Record<Language, Translation> = {
       presetPrefix: 'Preset: ',
       livePreview: "Jonli ko'rish",
       printReadyMode: 'Bosmaga tayyor rejim',
-      printReadyDetails:
-        "DPI tekshiruvi o'tdi · CMYK uchun tayyor · toza yo'llar · kamaytirilgan tugunlar · shaffof fon · kesish chiziqlari mavjud.",
+      printChecklist: {
+        cmyk: 'CMYK uchun tayyor',
+        cleanPaths: "Toza yo'llar",
+        transparentBackground: 'Shaffof fon',
+        cutLine: 'Kesish chizig\'i mavjud',
+        reducedNodes: 'Kamaytirilgan tugunlar',
+      },
       exportAs: 'Quyidagi formatda eksport:',
+      dropTitle: 'Vektorlashtirish uchun rasmni tashlang',
+      dropSubtitle: "yoki tanlash uchun bosing — PNG, JPG, SVG, 10MB gacha",
+      browseFiles: 'Fayl tanlash',
+      newImage: 'Boshqa rasm yuklash',
+      previewModeBadge: 'Ko\'rib chiqish rejimi',
+      previewModeMessage:
+        "Bu frontend ko'rib chiqish (preview). Haqiqiy AI vektorlashtirish keyingi versiyada ulanadi.",
+      exportDisabledNote: 'AI qayta ishlash ulangandan keyin mavjud bo\'ladi.',
     },
     features: {
       eyebrow: 'Imkoniyatlar',
@@ -829,9 +869,22 @@ export const translations: Record<Language, Translation> = {
       presetPrefix: 'Пресет: ',
       livePreview: 'Живой просмотр',
       printReadyMode: 'Режим готовности к печати',
-      printReadyDetails:
-        'Проверка DPI пройдена · готово к CMYK · чистые контуры · уменьшено число узлов · прозрачный фон · включены линии реза.',
+      printChecklist: {
+        cmyk: 'Готово к CMYK',
+        cleanPaths: 'Чистые контуры',
+        transparentBackground: 'Прозрачный фон',
+        cutLine: 'Линия реза включена',
+        reducedNodes: 'Уменьшено число узлов',
+      },
       exportAs: 'Экспорт в формате:',
+      dropTitle: 'Перетащите изображение для векторизации',
+      dropSubtitle: 'или нажмите, чтобы выбрать файл — PNG, JPG, SVG до 10 МБ',
+      browseFiles: 'Выбрать файл',
+      newImage: 'Загрузить другое изображение',
+      previewModeBadge: 'Режим предпросмотра',
+      previewModeMessage:
+        'Это предпросмотр интерфейса. Реальная AI-векторизация будет подключена в следующей версии.',
+      exportDisabledNote: 'Станет доступно после подключения AI-обработки.',
     },
     features: {
       eyebrow: 'Возможности',
