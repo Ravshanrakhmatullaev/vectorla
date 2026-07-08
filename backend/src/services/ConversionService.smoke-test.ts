@@ -12,6 +12,7 @@ import { StorageService } from './StorageService'
 import { InMemoryJobsRepository } from '../repositories/InMemoryJobsRepository'
 import { InMemoryUploadsRepository } from '../repositories/InMemoryUploadsRepository'
 import { InMemoryConversionsRepository } from '../repositories/InMemoryConversionsRepository'
+import { PlaceholderProvider } from '../providers/PlaceholderProvider'
 import type { QueueClient } from '../integrations/queue'
 import type { R2Client } from '../integrations/r2'
 import type { Upload } from '../types'
@@ -83,7 +84,7 @@ async function run() {
   const jobService = new JobService(jobsRepo, uploadsRepo, queueService)
   const r2 = createFakeR2Client()
   const storage = new StorageService(r2, 'test-secret')
-  const service = new ConversionService(jobService, uploadsRepo, storage, conversionsRepo)
+  const service = new ConversionService(jobService, uploadsRepo, storage, conversionsRepo, new PlaceholderProvider())
 
   await seedUpload(uploadsRepo)
 

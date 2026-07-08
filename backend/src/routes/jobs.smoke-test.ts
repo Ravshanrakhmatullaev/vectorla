@@ -45,6 +45,7 @@ function createFakeEnv(): Env {
     SUPABASE_URL: '',
     SUPABASE_SERVICE_ROLE_KEY: '',
     DOWNLOAD_URL_SECRET: 'test-secret',
+    VECTORIZATION_PROVIDER: 'placeholder',
     ENVIRONMENT: 'development',
   }
 }

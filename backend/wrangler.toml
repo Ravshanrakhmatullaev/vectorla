@@ -22,6 +22,10 @@ max_batch_timeout = 30
 
 [vars]
 ENVIRONMENT = "development"
+# Selects the vectorization backend (see src/providers/ProviderFactory.ts).
+# "placeholder" is the only one that actually works today — the others
+# (potrace/vision/openai) are architecture stubs, not real options yet.
+VECTORIZATION_PROVIDER = "placeholder"
 
 # Supabase credentials, and the download-URL signing key, are secrets, not vars — set them with:
 #   wrangler secret put SUPABASE_URL
