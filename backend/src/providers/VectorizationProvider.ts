@@ -16,10 +16,14 @@ export interface VectorizationResult {
  * Providers only ever see raw bytes, never R2/StorageService — ConversionService
  * fetches `fileBytes` and passes it down, so providers stay pure "bytes in,
  * bytes out" transformers (see Phase 19).
+ *
+ * `requestedPreset` (Phase 20) is the caller's Job.preset, if any — providers
+ * that support presets (see PlaceholderProvider/tracePresets.ts) use it when
+ * recognized and fall back to automatic recommendation otherwise.
  */
 export interface VectorizationProvider {
   readonly name: string
-  vectorize(upload: Upload, fileBytes: ArrayBuffer): Promise<VectorizationResult>
+  vectorize(upload: Upload, fileBytes: ArrayBuffer, requestedPreset?: string | null): Promise<VectorizationResult>
 }
 
 export type VectorizationProviderName = 'placeholder' | 'potrace' | 'vision' | 'openai'

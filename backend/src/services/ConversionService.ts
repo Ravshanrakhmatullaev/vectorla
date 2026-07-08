@@ -75,7 +75,7 @@ export class ConversionService {
 
     const fileStream = await this.storage.getFile(upload.storageKey)
     const fileBytes = await new Response(fileStream).arrayBuffer()
-    const result = await this.provider.vectorize(upload, fileBytes)
+    const result = await this.provider.vectorize(upload, fileBytes, job.preset)
     const storageKey = `conversions/${job.userId}/${job.id}/output.${result.format}`
     await this.storage.storeFile(storageKey, result.data)
 

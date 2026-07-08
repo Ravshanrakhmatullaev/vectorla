@@ -167,6 +167,25 @@ async function run() {
   assertTrue(completedJob.completedAt !== null, 'completedAt set after processJob')
   console.log('PASS: processJob marks the job completed')
 
+  // 1b. Job.preset (Phase 20) flows through to the provider — a job created
+  // with an explicit preset still produces a valid traced SVG end-to-end.
+  await creditsService.grantMonthlyCredits('preset-user', 'free')
+  await seedUpload(uploadsRepo, {
+    id: 'upload-preset',
+    userId: 'preset-user',
+    storageKey: 'uploads/preset-user/upload-preset/logo.png',
+  })
+  await r2.put('uploads/preset-user/upload-preset/logo.png', await createTestPng())
+  const presetJob = await jobService.createJob({ userId: 'preset-user', uploadId: 'upload-preset', preset: 'icon' })
+  assertEqual(presetJob.preset, 'icon', 'job persists the requested preset')
+  const presetConversions = await service.processJob(presetJob.id)
+  assertEqual(presetConversions.length, 1, 'processJob with an explicit preset still produces one conversion')
+  const presetSvg = new TextDecoder().decode(
+    presetConversions[0] ? await new Response(r2.objects.get(presetConversions[0].storageKey)).arrayBuffer() : new ArrayBuffer(0),
+  )
+  assertTrue(presetSvg.startsWith('<svg'), 'processJob with an explicit preset still produces a valid SVG')
+  console.log('PASS: Job.preset is passed through to the provider end-to-end')
+
   // 2. getConversion (completed) returns a fresh, valid, unexpired download URL
   const fetched = await service.getConversion(conversion?.id ?? '')
   assertEqual(fetched.id, conversion?.id, 'getConversion returns the right conversion')

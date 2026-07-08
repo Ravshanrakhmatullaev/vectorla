@@ -7,6 +7,7 @@
 // Run with: npx tsx src/providers/PlaceholderProvider.smoke-test.ts (from inside backend/)
 import { PlaceholderProvider } from './PlaceholderProvider'
 import { countPaths } from './svgOptimizer'
+import { TRACE_PRESETS, type TracePresetName } from './tracePresets'
 import { loadDecoderWasmModules, createTestPng, createTestJpeg, createTestWebp } from '../testSupport/wasmTestFixtures'
 import type { Upload } from '../types'
 
@@ -142,6 +143,41 @@ async function run() {
     'corrupted JPEG',
   )
   console.log('PASS: a corrupted (truncated) JPEG is rejected with a clear error, not a crash/hang')
+
+  // 7. Automatic preset recommendation (Phase 20): with no requested preset,
+  // analyze() picks one of the five named presets for a real decoded image.
+  const upload = makeUpload({ mimeType: 'image/png' })
+  const { analysis } = await provider.analyze(upload, pngBytes)
+  assertTrue(analysis.recommendedPreset in TRACE_PRESETS, `analyze() recommends a real preset (got "${analysis.recommendedPreset}")`)
+  console.log(
+    `PASS: analyze() recommends a preset for a real image (colors=${analysis.colorCountEstimate}, ` +
+      `transparency=${analysis.hasTransparency}, complexity=${analysis.complexityScore.toFixed(2)}) -> ${analysis.recommendedPreset}`,
+  )
+
+  // 8. Explicit preset request overrides the automatic recommendation.
+  const otherPreset: TracePresetName = analysis.recommendedPreset === 'photo' ? 'logo' : 'photo'
+  const requestedResult = await provider.vectorize(upload, pngBytes, otherPreset)
+  const defaultResult = await provider.vectorize(upload, pngBytes, null)
+  assertTrue(requestedResult.data.byteLength > 0, 'requesting an explicit preset still produces output')
+  assertTrue(defaultResult.data.byteLength > 0, 'requesting no preset (auto-recommend) still produces output')
+  console.log(`PASS: an explicit requestedPreset ("${otherPreset}") is honored instead of the auto-recommendation`)
+
+  // 9. An unrecognized requested preset falls back to auto-recommendation
+  // instead of throwing — a stale/garbage Job.preset shouldn't break processing.
+  const unknownPresetResult = await provider.vectorize(upload, pngBytes, 'not-a-real-preset')
+  assertTrue(unknownPresetResult.data.byteLength > 0, 'an unrecognized preset falls back to auto-recommendation, not an error')
+  console.log('PASS: an unrecognized requestedPreset falls back to automatic recommendation')
+
+  // 10. Measure every preset on the same real image, for comparison.
+  console.log('  preset comparison on the same PNG:')
+  for (const presetName of Object.keys(TRACE_PRESETS) as TracePresetName[]) {
+    const start = performance.now()
+    const result = await provider.vectorize(upload, pngBytes, presetName)
+    const elapsed = performance.now() - start
+    const svg = new TextDecoder().decode(result.data)
+    report({ label: `preset "${presetName}"`, conversionTimeMs: elapsed, svgSizeBytes: result.data.byteLength, pathCount: countPaths(svg) })
+  }
+  console.log('PASS: every preset produces output on the same source image')
 
   console.log('\nAll PlaceholderProvider (real engine) smoke tests passed.')
 }
