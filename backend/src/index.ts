@@ -2,6 +2,7 @@ import type { ExportedHandler, MessageBatch } from '@cloudflare/workers-types'
 import type { Env } from './env'
 import type { ConversionQueueMessage } from './integrations/queue'
 import { createJobService } from './services/JobService'
+import { createConversionService } from './services/ConversionService'
 import { handleHealthRoute } from './routes/health'
 import { handleUploadsRoute } from './routes/uploads'
 import { handleJobsRoute } from './routes/jobs'
@@ -33,18 +34,16 @@ export default {
     }
   },
 
-  // TODO(backend): real AI vectorization goes where the comment below marks
-  // it (ConversionService.processJob) — for now this consumer only exercises
-  // the state machine: queued -> processing -> completed.
+  // TODO(backend): real AI vectorization goes inside ConversionService.processJob
+  // — for now it produces a placeholder SVG, so the full pipeline (queued ->
+  // processing -> stored -> completed) can be exercised end-to-end.
   async queue(batch: MessageBatch<ConversionQueueMessage>, env: Env): Promise<void> {
     const jobService = createJobService(env)
+    const conversionService = createConversionService(env)
 
     for (const message of batch.messages) {
       try {
-        await jobService.markProcessing(message.body.jobId)
-        // TODO(backend): call ConversionService.processJob(job) here once a
-        // real vectorization engine exists.
-        await jobService.markCompleted(message.body.jobId)
+        await conversionService.processJob(message.body.jobId)
         message.ack()
       } catch (error) {
         const reason = error instanceof Error ? error.message : 'Unknown error'
