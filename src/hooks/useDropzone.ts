@@ -1,9 +1,7 @@
 import { useState, type DragEvent } from 'react'
 
-// TODO(backend): onFiles only ever receives a FileList for UI feedback (hover
-// state, filename display) — no file content is read, uploaded, or processed
-// anywhere this hook is used. Wire actual upload/vectorization here once the
-// backend exists.
+// Hero.tsx doesn't pass onFiles — its dropzone is decorative only. See
+// WorkspacePreview.tsx for the real upload wiring (src/hooks/useUploadFlow.ts).
 export function useDropzone(onFiles?: (files: FileList | null) => void) {
   const [isDragOver, setIsDragOver] = useState(false)
 

@@ -159,6 +159,12 @@ export interface Translation {
     previewModeBadge: string
     previewModeMessage: string
     exportDisabledNote: string
+    statusUploading: string
+    statusQueued: string
+    statusProcessing: string
+    statusFailedTitle: string
+    retry: string
+    download: string
   }
   features: {
     eyebrow: string
@@ -288,6 +294,12 @@ export const translations: Record<Language, Translation> = {
       previewModeMessage:
         'This is a frontend preview. Real AI vectorization will be connected in the next version.',
       exportDisabledNote: 'Available after AI processing is connected.',
+      statusUploading: 'Uploading…',
+      statusQueued: 'Queued — waiting to start',
+      statusProcessing: 'Vectorizing your image…',
+      statusFailedTitle: 'Conversion failed',
+      retry: 'Retry',
+      download: 'Download',
     },
     features: {
       eyebrow: 'Features',
@@ -593,6 +605,12 @@ export const translations: Record<Language, Translation> = {
       previewModeMessage:
         "Bu frontend ko'rib chiqish (preview). Haqiqiy AI vektorlashtirish keyingi versiyada ulanadi.",
       exportDisabledNote: 'AI qayta ishlash ulangandan keyin mavjud bo\'ladi.',
+      statusUploading: 'Yuklanmoqda…',
+      statusQueued: 'Navbatda — boshlanishini kutmoqda',
+      statusProcessing: 'Rasm vektorlashtirilmoqda…',
+      statusFailedTitle: 'Konvertatsiya muvaffaqiyatsiz tugadi',
+      retry: 'Qayta urinish',
+      download: 'Yuklab olish',
     },
     features: {
       eyebrow: 'Imkoniyatlar',
@@ -909,6 +927,12 @@ export const translations: Record<Language, Translation> = {
       previewModeMessage:
         'Это предпросмотр интерфейса. Реальная AI-векторизация будет подключена в следующей версии.',
       exportDisabledNote: 'Станет доступно после подключения AI-обработки.',
+      statusUploading: 'Загрузка…',
+      statusQueued: 'В очереди — ожидает начала',
+      statusProcessing: 'Векторизация изображения…',
+      statusFailedTitle: 'Не удалось выполнить конвертацию',
+      retry: 'Повторить',
+      download: 'Скачать',
     },
     features: {
       eyebrow: 'Возможности',

@@ -1,6 +1,18 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { UploadCloud, Clock, Printer, CheckCircle2, SlidersHorizontal, Eye, Info, RefreshCcw } from 'lucide-react'
+import {
+  UploadCloud,
+  Clock,
+  Printer,
+  CheckCircle2,
+  SlidersHorizontal,
+  Eye,
+  Info,
+  RefreshCcw,
+  Loader2,
+  AlertTriangle,
+  Download,
+} from 'lucide-react'
 import { SectionHeading } from '@/components/ui/SectionHeading'
 import { Button } from '@/components/ui/Button'
 import { BeforeAfterArt } from '@/components/BeforeAfterArt'
@@ -8,10 +20,20 @@ import { workspaceSettings, workspacePresets, recentFiles, exportFormats, printC
 import { useLanguage } from '@/lib/language'
 import { useCompareSlider } from '@/hooks/useCompareSlider'
 import { useDropzone } from '@/hooks/useDropzone'
+import { useUploadFlow } from '@/hooks/useUploadFlow'
+import { isBackendConfigured } from '@/lib/api/client'
+import { resolveDownloadUrl } from '@/lib/api/conversions'
 import { cn } from '@/utils/cn'
 
-// TODO(backend): Preview Mode only — no image is uploaded, read, or processed.
-// Real AI vectorization is not connected yet; this demonstrates the intended UI only.
+const backendConfigured = isBackendConfigured()
+
+/**
+ * When the backend isn't configured, this stays Preview Mode only (no image
+ * is uploaded, read, or processed) — see PROJECT_CONTEXT.md's honesty
+ * requirement. When it is configured, uploads go through the real API v1
+ * flow: upload → job → poll every second → completed/failed (see
+ * src/hooks/useUploadFlow.ts).
+ */
 export function WorkspacePreview() {
   const [activePreset, setActivePreset] = useState<(typeof workspacePresets)[number]>('logo')
   const [printReady, setPrintReady] = useState(true)
@@ -19,13 +41,49 @@ export function WorkspacePreview() {
   const { splitPct, containerRef, containerHandlers, onHandleKeyDown } = useCompareSlider(55)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { t } = useLanguage()
+  const { state: uploadState, upload, retry, reset } = useUploadFlow()
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+    }
+  }, [previewUrl])
 
   function handleFiles(files: FileList | null) {
-    if (!files?.[0]) return
-    setShowDemo(true)
+    const file = files?.[0]
+    if (!file) return
+
+    if (!backendConfigured) {
+      setShowDemo(true)
+      return
+    }
+
+    if (previewUrl) URL.revokeObjectURL(previewUrl)
+    setPreviewUrl(URL.createObjectURL(file))
+    void upload(file)
+  }
+
+  function handleNewImage() {
+    setShowDemo(false)
+    reset()
+    if (previewUrl) URL.revokeObjectURL(previewUrl)
+    setPreviewUrl(null)
   }
 
   const { isDragOver, dropzoneHandlers } = useDropzone(handleFiles)
+  const isWorking = backendConfigured && (uploadState.status === 'uploading' || uploadState.status === 'queued' || uploadState.status === 'processing')
+  const isCompleted = backendConfigured && uploadState.status === 'completed'
+  const isFailed = backendConfigured && uploadState.status === 'failed'
+  const isActive = backendConfigured ? isWorking || isCompleted || isFailed : showDemo
+  const completedDownloadUrl =
+    isCompleted && uploadState.status === 'completed' && uploadState.conversion?.downloadUrl
+      ? resolveDownloadUrl(uploadState.conversion.downloadUrl)
+      : null
+  const completedFormat =
+    isCompleted && uploadState.status === 'completed' && uploadState.conversion
+      ? uploadState.conversion.format.toUpperCase()
+      : null
 
   return (
     <section className="px-5 py-20 sm:px-8">
@@ -50,17 +108,21 @@ export function WorkspacePreview() {
             <span className="ml-3 text-xs font-medium text-[var(--ink-faint)]">
               {t.workspace.windowUrl}
             </span>
-            <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-[var(--accent-soft)] px-2.5 py-1 text-[10px] font-semibold text-[var(--accent)]">
-              <Eye size={11} />
-              {t.workspace.previewModeBadge}
-            </span>
+            {!backendConfigured && (
+              <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-[var(--accent-soft)] px-2.5 py-1 text-[10px] font-semibold text-[var(--accent)]">
+                <Eye size={11} />
+                {t.workspace.previewModeBadge}
+              </span>
+            )}
           </div>
 
-          {/* honest disclosure banner */}
-          <div className="flex items-start gap-2 border-b border-[var(--border)] bg-[var(--bg-subtle)] px-4 py-2.5 text-xs text-[var(--ink-muted)]">
-            <Info size={14} className="mt-0.5 flex-none text-[var(--accent)]" />
-            <span>{t.workspace.previewModeMessage}</span>
-          </div>
+          {/* honest disclosure banner — only shown while there's no real backend to talk to */}
+          {!backendConfigured && (
+            <div className="flex items-start gap-2 border-b border-[var(--border)] bg-[var(--bg-subtle)] px-4 py-2.5 text-xs text-[var(--ink-muted)]">
+              <Info size={14} className="mt-0.5 flex-none text-[var(--accent)]" />
+              <span>{t.workspace.previewModeMessage}</span>
+            </div>
+          )}
 
           <input
             ref={fileInputRef}
@@ -109,8 +171,9 @@ export function WorkspacePreview() {
                 {recentFiles.map((file) => (
                   <button
                     key={file}
-                    onClick={() => setShowDemo(true)}
-                    className="truncate rounded-md px-2 py-1.5 text-left text-xs text-[var(--ink-muted)] transition-colors hover:bg-[var(--bg-muted)] hover:text-[var(--ink)]"
+                    onClick={backendConfigured ? undefined : () => setShowDemo(true)}
+                    disabled={backendConfigured}
+                    className="truncate rounded-md px-2 py-1.5 text-left text-xs text-[var(--ink-muted)] transition-colors hover:bg-[var(--bg-muted)] hover:text-[var(--ink)] disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {file}
                   </button>
@@ -124,7 +187,7 @@ export function WorkspacePreview() {
                 className="relative flex-1 select-none overflow-hidden rounded-xl bg-[var(--bg-subtle)]"
                 style={{ minHeight: 280 }}
               >
-                {!showDemo && (
+                {!isActive && (
                   <div
                     role="button"
                     tabIndex={0}
@@ -149,7 +212,7 @@ export function WorkspacePreview() {
                   </div>
                 )}
 
-                {showDemo && (
+                {isActive && !backendConfigured && (
                   <motion.div
                     ref={containerRef}
                     initial={{ opacity: 0 }}
@@ -191,6 +254,61 @@ export function WorkspacePreview() {
                     </span>
                   </motion.div>
                 )}
+
+                {isActive && backendConfigured && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.3, ease: 'easeOut' }}
+                    className="relative flex h-full w-full items-center justify-center p-6"
+                  >
+                    {isWorking && (
+                      <div className="flex flex-col items-center gap-3 text-center">
+                        <Loader2 className="animate-spin text-[var(--accent)]" size={28} />
+                        <p className="text-sm font-semibold text-[var(--ink)]">
+                          {uploadState.status === 'uploading' && t.workspace.statusUploading}
+                          {uploadState.status === 'queued' && t.workspace.statusQueued}
+                          {uploadState.status === 'processing' && t.workspace.statusProcessing}
+                        </p>
+                      </div>
+                    )}
+
+                    {isFailed && uploadState.status === 'failed' && (
+                      <div className="flex flex-col items-center gap-3 text-center">
+                        <AlertTriangle className="text-red-500" size={28} />
+                        <p className="text-sm font-semibold text-[var(--ink)]">{t.workspace.statusFailedTitle}</p>
+                        <p className="max-w-[220px] text-xs text-[var(--ink-faint)]">{uploadState.message}</p>
+                        <Button variant="secondary" size="sm" onClick={retry}>
+                          <RefreshCcw size={14} />
+                          {t.workspace.retry}
+                        </Button>
+                      </div>
+                    )}
+
+                    {isCompleted && (
+                      <>
+                        {previewUrl && (
+                          <img src={previewUrl} alt="" className="absolute inset-0 h-full w-full object-contain p-6" />
+                        )}
+                        <div className="absolute inset-x-3 bottom-3 flex items-center justify-between gap-2 rounded-lg bg-black/55 px-3 py-2">
+                          <span className="flex items-center gap-1.5 text-[11px] font-medium text-white">
+                            <CheckCircle2 size={13} className="text-emerald-400" />
+                            {completedFormat}
+                          </span>
+                          {completedDownloadUrl && (
+                            <Button
+                              size="sm"
+                              onClick={() => window.open(completedDownloadUrl, '_blank', 'noopener,noreferrer')}
+                            >
+                              <Download size={14} />
+                              {t.workspace.download}
+                            </Button>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </motion.div>
+                )}
               </div>
 
               <div className="mt-3 flex items-center justify-between gap-2 text-xs text-[var(--ink-faint)]">
@@ -198,10 +316,10 @@ export function WorkspacePreview() {
                   {t.workspace.presetPrefix}
                   {t.workspace.presets[activePreset]}
                 </span>
-                {showDemo && (
+                {isActive && (
                   <button
                     type="button"
-                    onClick={() => setShowDemo(false)}
+                    onClick={handleNewImage}
                     className="inline-flex items-center gap-1 font-medium text-[var(--accent)] transition-colors hover:text-[var(--accent-hover)]"
                   >
                     <RefreshCcw size={11} />
@@ -282,20 +400,30 @@ export function WorkspacePreview() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <span className="text-xs text-[var(--ink-faint)]">{t.workspace.exportAs}</span>
               <div className="flex flex-wrap gap-2">
-                {exportFormats.map((format) => (
-                  <Button
-                    key={format}
-                    variant="secondary"
-                    size="sm"
-                    disabled
-                    title={t.workspace.exportDisabledNote}
-                  >
-                    {format}
-                  </Button>
-                ))}
+                {exportFormats.map((format) => {
+                  const isReady = completedFormat === format && completedDownloadUrl
+                  return (
+                    <Button
+                      key={format}
+                      variant="secondary"
+                      size="sm"
+                      disabled={!isReady}
+                      title={isReady ? undefined : t.workspace.exportDisabledNote}
+                      onClick={
+                        isReady
+                          ? () => window.open(completedDownloadUrl, '_blank', 'noopener,noreferrer')
+                          : undefined
+                      }
+                    >
+                      {format}
+                    </Button>
+                  )
+                })}
               </div>
             </div>
-            <p className="text-right text-[11px] text-[var(--ink-faint)]">{t.workspace.exportDisabledNote}</p>
+            {!isCompleted && (
+              <p className="text-right text-[11px] text-[var(--ink-faint)]">{t.workspace.exportDisabledNote}</p>
+            )}
           </div>
         </div>
       </div>
