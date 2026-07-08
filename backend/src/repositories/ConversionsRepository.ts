@@ -6,4 +6,6 @@ export interface ConversionsRepository {
   /** Today's pipeline (see ConversionService.processJob) produces exactly one Conversion per Job. */
   findByJobId(jobId: string): Promise<Conversion | null>
   findByUserId(userId: string): Promise<Conversion[]>
+  /** Used by routes/download.ts to resolve a signed download URL's R2 key back to its Conversion row. */
+  findByStorageKey(storageKey: string): Promise<Conversion | null>
 }

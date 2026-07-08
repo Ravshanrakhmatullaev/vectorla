@@ -1,6 +1,15 @@
-import type { PlanLimitsByPlan } from '../types'
+import type { PlanLimitsByPlan, ExportFormat } from '../types'
 
 export const ALLOWED_UPLOAD_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'] as const
+
+/** Content-Type to send when streaming a conversion's file — see routes/download.ts. */
+export const EXPORT_FORMAT_MIME_TYPES: Record<ExportFormat, string> = {
+  svg: 'image/svg+xml',
+  png: 'image/png',
+  pdf: 'application/pdf',
+  eps: 'application/postscript',
+  dxf: 'application/dxf',
+}
 
 // Credit costs per operation. 1 credit = 1 image processed in 1 export
 // format. See backend/README.md "Pricing & Credits" for the full rationale.

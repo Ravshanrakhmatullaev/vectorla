@@ -80,4 +80,15 @@ export class SupabaseConversionsRepository implements ConversionsRepository {
     if (error) throw new Error(`Failed to list conversions: ${error.message}`)
     return (data ?? []).map(mapRowToConversion)
   }
+
+  async findByStorageKey(storageKey: string): Promise<Conversion | null> {
+    const { data, error } = await this.client
+      .from('conversions')
+      .select()
+      .eq('storage_key', storageKey)
+      .maybeSingle<ConversionRow>()
+
+    if (error) throw new Error(`Failed to fetch conversion by storage key: ${error.message}`)
+    return data ? mapRowToConversion(data) : null
+  }
 }

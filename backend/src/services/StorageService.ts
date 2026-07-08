@@ -1,4 +1,5 @@
 import type { R2Client } from '../integrations/r2'
+import { NotFoundError } from '../errors'
 
 export interface SignedUrlVerification {
   valid: boolean
@@ -15,9 +16,8 @@ async function hmacHex(secret: string, message: string): Promise<string> {
     .join('')
 }
 
-// TODO(backend): getFile/deleteFile still need real implementations — not
-// needed until an actual download-serving route is built (see
-// getSignedDownloadUrl/verifySignedUrl below for that route's future seam).
+// TODO(backend): deleteFile still needs a real implementation — not needed
+// until upload/conversion deletion is built.
 export class StorageService {
   constructor(
     private readonly r2: R2Client,
@@ -28,8 +28,11 @@ export class StorageService {
     await this.r2.put(key, data)
   }
 
-  async getFile(_key: string): Promise<ReadableStream> {
-    throw new Error('Not implemented')
+  /** Used by routes/download.ts to stream a conversion's file after all download checks pass. */
+  async getFile(key: string): Promise<ReadableStream> {
+    const object = await this.r2.get(key)
+    if (!object) throw new NotFoundError(`No object found in storage for key "${key}"`)
+    return object
   }
 
   /**

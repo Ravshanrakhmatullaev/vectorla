@@ -30,4 +30,11 @@ export class InMemoryConversionsRepository implements ConversionsRepository {
       .filter((conversion) => conversion.userId === userId)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   }
+
+  async findByStorageKey(storageKey: string): Promise<Conversion | null> {
+    for (const conversion of this.conversionsById.values()) {
+      if (conversion.storageKey === storageKey) return conversion
+    }
+    return null
+  }
 }

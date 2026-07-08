@@ -7,6 +7,7 @@ import { handleHealthRoute } from './routes/health'
 import { handleUploadsRoute } from './routes/uploads'
 import { handleJobsRoute } from './routes/jobs'
 import { handleConversionsRoute } from './routes/conversions'
+import { handleDownloadRoute } from './routes/download'
 import { handleCreditsRoute } from './routes/credits'
 import { handleHistoryRoute } from './routes/history'
 
@@ -25,6 +26,7 @@ export default {
       if (url.pathname.startsWith('/api/uploads')) return await handleUploadsRoute(request, env)
       if (url.pathname.startsWith('/api/jobs')) return await handleJobsRoute(request, env)
       if (url.pathname.startsWith('/api/conversions')) return await handleConversionsRoute(request, env)
+      if (url.pathname === '/api/download') return await handleDownloadRoute(request, env)
       if (url.pathname.startsWith('/api/credits')) return await handleCreditsRoute(request, env)
       if (url.pathname.startsWith('/api/history')) return await handleHistoryRoute(request, env)
       return new Response('Not Found', { status: 404 })
