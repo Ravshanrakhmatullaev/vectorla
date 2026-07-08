@@ -12,5 +12,14 @@ export interface Env {
   DOWNLOAD_URL_SECRET: string
   /** Selects the VectorizationProvider ConversionService uses — see providers/ProviderFactory.ts. */
   VECTORIZATION_PROVIDER: VectorizationProviderName
+  /**
+   * jSquash's WASM raster decoders (Phase 19) — bound via wrangler.toml's
+   * [[wasm_modules]], which compiles each .wasm file to a WebAssembly.Module
+   * at build/bundle time (no runtime fetch, no filesystem access needed).
+   * See providers/PlaceholderProvider.ts for how these get used.
+   */
+  PNG_DECODER_WASM: WebAssembly.Module
+  JPEG_DECODER_WASM: WebAssembly.Module
+  WEBP_DECODER_WASM: WebAssembly.Module
   ENVIRONMENT: 'development' | 'staging' | 'production'
 }

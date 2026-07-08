@@ -7,6 +7,7 @@ import worker from './index'
 import { createJobService } from './services/JobService'
 import { createCreditsService } from './services/CreditsService'
 import { createUploadsRepository } from './repositories/createUploadsRepository'
+import { loadDecoderWasmModules, createTestPng } from './testSupport/wasmTestFixtures'
 import type { Env } from './env'
 import type { R2Bucket, Queue, Message, MessageBatch } from '@cloudflare/workers-types'
 import type { ConversionQueueMessage } from './integrations/queue'
@@ -21,21 +22,37 @@ function assertTrue(condition: boolean, message: string): void {
   if (!condition) throw new Error(message)
 }
 
-function createFakeEnv(): Env {
+function arrayBufferToStream(buffer: ArrayBuffer): ReadableStream {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array(buffer))
+      controller.close()
+    },
+  })
+}
+
+async function createFakeEnv(): Promise<Env> {
+  const store = new Map<string, ArrayBuffer>()
   const bucket = {
-    async put() {
+    async put(key: string, value: ArrayBuffer) {
+      store.set(key, value)
       return null
     },
-    async get() {
-      return null
+    async get(key: string) {
+      const value = store.get(key)
+      return value ? ({ body: arrayBufferToStream(value) } as never) : null
     },
-    async delete() {},
+    async delete(key: string) {
+      store.delete(key)
+    },
   } as unknown as R2Bucket
 
   const queue = {
     async send() {},
     async sendBatch() {},
   } as unknown as Queue<ConversionQueueMessage>
+
+  const { png, jpeg, webp } = await loadDecoderWasmModules()
 
   return {
     UPLOADS_BUCKET: bucket,
@@ -44,6 +61,9 @@ function createFakeEnv(): Env {
     SUPABASE_SERVICE_ROLE_KEY: '',
     DOWNLOAD_URL_SECRET: 'test-secret',
     VECTORIZATION_PROVIDER: 'placeholder',
+    PNG_DECODER_WASM: png,
+    JPEG_DECODER_WASM: jpeg,
+    WEBP_DECODER_WASM: webp,
     ENVIRONMENT: 'development',
   }
 }
@@ -88,21 +108,25 @@ function createFakeBatch(
 async function run() {
   if (!worker.queue) throw new Error('worker.queue is not defined')
 
-  const env = createFakeEnv()
+  const env = await createFakeEnv()
   const jobService = createJobService(env)
 
   // Seed a queued job directly via JobService (bypassing the upload flow —
-  // this test only cares about the consumer's state machine).
+  // this test only cares about the consumer's state machine). The queue
+  // consumer now runs a real decode+trace (Phase 19), so the R2 object at
+  // this storage key must be a genuinely valid PNG, not just a placeholder.
   // The uploads repository shares the same in-memory store within this env,
   // so createJob's existence check needs a matching upload to exist first.
   const uploads = createUploadsRepository(env)
+  const storageKey = 'uploads/user-1/upload-1/logo.png'
+  await env.UPLOADS_BUCKET.put(storageKey, await createTestPng())
   await uploads.create({
     id: 'upload-1',
     userId: 'user-1',
     originalFileName: 'logo.png',
     mimeType: 'image/png',
     sizeBytes: 10,
-    storageKey: 'uploads/user-1/upload-1/logo.png',
+    storageKey,
     status: 'stored',
     createdAt: new Date().toISOString(),
   })

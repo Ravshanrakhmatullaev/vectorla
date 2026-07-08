@@ -37,6 +37,10 @@ function createFakeEnv(environment: Env['ENVIRONMENT'] = 'development'): Env {
     SUPABASE_SERVICE_ROLE_KEY: '',
     DOWNLOAD_URL_SECRET: 'test-secret',
     VECTORIZATION_PROVIDER: 'placeholder',
+    // Never actually used — requireAuth doesn't touch storage/vectorization.
+    PNG_DECODER_WASM: {} as WebAssembly.Module,
+    JPEG_DECODER_WASM: {} as WebAssembly.Module,
+    WEBP_DECODER_WASM: {} as WebAssembly.Module,
     ENVIRONMENT: environment,
   }
 }

@@ -12,6 +12,7 @@ import { createCreditsService } from '../services/CreditsService'
 import { createConversionsRepository } from '../repositories/createConversionsRepository'
 import { StorageService } from '../services/StorageService'
 import { createR2Client } from '../integrations/r2'
+import { loadDecoderWasmModules, createTestPng } from '../testSupport/wasmTestFixtures'
 import type { Env } from '../env'
 import type { R2Bucket, Queue, Message, MessageBatch } from '@cloudflare/workers-types'
 import type { ConversionQueueMessage } from '../integrations/queue'
@@ -26,14 +27,6 @@ function assertTrue(condition: boolean, message: string): void {
   if (!condition) throw new Error(message)
 }
 
-// Phase 17 added magic-byte signature validation (see validateUpload.ts) —
-// fixtures declaring image/png must start with the real PNG signature.
-function pngBytes(size = 16): ArrayBuffer {
-  const buffer = new ArrayBuffer(Math.max(size, 8))
-  new Uint8Array(buffer).set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
-  return buffer
-}
-
 function arrayBufferToStream(buffer: ArrayBuffer): ReadableStream {
   return new ReadableStream({
     start(controller) {
@@ -43,7 +36,7 @@ function arrayBufferToStream(buffer: ArrayBuffer): ReadableStream {
   })
 }
 
-function createFakeEnv(): Env {
+async function createFakeEnv(): Promise<Env> {
   const store = new Map<string, ArrayBuffer>()
   const bucket = {
     async put(key: string, value: ArrayBuffer) {
@@ -64,6 +57,8 @@ function createFakeEnv(): Env {
     async sendBatch() {},
   } as unknown as Queue<ConversionQueueMessage>
 
+  const { png, jpeg, webp } = await loadDecoderWasmModules()
+
   return {
     UPLOADS_BUCKET: bucket,
     CONVERSION_QUEUE: queue,
@@ -71,6 +66,9 @@ function createFakeEnv(): Env {
     SUPABASE_SERVICE_ROLE_KEY: '',
     DOWNLOAD_URL_SECRET: 'test-secret',
     VECTORIZATION_PROVIDER: 'placeholder',
+    PNG_DECODER_WASM: png,
+    JPEG_DECODER_WASM: jpeg,
+    WEBP_DECODER_WASM: webp,
     ENVIRONMENT: 'development',
   }
 }
@@ -118,7 +116,9 @@ function downloadRequest(userId: string | null, downloadUrl: string): Request {
 }
 
 async function uploadAndComplete(env: Env, userId: string): Promise<{ conversionId: string; storageKey: string }> {
-  const file = new File([pngBytes()], 'logo.png', { type: 'image/png' })
+  // Phase 19: the queue consumer now really decodes+traces this file, so it
+  // must be a genuinely valid PNG, not just a placeholder.
+  const file = new File([await createTestPng()], 'logo.png', { type: 'image/png' })
   const uploadRes = await handleUploadsRoute(makeUploadRequest(userId, { file }), env)
   const { job } = (await uploadRes.json()) as { job: { id: string } }
   await runJobToCompletion(env, job.id)
@@ -130,7 +130,7 @@ async function uploadAndComplete(env: Env, userId: string): Promise<{ conversion
 }
 
 async function run() {
-  const env = createFakeEnv()
+  const env = await createFakeEnv()
   const creditsService = createCreditsService(env)
   await creditsService.grantMonthlyCredits('dl-user', 'free')
   await creditsService.grantMonthlyCredits('dl-user-2', 'free')
@@ -150,7 +150,8 @@ async function run() {
   )
   assertEqual(okRes.headers.get('Cache-Control'), 'private, max-age=0, no-store', 'Cache-Control forbids caching')
   const body = await okRes.text()
-  assertTrue(body.includes('Vectorla Preview'), 'response body is the placeholder SVG content')
+  assertTrue(body.startsWith('<svg'), 'response body is a real traced SVG')
+  assertTrue(body.includes('<path'), 'response body contains at least one traced path')
   console.log('PASS: 200 OK for a valid download, with correct headers and streamed content')
 
   // 2. Expired URL: 410

@@ -15,6 +15,7 @@ import { InMemoryConversionsRepository } from '../repositories/InMemoryConversio
 import { InMemoryCreditsRepository } from '../repositories/InMemoryCreditsRepository'
 import { CreditsService } from './CreditsService'
 import { PlaceholderProvider } from '../providers/PlaceholderProvider'
+import { loadDecoderWasmModules, createTestPng } from '../testSupport/wasmTestFixtures'
 import type { QueueClient } from '../integrations/queue'
 import type { R2Client } from '../integrations/r2'
 import type { Upload } from '../types'
@@ -55,7 +56,15 @@ function createFakeR2Client(): R2Client & { objects: Map<string, ReadableStream 
     },
     async get(key) {
       const value = objects.get(key)
-      return value instanceof ReadableStream ? value : null
+      if (!value) return null
+      if (value instanceof ReadableStream) return value
+      const buffer = value
+      return new ReadableStream({
+        start(controller) {
+          controller.enqueue(new Uint8Array(buffer))
+          controller.close()
+        },
+      })
     },
     async delete(key) {
       objects.delete(key)
@@ -91,16 +100,20 @@ async function run() {
   const jobService = new JobService(jobsRepo, uploadsRepo, queueService)
   const r2 = createFakeR2Client()
   const storage = new StorageService(r2, 'test-secret')
+  const wasm = await loadDecoderWasmModules()
   const service = new ConversionService(
     jobService,
     uploadsRepo,
     storage,
     conversionsRepo,
-    new PlaceholderProvider(),
+    new PlaceholderProvider(wasm),
     creditsService,
   )
 
   await seedUpload(uploadsRepo)
+  // Phase 19: processJob now really decodes+traces this file, so it must be
+  // a genuinely valid PNG, not just a placeholder.
+  await r2.put('uploads/user-1/upload-1/logo.png', await createTestPng())
   await seedUpload(uploadsRepo, { id: 'upload-broke', userId: 'broke-user', storageKey: 'uploads/broke-user/upload-broke/logo.png' })
 
   // 0. Not enough credits: processJob rejects before vectorizing/storing/debiting
@@ -146,8 +159,8 @@ async function run() {
   assertEqual(conversion?.userId, 'user-1', 'conversion references the user')
   assertEqual(conversion?.format, 'svg', 'conversion format is svg')
   assertTrue((conversion?.fileSizeBytes ?? 0) > 0, 'conversion has a non-zero file size')
-  assertTrue(r2.objects.has(conversion?.storageKey ?? ''), 'placeholder SVG stored in R2')
-  console.log('PASS: processJob stores a placeholder SVG and saves conversion metadata')
+  assertTrue(r2.objects.has(conversion?.storageKey ?? ''), 'traced SVG stored in R2')
+  console.log('PASS: processJob traces a real SVG and saves conversion metadata')
 
   const completedJob = await jobService.getJob(job.id)
   assertEqual(completedJob.status, 'completed', 'job status after processJob')

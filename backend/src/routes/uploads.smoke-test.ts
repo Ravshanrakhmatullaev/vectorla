@@ -6,6 +6,7 @@
 //
 // Run with: npx tsx src/routes/uploads.smoke-test.ts (from inside backend/)
 import { handleUploadsRoute } from './uploads'
+import { loadDecoderWasmModules } from '../testSupport/wasmTestFixtures'
 import type { Env } from '../env'
 import type { R2Bucket, Queue } from '@cloudflare/workers-types'
 import type { ConversionQueueMessage } from '../integrations/queue'
@@ -52,7 +53,11 @@ function createFakeQueue(): Queue<ConversionQueueMessage> {
   } as unknown as Queue<ConversionQueueMessage>
 }
 
-function createFakeEnv(shouldFail = false): Env {
+async function createFakeEnv(shouldFail = false): Promise<Env> {
+  // This test never drives a job through the queue consumer (no real
+  // decoding ever runs), but Env still requires real WebAssembly.Module
+  // values — see testSupport/wasmTestFixtures.ts.
+  const { png, jpeg, webp } = await loadDecoderWasmModules()
   return {
     UPLOADS_BUCKET: createFakeBucket(shouldFail),
     CONVERSION_QUEUE: createFakeQueue(),
@@ -63,6 +68,9 @@ function createFakeEnv(shouldFail = false): Env {
     SUPABASE_SERVICE_ROLE_KEY: '',
     DOWNLOAD_URL_SECRET: 'test-secret',
     VECTORIZATION_PROVIDER: 'placeholder',
+    PNG_DECODER_WASM: png,
+    JPEG_DECODER_WASM: jpeg,
+    WEBP_DECODER_WASM: webp,
     ENVIRONMENT: 'development',
   }
 }
@@ -78,7 +86,7 @@ function makeUploadRequest(userId: string, fields: Record<string, string | File>
 }
 
 async function run() {
-  const env = createFakeEnv()
+  const env = await createFakeEnv()
 
   // 201 on success — Phase 10: response now also includes the auto-created job
   const goodFile = new File([pngBytes()], 'route-test.png', { type: 'image/png' })
@@ -133,7 +141,7 @@ async function run() {
   console.log('PASS: 405 Method Not Allowed for GET')
 
   // 500 — unexpected failure (R2 put throws)
-  const brokenEnv = createFakeEnv(true)
+  const brokenEnv = await createFakeEnv(true)
   const okFile = new File([pngBytes()], 'will-fail.png', { type: 'image/png' })
   const res7 = await handleUploadsRoute(makeUploadRequest('route-user-4', { file: okFile }), brokenEnv)
   assertEqual(res7.status, 500, 'status for unexpected storage failure')

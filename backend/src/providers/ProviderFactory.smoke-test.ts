@@ -9,6 +9,7 @@ import { PlaceholderProvider } from './PlaceholderProvider'
 import { PotraceProvider } from './PotraceProvider'
 import { VisionProvider } from './VisionProvider'
 import { OpenAIProvider } from './OpenAIProvider'
+import { loadDecoderWasmModules, createTestPng } from '../testSupport/wasmTestFixtures'
 import type { Env } from '../env'
 import type { Upload } from '../types'
 import type { R2Bucket, Queue } from '@cloudflare/workers-types'
@@ -35,7 +36,8 @@ async function assertRejects(fn: () => Promise<unknown>, pattern: RegExp, messag
   throw new Error(`${message}: expected the call to reject, but it resolved`)
 }
 
-function createFakeEnv(provider: Env['VECTORIZATION_PROVIDER']): Env {
+async function createFakeEnv(provider: Env['VECTORIZATION_PROVIDER']): Promise<Env> {
+  const { png, jpeg, webp } = await loadDecoderWasmModules()
   return {
     UPLOADS_BUCKET: {} as R2Bucket,
     CONVERSION_QUEUE: {} as Queue<ConversionQueueMessage>,
@@ -43,6 +45,9 @@ function createFakeEnv(provider: Env['VECTORIZATION_PROVIDER']): Env {
     SUPABASE_SERVICE_ROLE_KEY: '',
     DOWNLOAD_URL_SECRET: 'test-secret',
     VECTORIZATION_PROVIDER: provider,
+    PNG_DECODER_WASM: png,
+    JPEG_DECODER_WASM: jpeg,
+    WEBP_DECODER_WASM: webp,
     ENVIRONMENT: 'development',
   }
 }
@@ -59,45 +64,62 @@ const fakeUpload: Upload = {
 }
 
 async function run() {
-  // 1. PlaceholderProvider is the only one that works
-  const placeholder = new PlaceholderProvider()
-  const result = await placeholder.vectorize(fakeUpload)
+  const wasm = await loadDecoderWasmModules()
+
+  // 1. PlaceholderProvider is the only one that works — Phase 19 made it a
+  // real ImageTracer.js-based engine (see PlaceholderProvider.ts for the
+  // full PNG/JPEG/WEBP/invalid/corrupted matrix — this just spot-checks it).
+  const placeholder = new PlaceholderProvider(wasm)
+  const pngUpload = { ...fakeUpload, mimeType: 'image/png' }
+  const result = await placeholder.vectorize(pngUpload, await createTestPng())
   assertEqual(result.format, 'svg', 'PlaceholderProvider produces an svg')
   assertTrue(result.data.byteLength > 0, 'PlaceholderProvider produces non-empty output')
-  console.log('PASS: PlaceholderProvider.vectorize produces placeholder SVG output')
+  console.log('PASS: PlaceholderProvider.vectorize produces real traced SVG output')
 
   // 2. The other three all throw "Not implemented"
-  await assertRejects(() => new PotraceProvider().vectorize(fakeUpload), /Not implemented/, 'PotraceProvider')
+  await assertRejects(
+    () => new PotraceProvider().vectorize(fakeUpload, new ArrayBuffer(0)),
+    /Not implemented/,
+    'PotraceProvider',
+  )
   console.log('PASS: PotraceProvider.vectorize throws "Not implemented"')
 
-  await assertRejects(() => new VisionProvider().vectorize(fakeUpload), /Not implemented/, 'VisionProvider')
+  await assertRejects(
+    () => new VisionProvider().vectorize(fakeUpload, new ArrayBuffer(0)),
+    /Not implemented/,
+    'VisionProvider',
+  )
   console.log('PASS: VisionProvider.vectorize throws "Not implemented"')
 
-  await assertRejects(() => new OpenAIProvider().vectorize(fakeUpload), /Not implemented/, 'OpenAIProvider')
+  await assertRejects(
+    () => new OpenAIProvider().vectorize(fakeUpload, new ArrayBuffer(0)),
+    /Not implemented/,
+    'OpenAIProvider',
+  )
   console.log('PASS: OpenAIProvider.vectorize throws "Not implemented"')
 
   // 3. ProviderFactory selects the right concrete class per env.VECTORIZATION_PROVIDER
   assertTrue(
-    createVectorizationProvider(createFakeEnv('placeholder')) instanceof PlaceholderProvider,
+    createVectorizationProvider(await createFakeEnv('placeholder')) instanceof PlaceholderProvider,
     'factory selects PlaceholderProvider',
   )
   assertTrue(
-    createVectorizationProvider(createFakeEnv('potrace')) instanceof PotraceProvider,
+    createVectorizationProvider(await createFakeEnv('potrace')) instanceof PotraceProvider,
     'factory selects PotraceProvider',
   )
   assertTrue(
-    createVectorizationProvider(createFakeEnv('vision')) instanceof VisionProvider,
+    createVectorizationProvider(await createFakeEnv('vision')) instanceof VisionProvider,
     'factory selects VisionProvider',
   )
   assertTrue(
-    createVectorizationProvider(createFakeEnv('openai')) instanceof OpenAIProvider,
+    createVectorizationProvider(await createFakeEnv('openai')) instanceof OpenAIProvider,
     'factory selects OpenAIProvider',
   )
   console.log('PASS: ProviderFactory selects the provider matching env.VECTORIZATION_PROVIDER')
 
   // 4. An unrecognized value falls back to PlaceholderProvider rather than crashing
   const badEnv = {
-    ...createFakeEnv('placeholder'),
+    ...(await createFakeEnv('placeholder')),
     VECTORIZATION_PROVIDER: 'not-a-real-provider',
   } as unknown as Env
   assertTrue(

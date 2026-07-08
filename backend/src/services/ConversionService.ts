@@ -73,7 +73,9 @@ export class ConversionService {
     const requiredCredits = calculateRequiredCredits(1, false)
     await this.credits.ensureEnoughCredits(job.userId, requiredCredits)
 
-    const result = await this.provider.vectorize(upload)
+    const fileStream = await this.storage.getFile(upload.storageKey)
+    const fileBytes = await new Response(fileStream).arrayBuffer()
+    const result = await this.provider.vectorize(upload, fileBytes)
     const storageKey = `conversions/${job.userId}/${job.id}/output.${result.format}`
     await this.storage.storeFile(storageKey, result.data)
 

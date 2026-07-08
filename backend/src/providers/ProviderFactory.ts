@@ -14,15 +14,16 @@ import { OpenAIProvider } from './OpenAIProvider'
  * pipeline.
  */
 export function createVectorizationProvider(env: Env): VectorizationProvider {
+  const decoderWasm = { png: env.PNG_DECODER_WASM, jpeg: env.JPEG_DECODER_WASM, webp: env.WEBP_DECODER_WASM }
   const name = env.VECTORIZATION_PROVIDER
   if (!isVectorizationProviderName(name)) {
     console.error(`Unknown VECTORIZATION_PROVIDER "${name}" — falling back to "placeholder"`)
-    return new PlaceholderProvider()
+    return new PlaceholderProvider(decoderWasm)
   }
 
   switch (name) {
     case 'placeholder':
-      return new PlaceholderProvider()
+      return new PlaceholderProvider(decoderWasm)
     case 'potrace':
       return new PotraceProvider()
     case 'vision':

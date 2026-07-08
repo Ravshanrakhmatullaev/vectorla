@@ -1,24 +1,74 @@
 import type { Upload } from '../types'
 import type { VectorizationProvider, VectorizationResult } from './VectorizationProvider'
+import { UnsupportedMediaTypeError } from '../errors'
+import { optimizeSvg } from './svgOptimizer'
+import ImageTracer from 'imagetracerjs'
+import { init as initPngDecoder, default as decodePng } from '@jsquash/png/decode.js'
+import { init as initJpegDecoder, default as decodeJpeg } from '@jsquash/jpeg/decode.js'
+import { init as initWebpDecoder, default as decodeWebp } from '@jsquash/webp/decode.js'
+
+export interface RasterDecoderWasm {
+  png: WebAssembly.Module
+  jpeg: WebAssembly.Module
+  webp: WebAssembly.Module
+}
+
+// Tuned for logo/artwork-style input (flat colors, clean edges) rather than
+// photographs: low error thresholds keep detail, a small pathomit drops
+// single-pixel noise specks without losing real shapes.
+const TRACE_OPTIONS = {
+  ltres: 1,
+  qtres: 1,
+  pathomit: 8,
+  rightangleenhance: true,
+}
 
 /**
- * The only provider that actually works today — produces a static "Vectorla
- * Preview" SVG regardless of input, so the full pipeline (queue ->
- * processing -> storage -> metadata -> completed) can be exercised
- * end-to-end without a real tracing/AI engine. See PotraceProvider,
- * VisionProvider, OpenAIProvider for the (currently stubbed) real options.
+ * The real vectorization engine (Phase 19) — despite the name/file location
+ * (kept as-is per this phase's "no config/API changes" rule; this is what
+ * VECTORIZATION_PROVIDER="placeholder" now points at), this is no longer a
+ * placeholder. Decodes the uploaded PNG/JPEG/WEBP via jSquash's WASM codecs
+ * (built for exactly this — Cloudflare Workers/edge runtimes, see
+ * ProviderFactory for how the .wasm modules are supplied) into raw pixels,
+ * then traces them into a real, full-color SVG with ImageTracer.js (pure
+ * JS, no further dependencies). See PotraceProvider/VisionProvider/
+ * OpenAIProvider for the options this phase deliberately left as stubs.
  */
 export class PlaceholderProvider implements VectorizationProvider {
   readonly name = 'placeholder'
 
-  async vectorize(_upload: Upload): Promise<VectorizationResult> {
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="#f4f4f5"/>
-  <text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" font-size="28" fill="#18181b">Vectorla Preview</text>
-</svg>`
+  constructor(private readonly wasm: RasterDecoderWasm) {}
+
+  async vectorize(upload: Upload, fileBytes: ArrayBuffer): Promise<VectorizationResult> {
+    const imageData = await this.decode(upload.mimeType, fileBytes)
+    const rawSvg = ImageTracer.imagedataToSVG(imageData, TRACE_OPTIONS)
+    const svg = optimizeSvg(rawSvg, { width: imageData.width, height: imageData.height })
+
     return {
       data: new TextEncoder().encode(svg).buffer as ArrayBuffer,
       format: 'svg',
+    }
+  }
+
+  private async decode(mimeType: string, fileBytes: ArrayBuffer): Promise<ImageData> {
+    try {
+      switch (mimeType) {
+        case 'image/png':
+          await initPngDecoder(this.wasm.png)
+          return await decodePng(fileBytes)
+        case 'image/jpeg':
+          await initJpegDecoder(this.wasm.jpeg)
+          return await decodeJpeg(fileBytes)
+        case 'image/webp':
+          await initWebpDecoder(this.wasm.webp)
+          return await decodeWebp(fileBytes)
+        default:
+          throw new UnsupportedMediaTypeError(`Cannot vectorize unsupported mime type "${mimeType}"`)
+      }
+    } catch (error) {
+      if (error instanceof UnsupportedMediaTypeError) throw error
+      const reason = error instanceof Error ? error.message : String(error)
+      throw new Error(`Failed to decode ${mimeType} image: ${reason}`)
     }
   }
 }

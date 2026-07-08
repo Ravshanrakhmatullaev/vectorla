@@ -23,9 +23,26 @@ max_batch_timeout = 30
 [vars]
 ENVIRONMENT = "development"
 # Selects the vectorization backend (see src/providers/ProviderFactory.ts).
-# "placeholder" is the only one that actually works today — the others
-# (potrace/vision/openai) are architecture stubs, not real options yet.
+# "placeholder" is the real ImageTracer.js-based engine as of Phase 19 (the
+# name is kept as-is — see PlaceholderProvider.ts — to avoid any config/API
+# changes); the others (potrace/vision/openai) are still architecture stubs.
 VECTORIZATION_PROVIDER = "placeholder"
+
+# WASM raster decoders (Phase 19) — jSquash's codecs, built for exactly this
+# (Cloudflare Workers/edge runtimes). Compiled to a WebAssembly.Module at
+# bundle time, available as env.PNG_DECODER_WASM etc. — see
+# src/providers/PlaceholderProvider.ts.
+[[wasm_modules]]
+binding = "PNG_DECODER_WASM"
+source = "node_modules/@jsquash/png/codec/pkg/squoosh_png_bg.wasm"
+
+[[wasm_modules]]
+binding = "JPEG_DECODER_WASM"
+source = "node_modules/@jsquash/jpeg/codec/dec/mozjpeg_dec.wasm"
+
+[[wasm_modules]]
+binding = "WEBP_DECODER_WASM"
+source = "node_modules/@jsquash/webp/codec/dec/webp_dec.wasm"
 
 # Supabase credentials, and the download-URL signing key, are secrets, not vars — set them with:
 #   wrangler secret put SUPABASE_URL

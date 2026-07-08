@@ -11,6 +11,7 @@ import { handleJobsRoute } from './jobs'
 import { handleConversionsRoute } from './conversions'
 import { createJobService } from '../services/JobService'
 import { createCreditsService } from '../services/CreditsService'
+import { loadDecoderWasmModules, createTestPng } from '../testSupport/wasmTestFixtures'
 import type { Env } from '../env'
 import type { R2Bucket, Queue, Message, MessageBatch } from '@cloudflare/workers-types'
 import type { ConversionQueueMessage } from '../integrations/queue'
@@ -25,23 +26,25 @@ function assertTrue(condition: boolean, message: string): void {
   if (!condition) throw new Error(message)
 }
 
-// Phase 17 added magic-byte signature validation (see validateUpload.ts) —
-// fixtures declaring image/png must start with the real PNG signature.
-function pngBytes(size = 16): ArrayBuffer {
-  const buffer = new ArrayBuffer(Math.max(size, 8))
-  new Uint8Array(buffer).set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
-  return buffer
+function arrayBufferToStream(buffer: ArrayBuffer): ReadableStream {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array(buffer))
+      controller.close()
+    },
+  })
 }
 
-function createFakeEnv(): Env {
+async function createFakeEnv(): Promise<Env> {
   const store = new Map<string, ArrayBuffer>()
   const bucket = {
     async put(key: string, value: ArrayBuffer) {
       store.set(key, value)
       return null
     },
-    async get() {
-      return null
+    async get(key: string) {
+      const value = store.get(key)
+      return value ? ({ body: arrayBufferToStream(value) } as never) : null
     },
     async delete(key: string) {
       store.delete(key)
@@ -53,6 +56,8 @@ function createFakeEnv(): Env {
     async sendBatch() {},
   } as unknown as Queue<ConversionQueueMessage>
 
+  const { png, jpeg, webp } = await loadDecoderWasmModules()
+
   return {
     UPLOADS_BUCKET: bucket,
     CONVERSION_QUEUE: queue,
@@ -60,6 +65,9 @@ function createFakeEnv(): Env {
     SUPABASE_SERVICE_ROLE_KEY: '',
     DOWNLOAD_URL_SECRET: 'test-secret',
     VECTORIZATION_PROVIDER: 'placeholder',
+    PNG_DECODER_WASM: png,
+    JPEG_DECODER_WASM: jpeg,
+    WEBP_DECODER_WASM: webp,
     ENVIRONMENT: 'development',
   }
 }
@@ -107,7 +115,7 @@ function authedRequest(userId: string | null, path: string): Request {
 }
 
 async function run() {
-  const env = createFakeEnv()
+  const env = await createFakeEnv()
 
   // ConversionService.processJob (Phase 15) now enforces credits before
   // vectorizing — grant both test users enough to cover their conversions.
@@ -116,7 +124,9 @@ async function run() {
   await creditsService.grantMonthlyCredits('conv-user-2', 'free')
 
   // Seed a completed job + conversion via the real upload -> queue pipeline.
-  const file = new File([pngBytes()], 'logo.png', { type: 'image/png' })
+  // Phase 19: the queue consumer now really decodes+traces this file, so it
+  // must be a genuinely valid PNG, not just a placeholder.
+  const file = new File([await createTestPng()], 'logo.png', { type: 'image/png' })
   const uploadRes = await handleUploadsRoute(makeUploadRequest('conv-user', { file }), env)
   const { job: completedJob } = (await uploadRes.json()) as { job: { id: string } }
   await runJobToCompletion(env, completedJob.id)

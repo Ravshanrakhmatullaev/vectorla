@@ -7,7 +7,7 @@ import type { VectorizationProvider, VectorizationResult } from './Vectorization
 export class PotraceProvider implements VectorizationProvider {
   readonly name = 'potrace'
 
-  async vectorize(_upload: Upload): Promise<VectorizationResult> {
+  async vectorize(_upload: Upload, _fileBytes: ArrayBuffer): Promise<VectorizationResult> {
     throw new Error('Not implemented')
   }
 }
