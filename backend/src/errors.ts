@@ -18,3 +18,6 @@ export class ForbiddenError extends Error {}
 
 /** Thrown by CreditsService.ensureEnoughCredits when a user can't cover a job's cost. */
 export class InsufficientCreditsError extends Error {}
+
+/** Thrown on a unique-constraint violation or an optimistic-lock mismatch — routes map this to HTTP 409. */
+export class ConflictError extends Error {}

@@ -10,7 +10,7 @@ import type { ConversionsRepository } from '../repositories/ConversionsRepositor
 import type { VectorizationProvider } from '../providers/VectorizationProvider'
 import { createVectorizationProvider } from '../providers/ProviderFactory'
 import { CreditsService, createCreditsService, calculateRequiredCredits } from './CreditsService'
-import { NotFoundError } from '../errors'
+import { NotFoundError, ConflictError } from '../errors'
 
 /** Result of looking up a job's conversion — see ConversionService.getConversionByJob. */
 export interface ConversionByJobResult {
@@ -41,9 +41,26 @@ export class ConversionService {
    * provider (see providers/ProviderFactory.ts — only PlaceholderProvider
    * actually works today), store the result in R2, save the Conversion row,
    * debit the credits, then mark the job completed.
+   *
+   * Idempotent against queue redelivery: a message for an already-completed
+   * job returns the existing conversion(s) as a no-op (no re-vectorizing, no
+   * double debit); a message for a job that's already 'processing' throws
+   * ConflictError so the caller (see index.ts's queue() consumer) can treat
+   * it as "another delivery is already handling this" rather than a real
+   * failure. markProcessing()'s own optimistic lock (see JobsRepository)
+   * closes the remaining race if two deliveries pass this check at once.
    */
   async processJob(jobId: string): Promise<Conversion[]> {
     const job = await this.jobs.getJob(jobId)
+
+    if (job.status === 'completed') {
+      const existing = await this.conversions.findByJobId(jobId)
+      return existing ? [existing] : []
+    }
+    if (job.status === 'processing') {
+      throw new ConflictError(`Job "${jobId}" is already being processed`)
+    }
+
     const upload = await this.uploads.findById(job.uploadId)
     if (!upload) {
       throw new NotFoundError(`No upload found with id "${job.uploadId}"`)

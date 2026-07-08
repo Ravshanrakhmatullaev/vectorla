@@ -1,5 +1,6 @@
 import type { CreditBalance, CreditTransaction } from '../types'
 import type { CreditsRepository } from './CreditsRepository'
+import { ConflictError } from '../errors'
 
 /**
  * In-memory fallback used automatically when SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY
@@ -14,8 +15,17 @@ export class InMemoryCreditsRepository implements CreditsRepository {
     return this.balancesByUserId.get(userId) ?? null
   }
 
-  async setBalance(userId: string, balance: number): Promise<CreditBalance> {
-    const record: CreditBalance = { userId, balance, updatedAt: new Date().toISOString() }
+  async setBalance(userId: string, balance: number, previous: CreditBalance | null): Promise<CreditBalance> {
+    const current = this.balancesByUserId.get(userId) ?? null
+    if ((current?.version ?? 0) !== (previous?.version ?? 0)) {
+      throw new ConflictError(`Credit balance for user "${userId}" was modified concurrently`)
+    }
+    const record: CreditBalance = {
+      userId,
+      balance,
+      version: (previous?.version ?? 0) + 1,
+      updatedAt: new Date().toISOString(),
+    }
     this.balancesByUserId.set(userId, record)
     return record
   }

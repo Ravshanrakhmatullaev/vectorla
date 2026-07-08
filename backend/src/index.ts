@@ -3,6 +3,7 @@ import type { Env } from './env'
 import type { ConversionQueueMessage } from './integrations/queue'
 import { createJobService } from './services/JobService'
 import { createConversionService } from './services/ConversionService'
+import { ConflictError } from './errors'
 import { handleHealthRoute } from './routes/health'
 import { handleUploadsRoute } from './routes/uploads'
 import { handleJobsRoute } from './routes/jobs'
@@ -48,6 +49,15 @@ export default {
         await conversionService.processJob(message.body.jobId)
         message.ack()
       } catch (error) {
+        if (error instanceof ConflictError) {
+          // Another delivery of this message is already handling the job (or
+          // just finished) — see ConversionService.processJob. Safe to ack
+          // without marking the job failed or retrying: retrying here would
+          // just race the in-flight delivery again.
+          console.warn(`Skipping duplicate delivery for job ${message.body.jobId}: ${error.message}`)
+          message.ack()
+          continue
+        }
         const reason = error instanceof Error ? error.message : 'Unknown error'
         await jobService.markFailed(message.body.jobId, reason).catch((markFailedError: unknown) => {
           console.error(`Failed to mark job ${message.body.jobId} as failed:`, markFailedError)

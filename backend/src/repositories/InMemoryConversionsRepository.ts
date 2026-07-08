@@ -37,4 +37,8 @@ export class InMemoryConversionsRepository implements ConversionsRepository {
     }
     return null
   }
+
+  async listAll(): Promise<Conversion[]> {
+    return Array.from(this.conversionsById.values())
+  }
 }

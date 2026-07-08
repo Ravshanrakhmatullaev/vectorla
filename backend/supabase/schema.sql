@@ -22,6 +22,12 @@ create table if not exists uploads (
   created_at timestamptz not null default now()
 );
 
+-- Phase 18: closes the check-then-insert race in UploadService.createUpload —
+-- SupabaseUploadsRepository.create() catches this constraint's violation
+-- (Postgres error code 23505) and surfaces it as ConflictError (HTTP 409).
+create unique index if not exists uploads_user_filename_unique on uploads (user_id, original_file_name);
+create index if not exists uploads_user_id_idx on uploads (user_id);
+
 create table if not exists jobs (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references profiles (id) on delete cascade,
@@ -31,10 +37,23 @@ create table if not exists jobs (
   settings jsonb,
   error_message text,
   retry_count integer not null default 0,
+  -- Phase 18: optimistic-locking token — SupabaseJobsRepository.update()
+  -- conditions its UPDATE on this matching the value it last read.
+  version integer not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   completed_at timestamptz
 );
+
+-- Phase 18: findActiveByUploadId (one active job per upload) and general
+-- per-upload/per-user job lookups. Deliberately not a unique index — an
+-- upload can have many jobs over time (retries, re-processing), just never
+-- more than one queued/processing at once; that invariant is enforced in
+-- JobService.createJob, not the database, since Postgres partial-unique
+-- indexes would need a hardcoded status list kept in sync with JobStatus.
+create index if not exists jobs_upload_id_idx on jobs (upload_id);
+create index if not exists jobs_upload_id_status_idx on jobs (upload_id, status);
+create index if not exists jobs_user_id_idx on jobs (user_id);
 
 create table if not exists conversions (
   id uuid primary key default gen_random_uuid(),
@@ -46,9 +65,19 @@ create table if not exists conversions (
   created_at timestamptz not null default now()
 );
 
+-- Phase 18: storage_key is 1:1 with a Conversion row by construction (see
+-- ConversionService.processJob) — unique also makes
+-- ConversionsRepository.findByStorageKey (routes/download.ts) an index lookup.
+create unique index if not exists conversions_storage_key_unique on conversions (storage_key);
+create index if not exists conversions_job_id_idx on conversions (job_id);
+create index if not exists conversions_user_id_idx on conversions (user_id);
+
 create table if not exists credit_balances (
   user_id uuid primary key references profiles (id) on delete cascade,
   balance integer not null default 0,
+  -- Phase 18: optimistic-locking token — SupabaseCreditsRepository.setBalance()
+  -- conditions its UPDATE on this matching the value it last read.
+  version integer not null default 1,
   updated_at timestamptz not null default now()
 );
 
@@ -61,3 +90,6 @@ create table if not exists credit_transactions (
   job_id uuid references jobs (id) on delete set null,
   created_at timestamptz not null default now()
 );
+
+create index if not exists credit_transactions_user_id_idx on credit_transactions (user_id);
+create index if not exists credit_transactions_job_id_idx on credit_transactions (job_id);

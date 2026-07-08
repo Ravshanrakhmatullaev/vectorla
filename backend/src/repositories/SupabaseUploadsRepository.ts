@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Upload, UploadStatus } from '../types'
 import type { UploadsRepository } from './UploadsRepository'
+import { ConflictError } from '../errors'
 
 // supabase-js's query builder is loosely typed unless generated Database types
 // are provided (not set up yet — see backend/README.md). This row shape mirrors
@@ -33,6 +34,7 @@ function mapRowToUpload(row: UploadRow): Upload {
 export class SupabaseUploadsRepository implements UploadsRepository {
   constructor(private readonly client: SupabaseClient) {}
 
+  /** Relies on schema.sql's unique(user_id, original_file_name) index to catch the race a pre-check alone can't. */
   async create(upload: Upload): Promise<Upload> {
     const { data, error } = await this.client
       .from('uploads')
@@ -48,7 +50,12 @@ export class SupabaseUploadsRepository implements UploadsRepository {
       .select()
       .single<UploadRow>()
 
-    if (error) throw new Error(`Failed to save upload metadata: ${error.message}`)
+    if (error) {
+      if (error.code === '23505') {
+        throw new ConflictError(`A file named "${upload.originalFileName}" has already been uploaded`)
+      }
+      throw new Error(`Failed to save upload metadata: ${error.message}`)
+    }
     return mapRowToUpload(data)
   }
 
@@ -68,5 +75,11 @@ export class SupabaseUploadsRepository implements UploadsRepository {
 
     if (error) throw new Error(`Failed to check for duplicate filename: ${error.message}`)
     return data ? mapRowToUpload(data) : null
+  }
+
+  async listAll(): Promise<Upload[]> {
+    const { data, error } = await this.client.from('uploads').select().returns<UploadRow[]>()
+    if (error) throw new Error(`Failed to list uploads: ${error.message}`)
+    return (data ?? []).map(mapRowToUpload)
   }
 }

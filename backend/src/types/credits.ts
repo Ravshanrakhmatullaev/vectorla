@@ -1,6 +1,8 @@
 export interface CreditBalance {
   userId: string
   balance: number
+  /** Optimistic-locking token — incremented on every update (see CreditsRepository.setBalance). */
+  version: number
   updatedAt: string
 }
 

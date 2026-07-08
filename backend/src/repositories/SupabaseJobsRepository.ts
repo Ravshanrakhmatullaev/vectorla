@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Job, JobStatus } from '../types'
 import type { JobsRepository } from './JobsRepository'
+import { ConflictError } from '../errors'
 
 // Mirrors backend/supabase/schema.sql's `jobs` table exactly.
 interface JobRow {
@@ -12,6 +13,7 @@ interface JobRow {
   settings: Record<string, number> | null
   error_message: string | null
   retry_count: number
+  version: number
   created_at: string
   updated_at: string
   completed_at: string | null
@@ -27,6 +29,7 @@ function mapRowToJob(row: JobRow): Job {
     settings: row.settings,
     errorMessage: row.error_message,
     retryCount: row.retry_count,
+    version: row.version,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     completedAt: row.completed_at,
@@ -49,6 +52,7 @@ export class SupabaseJobsRepository implements JobsRepository {
         settings: job.settings,
         error_message: job.errorMessage,
         retry_count: job.retryCount,
+        version: job.version,
       })
       .select()
       .single<JobRow>()
@@ -63,21 +67,41 @@ export class SupabaseJobsRepository implements JobsRepository {
     return data ? mapRowToJob(data) : null
   }
 
-  async update(job: Job): Promise<Job> {
+  /** Optimistic locking via `version`: the conditional WHERE only matches if nobody updated the row since `previous` was read. */
+  async update(previous: Job, next: Job): Promise<Job> {
     const { data, error } = await this.client
       .from('jobs')
       .update({
-        status: job.status,
-        error_message: job.errorMessage,
-        retry_count: job.retryCount,
-        updated_at: job.updatedAt,
-        completed_at: job.completedAt,
+        status: next.status,
+        error_message: next.errorMessage,
+        retry_count: next.retryCount,
+        version: next.version,
+        updated_at: next.updatedAt,
+        completed_at: next.completedAt,
       })
-      .eq('id', job.id)
+      .eq('id', next.id)
+      .eq('version', previous.version)
       .select()
-      .single<JobRow>()
+      .maybeSingle<JobRow>()
 
     if (error) throw new Error(`Failed to update job: ${error.message}`)
+    if (!data) {
+      throw new ConflictError(`Job "${next.id}" was modified concurrently — refusing a stale update`)
+    }
     return mapRowToJob(data)
+  }
+
+  async findActiveByUploadId(uploadId: string): Promise<Job | null> {
+    const { data, error } = await this.client
+      .from('jobs')
+      .select()
+      .eq('upload_id', uploadId)
+      .in('status', ['queued', 'processing'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle<JobRow>()
+
+    if (error) throw new Error(`Failed to look up active job: ${error.message}`)
+    return data ? mapRowToJob(data) : null
   }
 }

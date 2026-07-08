@@ -4,7 +4,7 @@ import { StorageService } from './StorageService'
 import { createR2Client } from '../integrations/r2'
 import { createUploadsRepository } from '../repositories/createUploadsRepository'
 import type { UploadsRepository } from '../repositories/UploadsRepository'
-import { ValidationError } from '../errors'
+import { ConflictError } from '../errors'
 import {
   validateFileName,
   validateMimeType,
@@ -42,9 +42,13 @@ export class UploadService {
     validateFileSize(input.file.byteLength, input.plan)
     validateFileSignature(input.file, input.mimeType)
 
+    // Fast path: avoids a wasted R2 write in the common (non-racing) case.
+    // The real guarantee is repository.create()'s atomic uniqueness check
+    // below (schema.sql's unique(user_id, original_file_name) index) — this
+    // pre-check alone has a TOCTOU window under concurrent identical requests.
     const existing = await this.repository.findByUserAndFilename(input.userId, input.originalFileName)
     if (existing) {
-      throw new ValidationError(`A file named "${input.originalFileName}" has already been uploaded`)
+      throw new ConflictError(`A file named "${input.originalFileName}" has already been uploaded`)
     }
 
     const id = crypto.randomUUID()

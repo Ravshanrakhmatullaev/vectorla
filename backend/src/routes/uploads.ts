@@ -2,7 +2,13 @@ import type { Env } from '../env'
 import { createUploadService } from '../services/UploadService'
 import { createJobService } from '../services/JobService'
 import { requireAuth } from '../middleware/requireAuth'
-import { ValidationError, PayloadTooLargeError, UnsupportedMediaTypeError, UnauthorizedError } from '../errors'
+import {
+  ValidationError,
+  PayloadTooLargeError,
+  UnsupportedMediaTypeError,
+  UnauthorizedError,
+  ConflictError,
+} from '../errors'
 import { isUserPlan } from '../types'
 
 function jsonResponse(body: unknown, status: number): Response {
@@ -66,6 +72,7 @@ export async function handleUploadsRoute(request: Request, env: Env): Promise<Re
   } catch (error) {
     if (error instanceof UnsupportedMediaTypeError) return jsonResponse({ error: error.message }, 415)
     if (error instanceof PayloadTooLargeError) return jsonResponse({ error: error.message }, 413)
+    if (error instanceof ConflictError) return jsonResponse({ error: error.message }, 409)
     if (error instanceof ValidationError) return jsonResponse({ error: error.message }, 400)
     console.error('Unexpected error in POST /api/uploads:', error)
     return jsonResponse({ error: 'Internal Server Error' }, 500)

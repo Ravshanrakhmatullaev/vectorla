@@ -80,23 +80,30 @@ async function run() {
   // Seed an upload the same way a real client would, via the real upload route.
   const file = new File([pngBytes()], 'jobs-route-test.png', { type: 'image/png' })
   const uploadRes = await handleUploadsRoute(makeUploadRequest('jobs-user', { file }), env)
-  const { upload } = (await uploadRes.json()) as { upload: { id: string } }
+  const { upload, job: autoCreatedJob } = (await uploadRes.json()) as {
+    upload: { id: string }
+    job: { id: string; status: string }
+  }
+  assertEqual(autoCreatedJob.status, 'queued', 'the upload auto-created a queued job')
 
   // 401 — no Authorization/X-Test-User-Id header
   const unauthedRes = await handleJobsRoute(makeJobsRequest(null, 'POST', '/api/jobs', { uploadId: upload.id }), env)
   assertEqual(unauthedRes.status, 401, 'status for missing auth on POST /api/jobs')
   console.log('PASS: 401 Unauthorized for POST /api/jobs with no auth')
 
-  // POST /api/jobs — create another job for the same upload (e.g. re-processing)
+  // POST /api/jobs for an upload that already has an active (queued) job —
+  // Phase 18: duplicate/accidental job requests are ignored, returning the
+  // existing active job unchanged (not a second job with the new preset).
   const createRes = await handleJobsRoute(
     makeJobsRequest('jobs-user', 'POST', '/api/jobs', { uploadId: upload.id, preset: 'logo' }),
     env,
   )
   assertEqual(createRes.status, 201, 'status for POST /api/jobs')
-  const job = (await createRes.json()) as { id: string; status: string; preset: string }
-  assertEqual(job.status, 'queued', 'created job status')
-  assertEqual(job.preset, 'logo', 'created job preset')
-  console.log('PASS: 201 Created for POST /api/jobs')
+  const job = (await createRes.json()) as { id: string; status: string; preset: string | null }
+  assertEqual(job.id, autoCreatedJob.id, 'a duplicate request returns the existing active job, not a new one')
+  assertEqual(job.status, 'queued', 'returned job status')
+  assertEqual(job.preset, null, 'the duplicate request\'s preset is ignored — the original job is unchanged')
+  console.log('PASS: 201 Created for POST /api/jobs (duplicate active-job request ignored)')
 
   // 400 — missing uploadId
   const badCreateRes = await handleJobsRoute(makeJobsRequest('jobs-user', 'POST', '/api/jobs', {}), env)

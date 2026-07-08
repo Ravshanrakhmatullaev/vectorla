@@ -1,5 +1,6 @@
 import type { Job } from '../types'
 import type { JobsRepository } from './JobsRepository'
+import { ConflictError } from '../errors'
 
 /**
  * In-memory fallback used automatically when SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY
@@ -19,8 +20,21 @@ export class InMemoryJobsRepository implements JobsRepository {
     return this.jobsById.get(id) ?? null
   }
 
-  async update(job: Job): Promise<Job> {
-    this.jobsById.set(job.id, job)
-    return job
+  async update(previous: Job, next: Job): Promise<Job> {
+    const current = this.jobsById.get(previous.id)
+    if (!current || current.version !== previous.version) {
+      throw new ConflictError(`Job "${previous.id}" was modified concurrently — refusing a stale update`)
+    }
+    this.jobsById.set(next.id, next)
+    return next
+  }
+
+  async findActiveByUploadId(uploadId: string): Promise<Job | null> {
+    for (const job of this.jobsById.values()) {
+      if (job.uploadId === uploadId && (job.status === 'queued' || job.status === 'processing')) {
+        return job
+      }
+    }
+    return null
   }
 }

@@ -60,6 +60,9 @@ function createFakeR2Client(): R2Client & { objects: Map<string, ReadableStream 
     async delete(key) {
       objects.delete(key)
     },
+    async list(prefix) {
+      return Array.from(objects.keys()).filter((key) => key.startsWith(prefix))
+    },
   }
 }
 
@@ -181,8 +184,12 @@ async function run() {
   assertEqual(processingResult.conversion, null, 'no conversion for a processing job')
   console.log('PASS: getConversionByJob (queued/processing) returns status only, no conversion')
 
-  // 5. getConversionByJob (failed) — error information, no conversion
+  // 5. getConversionByJob (failed) — error information, no conversion.
+  // pendingJob is still 'processing' for upload-1, so this createJob call
+  // hits the Phase 18 duplicate-job guard and returns pendingJob itself
+  // rather than creating a distinct job — confirmed below, then reused.
   const failedJob = await jobService.createJob({ userId: 'user-1', uploadId: 'upload-1' })
+  assertEqual(failedJob.id, pendingJob.id, 'a second createJob call for the same in-flight upload returns the existing active job')
   await jobService.markFailed(failedJob.id, 'simulated vectorization failure')
   const failedResult = await service.getConversionByJob(failedJob.id)
   assertEqual(failedResult.jobStatus, 'failed', 'getConversionByJob status for a failed job')
@@ -210,6 +217,39 @@ async function run() {
   // 8. Unknown job rejected by processJob
   await assertRejects(() => service.processJob('does-not-exist'), /No job found/, 'unknown job')
   console.log('PASS: processJob rejects an unknown job id')
+
+  // 8b. Idempotent queue redelivery (Phase 18): re-processing an
+  // already-completed job returns the existing conversion as a no-op — no
+  // re-vectorization, no second debit.
+  const redeliveredConversions = await service.processJob(job.id)
+  assertEqual(redeliveredConversions.length, 1, 'redelivery returns the existing conversion')
+  assertEqual(redeliveredConversions[0]?.id, conversion?.id, 'redelivery returns the same conversion, not a new one')
+  const balanceAfterRedelivery = await creditsService.getBalance('user-1')
+  assertEqual(balanceAfterRedelivery.balance, 9, 'redelivering a completed job does not debit credits again')
+  assertEqual(
+    (await creditsRepo.findTransactionsByUserId('user-1')).filter((t) => t.type === 'debit').length,
+    1,
+    'still only one debit transaction after redelivery',
+  )
+  console.log('PASS: processJob is idempotent for an already-completed job — no re-processing, no double debit')
+
+  // 8c. Retry safety (Phase 18): a job already 'processing' must not be
+  // processed a second time concurrently — processJob throws ConflictError
+  // instead of racing the in-flight attempt.
+  const racingJob = await jobService.createJob({ userId: 'user-1', uploadId: 'upload-1' })
+  await jobService.markProcessing(racingJob.id)
+  await assertRejects(() => service.processJob(racingJob.id), /already being processed/, 'processing collision')
+  assertEqual(
+    await service.listUserConversions('user-1').then((c) => c.length),
+    1,
+    'no extra conversion created for the job that was already processing',
+  )
+  console.log('PASS: processJob refuses to process a job that is already processing (safe retry behavior)')
+
+  // Resolve racingJob so upload-1 has no active job left before test 9 —
+  // otherwise the Phase 18 duplicate-job guard would hand back racingJob
+  // (still 'processing') instead of letting a new job be created.
+  await jobService.markFailed(racingJob.id, 'simulated: superseded by retry-safety test')
 
   // 9. Job whose upload no longer exists is rejected — run last, since it
   // deletes upload-1 out from under any later test that would need it.

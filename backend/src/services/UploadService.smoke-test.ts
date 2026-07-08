@@ -53,6 +53,9 @@ function createFakeR2Client(): R2Client & { objects: Map<string, ReadableStream 
     async delete(key) {
       objects.delete(key)
     },
+    async list(prefix) {
+      return Array.from(objects.keys()).filter((key) => key.startsWith(prefix))
+    },
   }
 }
 
@@ -130,6 +133,40 @@ async function run() {
     'duplicate filename',
   )
   console.log('PASS: duplicate filename rejected')
+
+  // 2b. Race condition (Phase 18): the service's pre-check alone has a
+  // TOCTOU window, so the real guarantee is repository.create() enforcing
+  // (userId, originalFileName) uniqueness atomically. Simulate two
+  // concurrent uploads with the same filename that both got past the
+  // pre-check (as they could under real concurrency) by calling
+  // repository.create() directly, twice, for the same (user, filename) —
+  // exactly one must succeed.
+  const racingRepo = new InMemoryUploadsRepository()
+  const raceUpload = (id: string) => ({
+    id,
+    userId: 'race-user',
+    originalFileName: 'race.png',
+    mimeType: 'image/png',
+    sizeBytes: 10,
+    storageKey: `uploads/race-user/${id}.png`,
+    status: 'stored' as const,
+    createdAt: new Date().toISOString(),
+  })
+  const raceOutcomes = await Promise.allSettled([
+    racingRepo.create(raceUpload('race-1')),
+    racingRepo.create(raceUpload('race-2')),
+  ])
+  const raceFulfilled = raceOutcomes.filter((outcome) => outcome.status === 'fulfilled')
+  const raceRejected = raceOutcomes.filter((outcome) => outcome.status === 'rejected')
+  assertEqual(raceFulfilled.length, 1, 'exactly one concurrent duplicate-filename upload succeeds')
+  assertEqual(raceRejected.length, 1, 'exactly one concurrent duplicate-filename upload is rejected as a conflict')
+  const [firstRaceRejection] = raceRejected
+  const raceRejectionMessage =
+    firstRaceRejection?.status === 'rejected' && firstRaceRejection.reason instanceof Error
+      ? firstRaceRejection.reason.message
+      : ''
+  assertTrue(/already been uploaded/.test(raceRejectionMessage), 'the losing concurrent upload is rejected as a conflict')
+  console.log('PASS: repository.create() closes the duplicate-upload race atomically, even without the service pre-check')
 
   // 3. Invalid mime type rejected
   await assertRejects(

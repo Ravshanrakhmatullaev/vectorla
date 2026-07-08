@@ -8,7 +8,10 @@ import {
   CREDIT_COST_ADDITIONAL_EXPORT_FORMAT,
   CREDIT_COST_PRINT_READY_MODE,
 } from '../config'
-import { InsufficientCreditsError } from '../errors'
+import { InsufficientCreditsError, ConflictError } from '../errors'
+
+/** Bounded optimistic-lock retries for applyTransaction — see setBalance's ConflictError. */
+const MAX_BALANCE_UPDATE_ATTEMPTS = 5
 
 /**
  * Computes the credit cost of a conversion: a base cost, plus
@@ -37,7 +40,7 @@ export class CreditsService {
   /** A user with no balance row yet (yet to receive a monthly grant) reads as a zero balance, not an error. */
   async getBalance(userId: string): Promise<CreditBalance> {
     const existing = await this.repository.getBalance(userId)
-    return existing ?? { userId, balance: 0, updatedAt: new Date().toISOString() }
+    return existing ?? { userId, balance: 0, version: 0, updatedAt: new Date().toISOString() }
   }
 
   /** Throws InsufficientCreditsError if the user can't cover requiredCredits — callers (e.g. ConversionService) let this fail the job. */
@@ -64,6 +67,14 @@ export class CreditsService {
     return this.applyTransaction(userId, amount, amount, 'credit', `Monthly credit grant for plan "${plan}"`, null)
   }
 
+  /**
+   * Read-modify-write on the balance, guarded by optimistic locking
+   * (CreditsRepository.setBalance) so two concurrent debits/credits for the
+   * same user can't both read the same starting balance and silently lose
+   * one update. Retries a bounded number of times on conflict before giving
+   * up — real contention on one user's balance is expected to be rare (at
+   * most one in-flight conversion per job today).
+   */
   private async applyTransaction(
     userId: string,
     balanceDelta: number,
@@ -72,19 +83,28 @@ export class CreditsService {
     reason: string,
     jobId: string | null,
   ): Promise<CreditTransaction> {
-    const current = await this.getBalance(userId)
-    await this.repository.setBalance(userId, current.balance + balanceDelta)
-
-    const transaction: CreditTransaction = {
-      id: crypto.randomUUID(),
-      userId,
-      amount: transactionAmount,
-      type,
-      reason,
-      jobId,
-      createdAt: new Date().toISOString(),
+    let lastConflict: ConflictError | undefined
+    for (let attempt = 0; attempt < MAX_BALANCE_UPDATE_ATTEMPTS; attempt++) {
+      const previous = await this.repository.getBalance(userId)
+      const currentBalance = previous?.balance ?? 0
+      try {
+        await this.repository.setBalance(userId, currentBalance + balanceDelta, previous)
+        const transaction: CreditTransaction = {
+          id: crypto.randomUUID(),
+          userId,
+          amount: transactionAmount,
+          type,
+          reason,
+          jobId,
+          createdAt: new Date().toISOString(),
+        }
+        return await this.repository.createTransaction(transaction)
+      } catch (error) {
+        if (!(error instanceof ConflictError)) throw error
+        lastConflict = error
+      }
     }
-    return this.repository.createTransaction(transaction)
+    throw lastConflict
   }
 }
 

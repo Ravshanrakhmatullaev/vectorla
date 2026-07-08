@@ -22,7 +22,14 @@ export class JobService {
     private readonly queueService: QueueService,
   ) {}
 
-  /** Creates a job for an existing upload, persists it, and enqueues it for processing. */
+  /**
+   * Creates a job for an existing upload, persists it, and enqueues it for
+   * processing. If the upload already has an active (queued/processing) job,
+   * that job is returned unchanged instead of creating a duplicate — an
+   * accidental double-submit (double-click, client retry) is a no-op rather
+   * than a second conversion/second credit debit. A new job can still be
+   * created once the prior one finishes (completed or failed).
+   */
   async createJob(input: CreateJobInput): Promise<Job> {
     const upload = await this.uploads.findById(input.uploadId)
     if (!upload) {
@@ -31,6 +38,9 @@ export class JobService {
     if (upload.userId !== input.userId) {
       throw new ForbiddenError(`Upload "${input.uploadId}" does not belong to user "${input.userId}"`)
     }
+
+    const active = await this.repository.findActiveByUploadId(input.uploadId)
+    if (active) return active
 
     const now = new Date().toISOString()
     const job: Job = {
@@ -42,6 +52,7 @@ export class JobService {
       settings: input.settings ?? null,
       errorMessage: null,
       retryCount: 0,
+      version: 0,
       createdAt: now,
       updatedAt: now,
       completedAt: null,
@@ -59,13 +70,16 @@ export class JobService {
   }
 
   // --- Queue-consumer state transitions (see index.ts's queue() handler). No
-  // AI runs here yet — this only exercises queued -> processing -> completed. ---
+  // AI runs here yet — this only exercises queued -> processing -> completed.
+  // Each transition is optimistically locked (see JobsRepository.update) so
+  // two concurrent deliveries of the same queue message can't both "win". ---
 
   async markProcessing(jobId: string): Promise<Job> {
     const job = await this.getJob(jobId)
-    return this.repository.update({
+    return this.repository.update(job, {
       ...job,
       status: 'processing',
+      version: job.version + 1,
       updatedAt: new Date().toISOString(),
     })
   }
@@ -73,9 +87,10 @@ export class JobService {
   async markCompleted(jobId: string): Promise<Job> {
     const job = await this.getJob(jobId)
     const now = new Date().toISOString()
-    return this.repository.update({
+    return this.repository.update(job, {
       ...job,
       status: 'completed',
+      version: job.version + 1,
       updatedAt: now,
       completedAt: now,
     })
@@ -83,11 +98,12 @@ export class JobService {
 
   async markFailed(jobId: string, errorMessage: string): Promise<Job> {
     const job = await this.getJob(jobId)
-    return this.repository.update({
+    return this.repository.update(job, {
       ...job,
       status: 'failed',
       errorMessage,
       retryCount: job.retryCount + 1,
+      version: job.version + 1,
       updatedAt: new Date().toISOString(),
     })
   }

@@ -1,5 +1,6 @@
 import type { Upload } from '../types'
 import type { UploadsRepository } from './UploadsRepository'
+import { ConflictError } from '../errors'
 
 /**
  * In-memory fallback used automatically when SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY
@@ -11,7 +12,13 @@ import type { UploadsRepository } from './UploadsRepository'
 export class InMemoryUploadsRepository implements UploadsRepository {
   private readonly uploadsById = new Map<string, Upload>()
 
+  /** Enforces the (userId, originalFileName) uniqueness atomically — see UploadsRepository.create. */
   async create(upload: Upload): Promise<Upload> {
+    for (const existing of this.uploadsById.values()) {
+      if (existing.userId === upload.userId && existing.originalFileName === upload.originalFileName) {
+        throw new ConflictError(`A file named "${upload.originalFileName}" has already been uploaded`)
+      }
+    }
     this.uploadsById.set(upload.id, upload)
     return upload
   }
@@ -25,5 +32,9 @@ export class InMemoryUploadsRepository implements UploadsRepository {
       if (upload.userId === userId && upload.originalFileName === fileName) return upload
     }
     return null
+  }
+
+  async listAll(): Promise<Upload[]> {
+    return Array.from(this.uploadsById.values())
   }
 }

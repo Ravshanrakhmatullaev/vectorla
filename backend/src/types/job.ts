@@ -11,6 +11,8 @@ export interface Job {
   settings: Record<string, number> | null
   errorMessage: string | null
   retryCount: number
+  /** Optimistic-locking token — incremented on every update (see JobsRepository.update). */
+  version: number
   createdAt: string
   updatedAt: string
   completedAt: string | null

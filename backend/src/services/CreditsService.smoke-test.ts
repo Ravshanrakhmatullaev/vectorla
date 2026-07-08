@@ -88,6 +88,22 @@ async function run() {
   assertEqual(history.length, 3, 'grant + debit + credit all recorded')
   console.log('PASS: transaction history accumulates all balance-affecting operations')
 
+  // 9. Optimistic locking (Phase 18): concurrent debits for the same user
+  // must not lose an update — the retry-on-conflict loop in applyTransaction
+  // means every debit is eventually applied, so the final balance reflects
+  // all of them rather than only the "last writer wins" amount.
+  await service.grantMonthlyCredits('user-2', 'business') // 5000 credits
+  await Promise.all([
+    service.debitCredits('user-2', 1, 'concurrent debit A', 'job-a'),
+    service.debitCredits('user-2', 1, 'concurrent debit B', 'job-b'),
+    service.debitCredits('user-2', 1, 'concurrent debit C', 'job-c'),
+  ])
+  const balanceAfterConcurrentDebits = await service.getBalance('user-2')
+  assertEqual(balanceAfterConcurrentDebits.balance, 4997, 'all three concurrent debits were applied, none lost')
+  const user2History = await repository.findTransactionsByUserId('user-2')
+  assertEqual(user2History.filter((t) => t.type === 'debit').length, 3, 'all three debit transactions were recorded')
+  console.log('PASS: concurrent debits for the same user are all applied — optimistic locking prevents lost updates')
+
   console.log('\nAll CreditsService smoke tests passed.')
 }
 

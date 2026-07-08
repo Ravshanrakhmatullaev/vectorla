@@ -107,12 +107,13 @@ async function run() {
   assertEqual(res2.status, 400, 'status for missing file field')
   console.log('PASS: 400 Bad Request when "file" field is missing')
 
-  // NOTE: duplicate-filename detection is tested in UploadService.smoke-test.ts
-  // instead of here — createUploadService(env) constructs a fresh repository
-  // per call (correct: production's real Supabase repository is backed by an
-  // external DB that persists across requests regardless), so the in-memory
-  // fallback used by this route-level test has no cross-request memory to
-  // detect a duplicate against.
+  // 409 — duplicate filename for the same user (createUploadsRepository
+  // caches one in-memory repository per env, so this route-level call does
+  // share state with res1 above — see createUploadsRepository.ts)
+  const duplicateFile = new File([pngBytes()], 'route-test.png', { type: 'image/png' })
+  const res3 = await handleUploadsRoute(makeUploadRequest('route-user', { file: duplicateFile }), env)
+  assertEqual(res3.status, 409, 'status for a duplicate filename from the same user')
+  console.log('PASS: 409 Conflict when the same user uploads a filename they already have')
 
   // 415 — unsupported mime type
   const badFile = new File([toArrayBuffer('x')], 'doc.pdf', { type: 'application/pdf' })

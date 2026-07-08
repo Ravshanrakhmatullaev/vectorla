@@ -15,6 +15,10 @@ function assertEqual<T>(actual: T, expected: T, message: string): void {
   }
 }
 
+function assertTrue(condition: boolean, message: string): void {
+  if (!condition) throw new Error(message)
+}
+
 async function assertRejects(fn: () => Promise<unknown>, pattern: RegExp, message: string): Promise<void> {
   try {
     await fn()
@@ -68,6 +72,15 @@ async function run() {
   assertEqual(queueClient.sent[0]?.jobId, job.id, 'enqueued message references the job id')
   console.log('PASS: createJob persists a queued job and enqueues it')
 
+  // 1b. Duplicate/idempotent job creation (Phase 18): a second request while
+  // the first is still active (queued) returns that job unchanged instead of
+  // creating (and re-enqueueing) a duplicate.
+  const duplicate = await service.createJob({ userId: 'user-1', uploadId: 'upload-1', preset: 'ignored-preset' })
+  assertEqual(duplicate.id, job.id, 'a duplicate request returns the existing active job')
+  assertEqual(duplicate.preset, null, "the duplicate request's preset is ignored — the original job is unchanged")
+  assertEqual(queueClient.sent.length, 1, 'no second message is enqueued for the duplicate request')
+  console.log('PASS: createJob ignores a duplicate request while a job is still active for the upload')
+
   // 2. Unknown upload rejected
   await assertRejects(
     () => service.createJob({ userId: 'user-1', uploadId: 'does-not-exist' }),
@@ -108,6 +121,21 @@ async function run() {
   assertEqual(failed.errorMessage, 'simulated failure', 'errorMessage after markFailed')
   assertEqual(failed.retryCount, 1, 'retryCount incremented on failure')
   console.log('PASS: markFailed sets status/errorMessage and increments retryCount')
+
+  // 7. Optimistic locking (Phase 18): two concurrent markProcessing calls on
+  // the same job — exactly one must win; the other must see a conflict
+  // rather than silently clobbering the winner's update.
+  const job3 = await service.createJob({ userId: 'user-1', uploadId: 'upload-1' })
+  const outcomes = await Promise.allSettled([service.markProcessing(job3.id), service.markProcessing(job3.id)])
+  const fulfilled = outcomes.filter((outcome) => outcome.status === 'fulfilled')
+  const rejected = outcomes.filter((outcome) => outcome.status === 'rejected')
+  assertEqual(fulfilled.length, 1, 'exactly one concurrent markProcessing call succeeds')
+  assertEqual(rejected.length, 1, 'exactly one concurrent markProcessing call is rejected as a conflict')
+  const [firstRejected] = rejected
+  const rejectionMessage =
+    firstRejected?.status === 'rejected' && firstRejected.reason instanceof Error ? firstRejected.reason.message : ''
+  assertTrue(/modified concurrently/.test(rejectionMessage), 'the losing call fails with a conflict, not a silent overwrite')
+  console.log('PASS: concurrent job status transitions are optimistically locked — only one wins')
 
   console.log('\nAll JobService smoke tests passed.')
 }

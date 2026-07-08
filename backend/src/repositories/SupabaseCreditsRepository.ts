@@ -1,11 +1,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { CreditBalance, CreditTransaction, CreditTransactionType } from '../types'
 import type { CreditsRepository } from './CreditsRepository'
+import { ConflictError } from '../errors'
 
 // Mirrors backend/supabase/schema.sql's `credit_balances` table exactly.
 interface BalanceRow {
   user_id: string
   balance: number
+  version: number
   updated_at: string
 }
 
@@ -21,7 +23,7 @@ interface TransactionRow {
 }
 
 function mapRowToBalance(row: BalanceRow): CreditBalance {
-  return { userId: row.user_id, balance: row.balance, updatedAt: row.updated_at }
+  return { userId: row.user_id, balance: row.balance, version: row.version, updatedAt: row.updated_at }
 }
 
 function mapRowToTransaction(row: TransactionRow): CreditTransaction {
@@ -51,14 +53,43 @@ export class SupabaseCreditsRepository implements CreditsRepository {
     return data ? mapRowToBalance(data) : null
   }
 
-  async setBalance(userId: string, balance: number): Promise<CreditBalance> {
+  /**
+   * Optimistic locking via `version` (a plain timestamp isn't safe here —
+   * two updates within the same millisecond would collide and the lock
+   * would silently fail to notice). `previous === null` means "no row
+   * existed when we read it" — the insert itself fails closed (unique
+   * violation) if a row was created concurrently in the meantime.
+   */
+  async setBalance(userId: string, balance: number, previous: CreditBalance | null): Promise<CreditBalance> {
+    const now = new Date().toISOString()
+
+    if (!previous) {
+      const { data, error } = await this.client
+        .from('credit_balances')
+        .insert({ user_id: userId, balance, version: 1, updated_at: now })
+        .select()
+        .maybeSingle<BalanceRow>()
+
+      if (error) {
+        if (error.code === '23505') {
+          throw new ConflictError(`Credit balance for user "${userId}" was created concurrently`)
+        }
+        throw new Error(`Failed to create credit balance: ${error.message}`)
+      }
+      if (!data) throw new Error(`Failed to create credit balance for user "${userId}": no row returned`)
+      return mapRowToBalance(data)
+    }
+
     const { data, error } = await this.client
       .from('credit_balances')
-      .upsert({ user_id: userId, balance, updated_at: new Date().toISOString() })
+      .update({ balance, version: previous.version + 1, updated_at: now })
+      .eq('user_id', userId)
+      .eq('version', previous.version)
       .select()
-      .single<BalanceRow>()
+      .maybeSingle<BalanceRow>()
 
     if (error) throw new Error(`Failed to update credit balance: ${error.message}`)
+    if (!data) throw new ConflictError(`Credit balance for user "${userId}" was modified concurrently`)
     return mapRowToBalance(data)
   }
 
