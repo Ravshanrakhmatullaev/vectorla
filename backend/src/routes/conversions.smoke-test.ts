@@ -1,8 +1,9 @@
-// Local smoke test for GET /api/conversions/:id and GET /api/jobs/:id/conversion
-// — calls the real route handlers directly with a fake Env, driving a job all
-// the way through the real queue() consumer to get a genuinely completed
-// conversion, no wrangler dev needed. Auth uses the dev-only X-Test-User-Id
-// bypass (see middleware/requireAuth.ts).
+// Local smoke test for GET /api/v1/conversions, GET /api/v1/conversions/:id,
+// and GET /api/v1/jobs/:id/conversion — calls the real route handlers
+// directly with a fake Env, driving a job all the way through the real
+// queue() consumer to get a genuinely completed conversion, no wrangler dev
+// needed. Auth uses the dev-only X-Test-User-Id bypass (see
+// middleware/requireAuth.ts).
 //
 // Run with: npx tsx src/routes/conversions.smoke-test.ts (from inside backend/)
 import worker from '../index'
@@ -12,6 +13,7 @@ import { handleConversionsRoute } from './conversions'
 import { createJobService } from '../services/JobService'
 import { createCreditsService } from '../services/CreditsService'
 import { loadDecoderWasmModules, createTestPng } from '../testSupport/wasmTestFixtures'
+import { readSuccessBody, readErrorBody, TEST_REQUEST_ID } from '../testSupport/apiTestHelpers'
 import type { Env } from '../env'
 import type { R2Bucket, Queue, Message, MessageBatch } from '@cloudflare/workers-types'
 import type { ConversionQueueMessage } from '../integrations/queue'
@@ -101,7 +103,7 @@ async function runJobToCompletion(env: Env, jobId: string): Promise<void> {
 function makeUploadRequest(userId: string, fields: Record<string, string | File>): Request {
   const form = new FormData()
   for (const [key, value] of Object.entries(fields)) form.append(key, value)
-  return new Request('http://localhost/api/uploads', {
+  return new Request('http://localhost/api/v1/uploads', {
     method: 'POST',
     headers: { 'X-Test-User-Id': userId },
     body: form,
@@ -111,7 +113,7 @@ function makeUploadRequest(userId: string, fields: Record<string, string | File>
 function authedRequest(userId: string | null, path: string): Request {
   const headers: Record<string, string> = {}
   if (userId) headers['X-Test-User-Id'] = userId
-  return new Request(`http://localhost${path}`, { method: 'GET', headers })
+  return new Request(`http://localhost/api/v1${path}`, { method: 'GET', headers })
 }
 
 async function run() {
@@ -127,112 +129,126 @@ async function run() {
   // Phase 19: the queue consumer now really decodes+traces this file, so it
   // must be a genuinely valid PNG, not just a placeholder.
   const file = new File([await createTestPng()], 'logo.png', { type: 'image/png' })
-  const uploadRes = await handleUploadsRoute(makeUploadRequest('conv-user', { file }), env)
-  const { job: completedJob } = (await uploadRes.json()) as { job: { id: string } }
+  const uploadRes = await handleUploadsRoute(makeUploadRequest('conv-user', { file }), env, TEST_REQUEST_ID)
+  const { job: completedJob } = await readSuccessBody<{ job: { id: string } }>(uploadRes)
   await runJobToCompletion(env, completedJob.id)
 
-  // 1. GET /api/jobs/:id/conversion — completed conversion (200 + download URL)
+  // 1. GET /jobs/:id/conversion — completed conversion (200 + download URL)
   const jobConversionRes = await handleJobsRoute(
-    authedRequest('conv-user', `/api/jobs/${completedJob.id}/conversion`),
+    authedRequest('conv-user', `/jobs/${completedJob.id}/conversion`),
     env,
+    TEST_REQUEST_ID,
   )
-  assertEqual(jobConversionRes.status, 200, 'status for GET /api/jobs/:id/conversion (completed)')
-  const jobConversionBody = (await jobConversionRes.json()) as {
+  assertEqual(jobConversionRes.status, 200, 'status for GET /jobs/:id/conversion (completed)')
+  const jobConversionBody = await readSuccessBody<{
     status: string
     conversion: { id: string; downloadUrl: string | null }
-  }
-  assertEqual(jobConversionBody.status, 'completed', 'body.status for completed job')
-  assertTrue(Boolean(jobConversionBody.conversion.downloadUrl), 'body.conversion.downloadUrl is present')
+  }>(jobConversionRes)
+  assertEqual(jobConversionBody.status, 'completed', 'data.status for completed job')
+  assertTrue(Boolean(jobConversionBody.conversion.downloadUrl), 'data.conversion.downloadUrl is present')
   assertEqual(
     (jobConversionBody.conversion as unknown as { storageKey?: string }).storageKey,
     undefined,
     'Security (Phase 17): raw R2 storageKey must never be exposed in the API response',
   )
-  console.log('PASS: 200 OK for GET /api/jobs/:id/conversion once completed, with a download URL')
+  console.log('PASS: 200 OK for GET /api/v1/jobs/:id/conversion once completed, with a download URL')
 
   // 401 — no auth
   const jobConversionUnauthedRes = await handleJobsRoute(
-    authedRequest(null, `/api/jobs/${completedJob.id}/conversion`),
+    authedRequest(null, `/jobs/${completedJob.id}/conversion`),
     env,
+    TEST_REQUEST_ID,
   )
-  assertEqual(jobConversionUnauthedRes.status, 401, 'status for GET /api/jobs/:id/conversion with no auth')
-  console.log('PASS: 401 Unauthorized for GET /api/jobs/:id/conversion with no auth')
+  assertEqual(jobConversionUnauthedRes.status, 401, 'status for GET /jobs/:id/conversion with no auth')
+  console.log('PASS: 401 Unauthorized for GET /api/v1/jobs/:id/conversion with no auth')
 
   // 403 — a different authenticated user than the job's owner
   const jobConversionForbiddenRes = await handleJobsRoute(
-    authedRequest('someone-else', `/api/jobs/${completedJob.id}/conversion`),
+    authedRequest('someone-else', `/jobs/${completedJob.id}/conversion`),
     env,
+    TEST_REQUEST_ID,
   )
-  assertEqual(jobConversionForbiddenRes.status, 403, 'status for GET /api/jobs/:id/conversion as another user')
-  console.log('PASS: 403 Forbidden for GET /api/jobs/:id/conversion when the job belongs to another user')
+  assertEqual(jobConversionForbiddenRes.status, 403, 'status for GET /jobs/:id/conversion as another user')
+  console.log('PASS: 403 Forbidden for GET /api/v1/jobs/:id/conversion when the job belongs to another user')
 
   const conversionId = jobConversionBody.conversion.id
-  const getConversionRes = await handleConversionsRoute(
-    authedRequest('conv-user', `/api/conversions/${conversionId}`),
-    env,
-  )
-  assertEqual(getConversionRes.status, 200, 'status for GET /api/conversions/:id')
-  const conversionBody = (await getConversionRes.json()) as { id: string; downloadUrl: string | null }
-  assertEqual(conversionBody.id, conversionId, 'GET /api/conversions/:id returns the right conversion')
-  assertTrue(Boolean(conversionBody.downloadUrl), 'GET /api/conversions/:id attaches a downloadUrl')
+  const getConversionRes = await handleConversionsRoute(authedRequest('conv-user', `/conversions/${conversionId}`), env, TEST_REQUEST_ID)
+  assertEqual(getConversionRes.status, 200, 'status for GET /conversions/:id')
+  const conversionBody = await readSuccessBody<{ id: string; downloadUrl: string | null }>(getConversionRes)
+  assertEqual(conversionBody.id, conversionId, 'GET /conversions/:id returns the right conversion')
+  assertTrue(Boolean(conversionBody.downloadUrl), 'GET /conversions/:id attaches a downloadUrl')
   assertEqual(
     (conversionBody as unknown as { storageKey?: string }).storageKey,
     undefined,
     'Security (Phase 17): raw R2 storageKey must never be exposed in the API response',
   )
-  console.log('PASS: 200 OK for GET /api/conversions/:id with a download URL')
+  console.log('PASS: 200 OK for GET /api/v1/conversions/:id with a download URL')
 
   // 401 — no auth
-  const getConversionUnauthedRes = await handleConversionsRoute(
-    authedRequest(null, `/api/conversions/${conversionId}`),
-    env,
-  )
-  assertEqual(getConversionUnauthedRes.status, 401, 'status for GET /api/conversions/:id with no auth')
-  console.log('PASS: 401 Unauthorized for GET /api/conversions/:id with no auth')
+  const getConversionUnauthedRes = await handleConversionsRoute(authedRequest(null, `/conversions/${conversionId}`), env, TEST_REQUEST_ID)
+  assertEqual(getConversionUnauthedRes.status, 401, 'status for GET /conversions/:id with no auth')
+  console.log('PASS: 401 Unauthorized for GET /api/v1/conversions/:id with no auth')
 
   // 403 — a different authenticated user than the conversion's owner
   const getConversionForbiddenRes = await handleConversionsRoute(
-    authedRequest('someone-else', `/api/conversions/${conversionId}`),
+    authedRequest('someone-else', `/conversions/${conversionId}`),
     env,
+    TEST_REQUEST_ID,
   )
-  assertEqual(getConversionForbiddenRes.status, 403, 'status for GET /api/conversions/:id as another user')
-  console.log('PASS: 403 Forbidden for GET /api/conversions/:id when the conversion belongs to another user')
+  assertEqual(getConversionForbiddenRes.status, 403, 'status for GET /conversions/:id as another user')
+  console.log('PASS: 403 Forbidden for GET /api/v1/conversions/:id when the conversion belongs to another user')
 
-  // 2. GET /api/conversions/:id — unknown id (404)
-  const missingConversionRes = await handleConversionsRoute(
-    authedRequest('conv-user', '/api/conversions/does-not-exist'),
-    env,
-  )
+  // 2. GET /conversions/:id — unknown id (404)
+  const missingConversionRes = await handleConversionsRoute(authedRequest('conv-user', '/conversions/does-not-exist'), env, TEST_REQUEST_ID)
   assertEqual(missingConversionRes.status, 404, 'status for unknown conversion id')
-  console.log('PASS: 404 Not Found for GET /api/conversions/:id with an unknown id')
+  assertEqual((await readErrorBody(missingConversionRes)).code, 'NOT_FOUND', 'error code for unknown conversion id')
+  console.log('PASS: 404 Not Found for GET /api/v1/conversions/:id with an unknown id')
 
-  // 3. GET /api/jobs/:id/conversion — queued/processing job (202, status only)
+  // 2b. GET /conversions (Phase 21: new paginated list endpoint)
+  const listRes = await handleConversionsRoute(authedRequest('conv-user', '/conversions'), env, TEST_REQUEST_ID)
+  assertEqual(listRes.status, 200, 'status for GET /conversions (list)')
+  const listBody = (await listRes.json()) as {
+    success: boolean
+    data: { id: string }[]
+    pagination: { total: number; limit: number; offset: number; hasMore: boolean }
+  }
+  assertEqual(listBody.success, true, 'list response is a success envelope')
+  assertEqual(listBody.data.length, 1, 'conv-user has exactly one completed conversion')
+  assertEqual(listBody.data[0]?.id, conversionId, 'the listed conversion matches')
+  assertEqual(listBody.pagination.total, 1, 'pagination.total reflects the full count')
+  assertEqual(listBody.pagination.hasMore, false, 'no more pages')
+  console.log('PASS: 200 OK for GET /api/v1/conversions (paginated list)')
+
+  const emptyListRes = await handleConversionsRoute(authedRequest('nobody-user', '/conversions'), env, TEST_REQUEST_ID)
+  const emptyListBody = (await emptyListRes.json()) as { data: unknown[]; pagination: { total: number } }
+  assertEqual(emptyListBody.data.length, 0, 'a user with no conversions gets an empty list, not an error')
+  assertEqual(emptyListBody.pagination.total, 0, 'pagination.total is 0 for an empty list')
+  console.log('PASS: GET /api/v1/conversions returns an empty page for a user with no conversions')
+
+  // 3. GET /jobs/:id/conversion — queued/processing job (202, status only)
   const jobService = createJobService(env)
-  const uploadRes2 = await handleUploadsRoute(makeUploadRequest('conv-user-2', { file }), env)
-  const { job: pendingJob } = (await uploadRes2.json()) as { job: { id: string } }
-  const pendingRes = await handleJobsRoute(authedRequest('conv-user-2', `/api/jobs/${pendingJob.id}/conversion`), env)
-  assertEqual(pendingRes.status, 202, 'status for GET /api/jobs/:id/conversion (queued)')
-  const pendingBody = (await pendingRes.json()) as { status: string; conversion?: unknown }
-  assertEqual(pendingBody.status, 'queued', 'body.status for a queued job')
+  const uploadRes2 = await handleUploadsRoute(makeUploadRequest('conv-user-2', { file }), env, TEST_REQUEST_ID)
+  const { job: pendingJob } = await readSuccessBody<{ job: { id: string } }>(uploadRes2)
+  const pendingRes = await handleJobsRoute(authedRequest('conv-user-2', `/jobs/${pendingJob.id}/conversion`), env, TEST_REQUEST_ID)
+  assertEqual(pendingRes.status, 202, 'status for GET /jobs/:id/conversion (queued)')
+  const pendingBody = await readSuccessBody<{ status: string; conversion?: unknown }>(pendingRes)
+  assertEqual(pendingBody.status, 'queued', 'data.status for a queued job')
   assertEqual(pendingBody.conversion, undefined, 'no conversion field for a queued job')
-  console.log('PASS: 202 Accepted for GET /api/jobs/:id/conversion while queued/processing')
+  console.log('PASS: 202 Accepted for GET /api/v1/jobs/:id/conversion while queued/processing')
 
-  // 4. GET /api/jobs/:id/conversion — failed job (410, error info)
+  // 4. GET /jobs/:id/conversion — failed job (410, error info, still success envelope)
   await jobService.markFailed(pendingJob.id, 'simulated vectorization failure')
-  const failedRes = await handleJobsRoute(authedRequest('conv-user-2', `/api/jobs/${pendingJob.id}/conversion`), env)
-  assertEqual(failedRes.status, 410, 'status for GET /api/jobs/:id/conversion (failed)')
-  const failedBody = (await failedRes.json()) as { status: string; error: string | null }
-  assertEqual(failedBody.status, 'failed', 'body.status for a failed job')
-  assertEqual(failedBody.error, 'simulated vectorization failure', 'body.error surfaces the failure reason')
-  console.log('PASS: 410 Gone for GET /api/jobs/:id/conversion once the job has failed')
+  const failedRes = await handleJobsRoute(authedRequest('conv-user-2', `/jobs/${pendingJob.id}/conversion`), env, TEST_REQUEST_ID)
+  assertEqual(failedRes.status, 410, 'status for GET /jobs/:id/conversion (failed)')
+  const failedBody = await readSuccessBody<{ status: string; error: string | null }>(failedRes)
+  assertEqual(failedBody.status, 'failed', 'data.status for a failed job')
+  assertEqual(failedBody.error, 'simulated vectorization failure', 'data.error surfaces the failure reason')
+  console.log('PASS: 410 for GET /api/v1/jobs/:id/conversion once the job has failed (still a success envelope)')
 
-  // 5. GET /api/jobs/:id/conversion — unknown job (404)
-  const missingJobConversionRes = await handleJobsRoute(
-    authedRequest('conv-user', '/api/jobs/does-not-exist/conversion'),
-    env,
-  )
-  assertEqual(missingJobConversionRes.status, 404, 'status for GET /api/jobs/:id/conversion with an unknown job')
-  console.log('PASS: 404 Not Found for GET /api/jobs/:id/conversion with an unknown job id')
+  // 5. GET /jobs/:id/conversion — unknown job (404)
+  const missingJobConversionRes = await handleJobsRoute(authedRequest('conv-user', '/jobs/does-not-exist/conversion'), env, TEST_REQUEST_ID)
+  assertEqual(missingJobConversionRes.status, 404, 'status for GET /jobs/:id/conversion with an unknown job')
+  console.log('PASS: 404 Not Found for GET /api/v1/jobs/:id/conversion with an unknown job id')
 
   console.log('\nAll conversion retrieval route smoke tests passed.')
 }

@@ -21,3 +21,6 @@ export class InsufficientCreditsError extends Error {}
 
 /** Thrown on a unique-constraint violation or an optimistic-lock mismatch — routes map this to HTTP 409. */
 export class ConflictError extends Error {}
+
+/** Thrown by still-stubbed routes/services (see backend/README.md) — routes map this to HTTP 501. */
+export class NotImplementedError extends Error {}

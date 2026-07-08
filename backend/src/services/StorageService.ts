@@ -48,7 +48,7 @@ export class StorageService {
     const expiresAt = Math.floor(Date.now() / 1000) + expiresInSeconds
     const signature = await hmacHex(this.downloadUrlSecret, `${key}:${expiresAt}`)
     const params = new URLSearchParams({ key, exp: String(expiresAt), sig: signature })
-    return `/api/download?${params.toString()}`
+    return `/api/v1/download?${params.toString()}`
   }
 
   /** Verifies a URL produced by getSignedDownloadUrl — checks the HMAC and expiry. */

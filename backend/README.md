@@ -120,20 +120,43 @@ quirk) — but every script above calls the exact same functions Wrangler
 would invoke, so the business logic is verified either way. Worth re-trying
 `wrangler dev` in a normal terminal/CI environment before shipping.
 
+## Public API (v1) — Phase 21
+
+Every route now lives under `/api/v1/` and returns a standard envelope
+(`SuccessResponse<T>` / `ErrorResponse` / `PaginatedResponse<T>`, see
+`src/api/response.ts`) with a `requestId` (also echoed as `X-Request-Id`),
+plus an `X-Response-Time` header and a structured JSON log line per request
+(`src/api/logging.ts`). CORS is handled centrally (`src/api/cors.ts`) —
+`vectorla.app` always, `localhost:*` outside production only. Errors use a
+fixed 7-code vocabulary (`VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`,
+`NOT_FOUND`, `CONFLICT`, `INSUFFICIENT_CREDITS`, `INTERNAL_ERROR`) — see
+`mapErrorToResponse()`, the single place that maps a thrown error class to
+(code, HTTP status).
+
+Full endpoint reference: **[API.md](./API.md)**. Machine-readable spec:
+`GET /api/v1/openapi.json`, generated from the hand-maintained
+`src/api/openapi.ts` (no schema-validation library exists in this codebase
+yet to generate it from — see "What's still a decision" below).
+
+`GET /api/v1/conversions` (paginated list) is new this phase — the only net-new
+route; everything else is the same functionality under the new prefix/envelope.
+
 ## Request flow (once implemented)
 
-1. `POST /api/uploads` — client uploads a raster image. `UploadService`
+1. `POST /api/v1/uploads` — client uploads a raster image. `UploadService`
    stores the file via `StorageService`/R2 and records an `Upload` row.
-2. `POST /api/jobs` — client requests a conversion. A `Job` row is created
+2. `POST /api/v1/jobs` — client requests a conversion. A `Job` row is created
    (`status: queued`) and `QueueService` pushes a message onto
    `CONVERSION_QUEUE`.
 3. The Worker's `queue()` handler consumes that message and calls
    `ConversionService.processJob()` — **this is where the real AI/tracing
    call will eventually go.** It writes result files via `StorageService`,
    creates `Conversion` rows, and debits credits via `CreditsService`.
-4. `GET /api/jobs/:id` — client polls for job status.
-5. `GET /api/conversions/:id` — metadata + a signed R2 download URL.
-6. `GET /api/credits` / `GET /api/history` — balance and past activity.
+4. `GET /api/v1/jobs/:id` — client polls for job status.
+5. `GET /api/v1/conversions/:id` (or `/api/v1/conversions` for a paginated
+   list) — metadata + a signed R2 download URL.
+6. `GET /api/v1/credits` / `GET /api/v1/history` — still stubbed
+   (`501 INTERNAL_ERROR`), balance and past activity.
 
 ## Folder structure
 
