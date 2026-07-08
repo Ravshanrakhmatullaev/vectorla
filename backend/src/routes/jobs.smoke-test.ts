@@ -1,5 +1,6 @@
-// Local smoke test for POST /api/jobs and GET /api/jobs/:id — calls the real
-// route handler directly with a fake Env, no wrangler dev needed.
+// Local smoke test for POST /api/jobs, GET /api/jobs/:id — calls the real
+// route handler directly with a fake Env, no wrangler dev needed. Auth uses
+// the dev-only X-Test-User-Id bypass (see middleware/requireAuth.ts).
 //
 // Run with: npx tsx src/routes/jobs.smoke-test.ts (from inside backend/)
 import { handleJobsRoute } from './jobs'
@@ -48,10 +49,24 @@ function createFakeEnv(): Env {
   }
 }
 
-function makeUploadRequest(fields: Record<string, string | File>): Request {
+function makeUploadRequest(userId: string, fields: Record<string, string | File>): Request {
   const form = new FormData()
   for (const [key, value] of Object.entries(fields)) form.append(key, value)
-  return new Request('http://localhost/api/uploads', { method: 'POST', body: form })
+  return new Request('http://localhost/api/uploads', {
+    method: 'POST',
+    headers: { 'X-Test-User-Id': userId },
+    body: form,
+  })
+}
+
+function makeJobsRequest(userId: string | null, method: string, path: string, body?: unknown): Request {
+  const headers: Record<string, string> = {}
+  if (userId) headers['X-Test-User-Id'] = userId
+  return new Request(`http://localhost${path}`, {
+    method,
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  })
 }
 
 async function run() {
@@ -59,15 +74,17 @@ async function run() {
 
   // Seed an upload the same way a real client would, via the real upload route.
   const file = new File([toArrayBuffer('bytes')], 'jobs-route-test.png', { type: 'image/png' })
-  const uploadRes = await handleUploadsRoute(makeUploadRequest({ file, userId: 'jobs-user' }), env)
+  const uploadRes = await handleUploadsRoute(makeUploadRequest('jobs-user', { file }), env)
   const { upload } = (await uploadRes.json()) as { upload: { id: string } }
+
+  // 401 — no Authorization/X-Test-User-Id header
+  const unauthedRes = await handleJobsRoute(makeJobsRequest(null, 'POST', '/api/jobs', { uploadId: upload.id }), env)
+  assertEqual(unauthedRes.status, 401, 'status for missing auth on POST /api/jobs')
+  console.log('PASS: 401 Unauthorized for POST /api/jobs with no auth')
 
   // POST /api/jobs — create another job for the same upload (e.g. re-processing)
   const createRes = await handleJobsRoute(
-    new Request('http://localhost/api/jobs', {
-      method: 'POST',
-      body: JSON.stringify({ userId: 'jobs-user', uploadId: upload.id, preset: 'logo' }),
-    }),
+    makeJobsRequest('jobs-user', 'POST', '/api/jobs', { uploadId: upload.id, preset: 'logo' }),
     env,
   )
   assertEqual(createRes.status, 201, 'status for POST /api/jobs')
@@ -77,47 +94,50 @@ async function run() {
   console.log('PASS: 201 Created for POST /api/jobs')
 
   // 400 — missing uploadId
-  const badCreateRes = await handleJobsRoute(
-    new Request('http://localhost/api/jobs', {
-      method: 'POST',
-      body: JSON.stringify({ userId: 'jobs-user' }),
-    }),
-    env,
-  )
+  const badCreateRes = await handleJobsRoute(makeJobsRequest('jobs-user', 'POST', '/api/jobs', {}), env)
   assertEqual(badCreateRes.status, 400, 'status for missing uploadId')
   console.log('PASS: 400 Bad Request when "uploadId" is missing')
 
   // 400 — uploadId that doesn't exist
   const missingUploadRes = await handleJobsRoute(
-    new Request('http://localhost/api/jobs', {
-      method: 'POST',
-      body: JSON.stringify({ userId: 'jobs-user', uploadId: 'does-not-exist' }),
-    }),
+    makeJobsRequest('jobs-user', 'POST', '/api/jobs', { uploadId: 'does-not-exist' }),
     env,
   )
   assertEqual(missingUploadRes.status, 400, 'status for unknown uploadId')
   console.log('PASS: 400 Bad Request for an unknown uploadId')
 
+  // 403 — uploadId belongs to a different authenticated user
+  const otherUserRes = await handleJobsRoute(
+    makeJobsRequest('someone-else', 'POST', '/api/jobs', { uploadId: upload.id }),
+    env,
+  )
+  assertEqual(otherUserRes.status, 403, 'status for uploadId owned by another user')
+  console.log('PASS: 403 Forbidden for POST /api/jobs when the upload belongs to another user')
+
   // GET /api/jobs/:id
-  const getRes = await handleJobsRoute(new Request(`http://localhost/api/jobs/${job.id}`, { method: 'GET' }), env)
+  const getRes = await handleJobsRoute(makeJobsRequest('jobs-user', 'GET', `/api/jobs/${job.id}`), env)
   assertEqual(getRes.status, 200, 'status for GET /api/jobs/:id')
   const fetchedJob = (await getRes.json()) as { id: string }
   assertEqual(fetchedJob.id, job.id, 'fetched job id matches')
   console.log('PASS: 200 OK for GET /api/jobs/:id')
 
+  // 401 — GET /api/jobs/:id with no auth
+  const getUnauthedRes = await handleJobsRoute(makeJobsRequest(null, 'GET', `/api/jobs/${job.id}`), env)
+  assertEqual(getUnauthedRes.status, 401, 'status for GET /api/jobs/:id with no auth')
+  console.log('PASS: 401 Unauthorized for GET /api/jobs/:id with no auth')
+
+  // 403 — GET /api/jobs/:id as a different user than the job's owner
+  const getForbiddenRes = await handleJobsRoute(makeJobsRequest('someone-else', 'GET', `/api/jobs/${job.id}`), env)
+  assertEqual(getForbiddenRes.status, 403, 'status for GET /api/jobs/:id as a different user')
+  console.log('PASS: 403 Forbidden for GET /api/jobs/:id when the job belongs to another user')
+
   // 404 — unknown job id
-  const notFoundRes = await handleJobsRoute(
-    new Request('http://localhost/api/jobs/does-not-exist', { method: 'GET' }),
-    env,
-  )
+  const notFoundRes = await handleJobsRoute(makeJobsRequest('jobs-user', 'GET', '/api/jobs/does-not-exist'), env)
   assertEqual(notFoundRes.status, 404, 'status for unknown job id')
   console.log('PASS: 404 Not Found for an unknown job id')
 
   // 405 — DELETE not supported
-  const wrongMethodRes = await handleJobsRoute(
-    new Request(`http://localhost/api/jobs/${job.id}`, { method: 'DELETE' }),
-    env,
-  )
+  const wrongMethodRes = await handleJobsRoute(makeJobsRequest('jobs-user', 'DELETE', `/api/jobs/${job.id}`), env)
   assertEqual(wrongMethodRes.status, 405, 'status for unsupported method')
   console.log('PASS: 405 Method Not Allowed for DELETE')
 

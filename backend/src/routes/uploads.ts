@@ -1,7 +1,8 @@
 import type { Env } from '../env'
 import { createUploadService } from '../services/UploadService'
 import { createJobService } from '../services/JobService'
-import { ValidationError, PayloadTooLargeError, UnsupportedMediaTypeError } from '../errors'
+import { requireAuth } from '../middleware/requireAuth'
+import { ValidationError, PayloadTooLargeError, UnsupportedMediaTypeError, UnauthorizedError } from '../errors'
 import { isUserPlan } from '../types'
 
 function jsonResponse(body: unknown, status: number): Response {
@@ -17,6 +18,14 @@ export async function handleUploadsRoute(request: Request, env: Env): Promise<Re
     return jsonResponse({ error: 'Method not allowed' }, 405)
   }
 
+  let userId: string
+  try {
+    ;({ userId } = await requireAuth(request, env))
+  } catch (error) {
+    if (error instanceof UnauthorizedError) return jsonResponse({ error: error.message }, 401)
+    throw error
+  }
+
   let formData: FormData
   try {
     formData = await request.formData()
@@ -28,14 +37,10 @@ export async function handleUploadsRoute(request: Request, env: Env): Promise<Re
   // but the real Workers runtime does return File entries for multipart
   // form-data — this cast documents that known typing gap.
   const file = formData.get('file') as unknown as File | string | null
-  const userId = formData.get('userId')
   const planField = formData.get('plan')
 
   if (!(file instanceof File)) {
     return jsonResponse({ error: 'Missing "file" field' }, 400)
-  }
-  if (typeof userId !== 'string' || userId.length === 0) {
-    return jsonResponse({ error: 'Missing "userId" field' }, 400)
   }
 
   const plan = typeof planField === 'string' && isUserPlan(planField) ? planField : 'free'

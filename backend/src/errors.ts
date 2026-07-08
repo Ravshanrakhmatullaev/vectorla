@@ -9,3 +9,9 @@ export class UnsupportedMediaTypeError extends Error {}
 
 /** Thrown when a requested resource doesn't exist — routes map this to HTTP 404. */
 export class NotFoundError extends Error {}
+
+/** Thrown when a request has no/an invalid auth token — routes map this to HTTP 401. */
+export class UnauthorizedError extends Error {}
+
+/** Thrown when an authenticated caller tries to access another user's resource — routes map this to HTTP 403. */
+export class ForbiddenError extends Error {}

@@ -14,10 +14,12 @@ import {
 } from './validateUpload'
 
 export interface CreateUploadInput {
+  // Derived from the authenticated session by routes/uploads.ts (see
+  // middleware/requireAuth.ts) — this service itself doesn't verify identity.
   userId: string
-  // TODO(backend): derive from the authenticated session once auth exists —
+  // TODO(backend): derive from the user's billing plan once billing exists —
   // callers currently declare their own plan, which is not secure and is only
-  // acceptable because there's no real auth/billing yet to spoof value from.
+  // acceptable because there's no real billing yet to spoof value from.
   plan: UserPlan
   file: ArrayBuffer
   originalFileName: string

@@ -23,6 +23,8 @@ function buildPlaceholderSvg(): ArrayBuffer {
 
 /** Result of looking up a job's conversion — see ConversionService.getConversionByJob. */
 export interface ConversionByJobResult {
+  /** The job's owner — always populated, so routes can do an ownership check regardless of job status. */
+  userId: string
   jobStatus: JobStatus
   conversion: Conversion | null
   /** Only populated when jobStatus is 'failed' (mirrors Job.errorMessage). */
@@ -90,10 +92,10 @@ export class ConversionService {
     const job = await this.jobs.getJob(jobId)
 
     if (job.status === 'failed') {
-      return { jobStatus: 'failed', conversion: null, errorMessage: job.errorMessage }
+      return { userId: job.userId, jobStatus: 'failed', conversion: null, errorMessage: job.errorMessage }
     }
     if (job.status !== 'completed') {
-      return { jobStatus: job.status, conversion: null, errorMessage: null }
+      return { userId: job.userId, jobStatus: job.status, conversion: null, errorMessage: null }
     }
 
     const conversion = await this.conversions.findByJobId(jobId)
@@ -103,7 +105,12 @@ export class ConversionService {
       // exactly as unavailable to the caller as a missing job would be.
       throw new NotFoundError(`No conversion found for completed job "${jobId}"`)
     }
-    return { jobStatus: 'completed', conversion: await this.attachDownloadUrl(conversion), errorMessage: null }
+    return {
+      userId: job.userId,
+      jobStatus: 'completed',
+      conversion: await this.attachDownloadUrl(conversion),
+      errorMessage: null,
+    }
   }
 
   /** Lists a user's completed conversions, most recent first, each with a fresh download URL. */

@@ -1,7 +1,8 @@
 import type { Env } from '../env'
 import { createJobService } from '../services/JobService'
 import { createConversionService } from '../services/ConversionService'
-import { NotFoundError, ValidationError } from '../errors'
+import { requireAuth } from '../middleware/requireAuth'
+import { NotFoundError, ValidationError, UnauthorizedError, ForbiddenError } from '../errors'
 
 function jsonResponse(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
@@ -11,7 +12,6 @@ function jsonResponse(body: unknown, status: number): Response {
 }
 
 interface CreateJobBody {
-  userId?: unknown
   uploadId?: unknown
   preset?: unknown
   settings?: unknown
@@ -23,6 +23,8 @@ function isRecordOfNumbers(value: unknown): value is Record<string, number> {
 }
 
 async function handleCreateJob(request: Request, env: Env): Promise<Response> {
+  const { userId } = await requireAuth(request, env)
+
   let body: CreateJobBody
   try {
     body = (await request.json()) as CreateJobBody
@@ -30,9 +32,6 @@ async function handleCreateJob(request: Request, env: Env): Promise<Response> {
     return jsonResponse({ error: 'Expected a JSON body' }, 400)
   }
 
-  if (typeof body.userId !== 'string' || body.userId.length === 0) {
-    return jsonResponse({ error: 'Missing "userId" field' }, 400)
-  }
   if (typeof body.uploadId !== 'string' || body.uploadId.length === 0) {
     return jsonResponse({ error: 'Missing "uploadId" field' }, 400)
   }
@@ -40,23 +39,27 @@ async function handleCreateJob(request: Request, env: Env): Promise<Response> {
   try {
     const jobService = createJobService(env)
     const job = await jobService.createJob({
-      userId: body.userId,
+      userId,
       uploadId: body.uploadId,
       preset: typeof body.preset === 'string' ? body.preset : undefined,
       settings: isRecordOfNumbers(body.settings) ? body.settings : undefined,
     })
     return jsonResponse(job, 201)
   } catch (error) {
+    if (error instanceof ForbiddenError) return jsonResponse({ error: error.message }, 403)
     if (error instanceof ValidationError) return jsonResponse({ error: error.message }, 400)
     console.error('Unexpected error in POST /api/jobs:', error)
     return jsonResponse({ error: 'Internal Server Error' }, 500)
   }
 }
 
-async function handleGetJob(jobId: string, env: Env): Promise<Response> {
+async function handleGetJob(jobId: string, callerUserId: string, env: Env): Promise<Response> {
   try {
     const jobService = createJobService(env)
     const job = await jobService.getJob(jobId)
+    if (job.userId !== callerUserId) {
+      return jsonResponse({ error: `Job "${jobId}" does not belong to the authenticated user` }, 403)
+    }
     return jsonResponse(job, 200)
   } catch (error) {
     if (error instanceof NotFoundError) return jsonResponse({ error: error.message }, 404)
@@ -69,13 +72,16 @@ async function handleGetJob(jobId: string, env: Env): Promise<Response> {
  * GET /api/jobs/:id/conversion — maps the job's current state to an HTTP
  * status: 200 once the conversion is ready (with a download URL), 202 while
  * still queued/processing, 410 if the job failed (won't ever produce one),
- * 404 if the job itself doesn't exist.
+ * 403 if the job belongs to someone else, 404 if the job itself doesn't exist.
  */
-async function handleGetJobConversion(jobId: string, env: Env): Promise<Response> {
+async function handleGetJobConversion(jobId: string, callerUserId: string, env: Env): Promise<Response> {
   try {
     const conversionService = createConversionService(env)
     const result = await conversionService.getConversionByJob(jobId)
 
+    if (result.userId !== callerUserId) {
+      return jsonResponse({ error: `Job "${jobId}" does not belong to the authenticated user` }, 403)
+    }
     if (result.jobStatus === 'completed') {
       return jsonResponse({ status: result.jobStatus, conversion: result.conversion }, 200)
     }
@@ -93,6 +99,8 @@ async function handleGetJobConversion(jobId: string, env: Env): Promise<Response
 /**
  * Handles POST /api/jobs (create + enqueue), GET /api/jobs/:id (poll status),
  * and GET /api/jobs/:id/conversion (resolve to the job's conversion result).
+ * All three require an authenticated caller (see middleware/requireAuth.ts);
+ * GET routes additionally check the resource belongs to that caller.
  */
 export async function handleJobsRoute(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url)
@@ -100,14 +108,21 @@ export async function handleJobsRoute(request: Request, env: Env): Promise<Respo
   const jobId = segments[2]
   const subResource = segments[3]
 
-  if (request.method === 'POST' && !jobId) {
-    return handleCreateJob(request, env)
-  }
-  if (request.method === 'GET' && jobId && subResource === 'conversion') {
-    return handleGetJobConversion(jobId, env)
-  }
-  if (request.method === 'GET' && jobId && !subResource) {
-    return handleGetJob(jobId, env)
+  try {
+    if (request.method === 'POST' && !jobId) {
+      return await handleCreateJob(request, env)
+    }
+    if (request.method === 'GET' && jobId && subResource === 'conversion') {
+      const { userId } = await requireAuth(request, env)
+      return await handleGetJobConversion(jobId, userId, env)
+    }
+    if (request.method === 'GET' && jobId && !subResource) {
+      const { userId } = await requireAuth(request, env)
+      return await handleGetJob(jobId, userId, env)
+    }
+  } catch (error) {
+    if (error instanceof UnauthorizedError) return jsonResponse({ error: error.message }, 401)
+    throw error
   }
   return jsonResponse({ error: 'Method not allowed' }, 405)
 }

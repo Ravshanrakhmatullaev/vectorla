@@ -6,7 +6,7 @@ import { createJobsRepository } from '../repositories/createJobsRepository'
 import { createUploadsRepository } from '../repositories/createUploadsRepository'
 import type { JobsRepository } from '../repositories/JobsRepository'
 import type { UploadsRepository } from '../repositories/UploadsRepository'
-import { NotFoundError, ValidationError } from '../errors'
+import { NotFoundError, ValidationError, ForbiddenError } from '../errors'
 
 export interface CreateJobInput {
   userId: string
@@ -29,7 +29,7 @@ export class JobService {
       throw new ValidationError(`No upload found with id "${input.uploadId}"`)
     }
     if (upload.userId !== input.userId) {
-      throw new ValidationError(`Upload "${input.uploadId}" does not belong to user "${input.userId}"`)
+      throw new ForbiddenError(`Upload "${input.uploadId}" does not belong to user "${input.userId}"`)
     }
 
     const now = new Date().toISOString()

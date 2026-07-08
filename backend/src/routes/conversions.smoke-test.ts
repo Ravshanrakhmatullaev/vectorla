@@ -1,7 +1,8 @@
 // Local smoke test for GET /api/conversions/:id and GET /api/jobs/:id/conversion
 // — calls the real route handlers directly with a fake Env, driving a job all
 // the way through the real queue() consumer to get a genuinely completed
-// conversion, no wrangler dev needed.
+// conversion, no wrangler dev needed. Auth uses the dev-only X-Test-User-Id
+// bypass (see middleware/requireAuth.ts).
 //
 // Run with: npx tsx src/routes/conversions.smoke-test.ts (from inside backend/)
 import worker from '../index'
@@ -83,10 +84,20 @@ async function runJobToCompletion(env: Env, jobId: string): Promise<void> {
   await worker.queue(createFakeBatch([createFakeMessage({ jobId })]), env)
 }
 
-function makeUploadRequest(fields: Record<string, string | File>): Request {
+function makeUploadRequest(userId: string, fields: Record<string, string | File>): Request {
   const form = new FormData()
   for (const [key, value] of Object.entries(fields)) form.append(key, value)
-  return new Request('http://localhost/api/uploads', { method: 'POST', body: form })
+  return new Request('http://localhost/api/uploads', {
+    method: 'POST',
+    headers: { 'X-Test-User-Id': userId },
+    body: form,
+  })
+}
+
+function authedRequest(userId: string | null, path: string): Request {
+  const headers: Record<string, string> = {}
+  if (userId) headers['X-Test-User-Id'] = userId
+  return new Request(`http://localhost${path}`, { method: 'GET', headers })
 }
 
 async function run() {
@@ -94,13 +105,13 @@ async function run() {
 
   // Seed a completed job + conversion via the real upload -> queue pipeline.
   const file = new File([toArrayBuffer('bytes')], 'logo.png', { type: 'image/png' })
-  const uploadRes = await handleUploadsRoute(makeUploadRequest({ file, userId: 'conv-user' }), env)
+  const uploadRes = await handleUploadsRoute(makeUploadRequest('conv-user', { file }), env)
   const { job: completedJob } = (await uploadRes.json()) as { job: { id: string } }
   await runJobToCompletion(env, completedJob.id)
 
-  // 1. GET /api/conversions/:id — completed conversion (200 + download URL)
+  // 1. GET /api/jobs/:id/conversion — completed conversion (200 + download URL)
   const jobConversionRes = await handleJobsRoute(
-    new Request(`http://localhost/api/jobs/${completedJob.id}/conversion`, { method: 'GET' }),
+    authedRequest('conv-user', `/api/jobs/${completedJob.id}/conversion`),
     env,
   )
   assertEqual(jobConversionRes.status, 200, 'status for GET /api/jobs/:id/conversion (completed)')
@@ -112,9 +123,25 @@ async function run() {
   assertTrue(Boolean(jobConversionBody.conversion.downloadUrl), 'body.conversion.downloadUrl is present')
   console.log('PASS: 200 OK for GET /api/jobs/:id/conversion once completed, with a download URL')
 
+  // 401 — no auth
+  const jobConversionUnauthedRes = await handleJobsRoute(
+    authedRequest(null, `/api/jobs/${completedJob.id}/conversion`),
+    env,
+  )
+  assertEqual(jobConversionUnauthedRes.status, 401, 'status for GET /api/jobs/:id/conversion with no auth')
+  console.log('PASS: 401 Unauthorized for GET /api/jobs/:id/conversion with no auth')
+
+  // 403 — a different authenticated user than the job's owner
+  const jobConversionForbiddenRes = await handleJobsRoute(
+    authedRequest('someone-else', `/api/jobs/${completedJob.id}/conversion`),
+    env,
+  )
+  assertEqual(jobConversionForbiddenRes.status, 403, 'status for GET /api/jobs/:id/conversion as another user')
+  console.log('PASS: 403 Forbidden for GET /api/jobs/:id/conversion when the job belongs to another user')
+
   const conversionId = jobConversionBody.conversion.id
   const getConversionRes = await handleConversionsRoute(
-    new Request(`http://localhost/api/conversions/${conversionId}`, { method: 'GET' }),
+    authedRequest('conv-user', `/api/conversions/${conversionId}`),
     env,
   )
   assertEqual(getConversionRes.status, 200, 'status for GET /api/conversions/:id')
@@ -123,9 +150,25 @@ async function run() {
   assertTrue(Boolean(conversionBody.downloadUrl), 'GET /api/conversions/:id attaches a downloadUrl')
   console.log('PASS: 200 OK for GET /api/conversions/:id with a download URL')
 
+  // 401 — no auth
+  const getConversionUnauthedRes = await handleConversionsRoute(
+    authedRequest(null, `/api/conversions/${conversionId}`),
+    env,
+  )
+  assertEqual(getConversionUnauthedRes.status, 401, 'status for GET /api/conversions/:id with no auth')
+  console.log('PASS: 401 Unauthorized for GET /api/conversions/:id with no auth')
+
+  // 403 — a different authenticated user than the conversion's owner
+  const getConversionForbiddenRes = await handleConversionsRoute(
+    authedRequest('someone-else', `/api/conversions/${conversionId}`),
+    env,
+  )
+  assertEqual(getConversionForbiddenRes.status, 403, 'status for GET /api/conversions/:id as another user')
+  console.log('PASS: 403 Forbidden for GET /api/conversions/:id when the conversion belongs to another user')
+
   // 2. GET /api/conversions/:id — unknown id (404)
   const missingConversionRes = await handleConversionsRoute(
-    new Request('http://localhost/api/conversions/does-not-exist', { method: 'GET' }),
+    authedRequest('conv-user', '/api/conversions/does-not-exist'),
     env,
   )
   assertEqual(missingConversionRes.status, 404, 'status for unknown conversion id')
@@ -133,12 +176,9 @@ async function run() {
 
   // 3. GET /api/jobs/:id/conversion — queued/processing job (202, status only)
   const jobService = createJobService(env)
-  const uploadRes2 = await handleUploadsRoute(makeUploadRequest({ file, userId: 'conv-user-2' }), env)
+  const uploadRes2 = await handleUploadsRoute(makeUploadRequest('conv-user-2', { file }), env)
   const { job: pendingJob } = (await uploadRes2.json()) as { job: { id: string } }
-  const pendingRes = await handleJobsRoute(
-    new Request(`http://localhost/api/jobs/${pendingJob.id}/conversion`, { method: 'GET' }),
-    env,
-  )
+  const pendingRes = await handleJobsRoute(authedRequest('conv-user-2', `/api/jobs/${pendingJob.id}/conversion`), env)
   assertEqual(pendingRes.status, 202, 'status for GET /api/jobs/:id/conversion (queued)')
   const pendingBody = (await pendingRes.json()) as { status: string; conversion?: unknown }
   assertEqual(pendingBody.status, 'queued', 'body.status for a queued job')
@@ -147,10 +187,7 @@ async function run() {
 
   // 4. GET /api/jobs/:id/conversion — failed job (410, error info)
   await jobService.markFailed(pendingJob.id, 'simulated vectorization failure')
-  const failedRes = await handleJobsRoute(
-    new Request(`http://localhost/api/jobs/${pendingJob.id}/conversion`, { method: 'GET' }),
-    env,
-  )
+  const failedRes = await handleJobsRoute(authedRequest('conv-user-2', `/api/jobs/${pendingJob.id}/conversion`), env)
   assertEqual(failedRes.status, 410, 'status for GET /api/jobs/:id/conversion (failed)')
   const failedBody = (await failedRes.json()) as { status: string; error: string | null }
   assertEqual(failedBody.status, 'failed', 'body.status for a failed job')
@@ -159,7 +196,7 @@ async function run() {
 
   // 5. GET /api/jobs/:id/conversion — unknown job (404)
   const missingJobConversionRes = await handleJobsRoute(
-    new Request('http://localhost/api/jobs/does-not-exist/conversion', { method: 'GET' }),
+    authedRequest('conv-user', '/api/jobs/does-not-exist/conversion'),
     env,
   )
   assertEqual(missingJobConversionRes.status, 404, 'status for GET /api/jobs/:id/conversion with an unknown job')

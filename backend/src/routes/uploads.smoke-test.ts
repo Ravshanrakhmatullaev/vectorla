@@ -1,6 +1,8 @@
 // Local smoke test for the actual POST /api/uploads route handler — the exact
 // function Wrangler invokes, called directly with a fake Env (no real R2/
-// Supabase, and no wrangler dev process needed).
+// Supabase, and no wrangler dev process needed). Auth uses the dev-only
+// X-Test-User-Id bypass (see middleware/requireAuth.ts) instead of a real
+// Supabase JWT, since ENVIRONMENT is 'development' below.
 //
 // Run with: npx tsx src/routes/uploads.smoke-test.ts (from inside backend/)
 import { handleUploadsRoute } from './uploads'
@@ -56,10 +58,14 @@ function createFakeEnv(shouldFail = false): Env {
   }
 }
 
-function makeUploadRequest(fields: Record<string, string | File>): Request {
+function makeUploadRequest(userId: string, fields: Record<string, string | File>): Request {
   const form = new FormData()
   for (const [key, value] of Object.entries(fields)) form.append(key, value)
-  return new Request('http://localhost/api/uploads', { method: 'POST', body: form })
+  return new Request('http://localhost/api/uploads', {
+    method: 'POST',
+    headers: { 'X-Test-User-Id': userId },
+    body: form,
+  })
 }
 
 async function run() {
@@ -67,7 +73,7 @@ async function run() {
 
   // 201 on success — Phase 10: response now also includes the auto-created job
   const goodFile = new File([toArrayBuffer('bytes')], 'route-test.png', { type: 'image/png' })
-  const res1 = await handleUploadsRoute(makeUploadRequest({ file: goodFile, userId: 'route-user' }), env)
+  const res1 = await handleUploadsRoute(makeUploadRequest('route-user', { file: goodFile }), env)
   assertEqual(res1.status, 201, 'status for valid upload')
   const body1 = (await res1.json()) as {
     upload: { originalFileName: string; status: string }
@@ -79,8 +85,16 @@ async function run() {
   assertEqual(body1.job.retryCount, 0, 'response job.retryCount')
   console.log('PASS: 201 Created on successful upload, with an auto-created queued job')
 
+  // 401 — no Authorization header and no test bypass header
+  const res0 = await handleUploadsRoute(
+    new Request('http://localhost/api/uploads', { method: 'POST', body: new FormData() }),
+    env,
+  )
+  assertEqual(res0.status, 401, 'status for missing auth')
+  console.log('PASS: 401 Unauthorized when no Authorization/X-Test-User-Id header is present')
+
   // 400 — missing file field
-  const res2 = await handleUploadsRoute(makeUploadRequest({ userId: 'route-user' }), env)
+  const res2 = await handleUploadsRoute(makeUploadRequest('route-user', {}), env)
   assertEqual(res2.status, 400, 'status for missing file field')
   console.log('PASS: 400 Bad Request when "file" field is missing')
 
@@ -93,16 +107,13 @@ async function run() {
 
   // 415 — unsupported mime type
   const badFile = new File([toArrayBuffer('x')], 'doc.pdf', { type: 'application/pdf' })
-  const res4 = await handleUploadsRoute(makeUploadRequest({ file: badFile, userId: 'route-user-2' }), env)
+  const res4 = await handleUploadsRoute(makeUploadRequest('route-user-2', { file: badFile }), env)
   assertEqual(res4.status, 415, 'status for unsupported mime type')
   console.log('PASS: 415 Unsupported Media Type for disallowed mime type')
 
   // 413 — oversized file (free plan default, 5MB limit)
   const bigFile = new File([new ArrayBuffer(6 * 1024 * 1024)], 'big.png', { type: 'image/png' })
-  const res5 = await handleUploadsRoute(
-    makeUploadRequest({ file: bigFile, userId: 'route-user-3', plan: 'free' }),
-    env,
-  )
+  const res5 = await handleUploadsRoute(makeUploadRequest('route-user-3', { file: bigFile, plan: 'free' }), env)
   assertEqual(res5.status, 413, 'status for oversized file')
   console.log('PASS: 413 Payload Too Large for oversized file')
 
@@ -114,7 +125,7 @@ async function run() {
   // 500 — unexpected failure (R2 put throws)
   const brokenEnv = createFakeEnv(true)
   const okFile = new File([toArrayBuffer('bytes')], 'will-fail.png', { type: 'image/png' })
-  const res7 = await handleUploadsRoute(makeUploadRequest({ file: okFile, userId: 'route-user-4' }), brokenEnv)
+  const res7 = await handleUploadsRoute(makeUploadRequest('route-user-4', { file: okFile }), brokenEnv)
   assertEqual(res7.status, 500, 'status for unexpected storage failure')
   console.log('PASS: 500 Internal Server Error on unexpected storage failure')
 
