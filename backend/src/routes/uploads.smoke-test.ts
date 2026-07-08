@@ -5,7 +5,8 @@
 // Run with: npx tsx src/routes/uploads.smoke-test.ts (from inside backend/)
 import { handleUploadsRoute } from './uploads'
 import type { Env } from '../env'
-import type { R2Bucket } from '@cloudflare/workers-types'
+import type { R2Bucket, Queue } from '@cloudflare/workers-types'
+import type { ConversionQueueMessage } from '../integrations/queue'
 
 function assertEqual<T>(actual: T, expected: T, message: string): void {
   if (actual !== expected) {
@@ -34,12 +35,20 @@ function createFakeBucket(shouldFail = false): R2Bucket {
   } as unknown as R2Bucket
 }
 
+function createFakeQueue(): Queue<ConversionQueueMessage> {
+  return {
+    async send() {},
+    async sendBatch() {},
+  } as unknown as Queue<ConversionQueueMessage>
+}
+
 function createFakeEnv(shouldFail = false): Env {
   return {
     UPLOADS_BUCKET: createFakeBucket(shouldFail),
-    CONVERSION_QUEUE: {} as Env['CONVERSION_QUEUE'],
-    // Left empty on purpose: this makes createUploadsRepository() fall back
-    // to InMemoryUploadsRepository, so this test needs no real Supabase project.
+    CONVERSION_QUEUE: createFakeQueue(),
+    // Left empty on purpose: this makes createUploadsRepository()/createJobsRepository()
+    // fall back to their in-memory implementations, so this test needs no real
+    // Supabase project.
     SUPABASE_URL: '',
     SUPABASE_SERVICE_ROLE_KEY: '',
     ENVIRONMENT: 'development',
@@ -55,14 +64,19 @@ function makeUploadRequest(fields: Record<string, string | File>): Request {
 async function run() {
   const env = createFakeEnv()
 
-  // 201 on success
+  // 201 on success — Phase 10: response now also includes the auto-created job
   const goodFile = new File([toArrayBuffer('bytes')], 'route-test.png', { type: 'image/png' })
   const res1 = await handleUploadsRoute(makeUploadRequest({ file: goodFile, userId: 'route-user' }), env)
   assertEqual(res1.status, 201, 'status for valid upload')
-  const body1 = (await res1.json()) as { originalFileName: string; status: string }
-  assertEqual(body1.originalFileName, 'route-test.png', 'response originalFileName')
-  assertEqual(body1.status, 'stored', 'response status')
-  console.log('PASS: 201 Created on successful upload')
+  const body1 = (await res1.json()) as {
+    upload: { originalFileName: string; status: string }
+    job: { status: string; uploadId: string; retryCount: number }
+  }
+  assertEqual(body1.upload.originalFileName, 'route-test.png', 'response upload.originalFileName')
+  assertEqual(body1.upload.status, 'stored', 'response upload.status')
+  assertEqual(body1.job.status, 'queued', 'response job.status')
+  assertEqual(body1.job.retryCount, 0, 'response job.retryCount')
+  console.log('PASS: 201 Created on successful upload, with an auto-created queued job')
 
   // 400 — missing file field
   const res2 = await handleUploadsRoute(makeUploadRequest({ userId: 'route-user' }), env)

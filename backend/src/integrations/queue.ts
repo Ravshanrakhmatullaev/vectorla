@@ -13,10 +13,10 @@ export interface QueueClient {
  * QueueService so the business-facing service layer never touches the raw
  * Workers binding API directly.
  */
-export function createQueueClient(_queue: Queue<ConversionQueueMessage>): QueueClient {
+export function createQueueClient(queue: Queue<ConversionQueueMessage>): QueueClient {
   return {
-    async send(): Promise<void> {
-      throw new Error('Not implemented')
+    async send(message) {
+      await queue.send(message)
     },
   }
 }

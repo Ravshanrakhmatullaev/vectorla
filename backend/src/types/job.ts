@@ -10,6 +10,7 @@ export interface Job {
   /** Matches the frontend's vector settings (colors/detail/smoothness/etc.). */
   settings: Record<string, number> | null
   errorMessage: string | null
+  retryCount: number
   createdAt: string
   updatedAt: string
   completedAt: string | null

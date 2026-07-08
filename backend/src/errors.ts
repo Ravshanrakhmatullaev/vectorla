@@ -6,3 +6,6 @@ export class PayloadTooLargeError extends Error {}
 
 /** Thrown for an unsupported/mismatched MIME type or extension — routes map this to HTTP 415. */
 export class UnsupportedMediaTypeError extends Error {}
+
+/** Thrown when a requested resource doesn't exist — routes map this to HTTP 404. */
+export class NotFoundError extends Error {}

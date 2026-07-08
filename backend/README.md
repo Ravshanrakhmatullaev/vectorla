@@ -7,11 +7,49 @@ This is a **Cloudflare Worker**, deployed separately from the frontend
 independent deployable.
 
 **Most of this is still scaffolding.** Every route handler and service method
-throws `new Error('Not implemented')` *except* `POST /api/uploads`, which is
-real (see "Upload API" below). This exists purely to define the shape of the
-API, the data model, and the integration points so real implementation
-(including AI vectorization) can be dropped in later without re-architecting
-anything.
+throws `new Error('Not implemented')` *except* `POST /api/uploads`, `POST
+/api/jobs`, `GET /api/jobs/:id`, and the queue consumer (see below). This
+exists purely to define the shape of the API, the data model, and the
+integration points so real implementation (including AI vectorization) can
+be dropped in later without re-architecting anything.
+
+## Job Queue (implemented)
+
+Every successful `POST /api/uploads` automatically creates a `Job` (status
+`queued`), persists it, and enqueues a `{ jobId }` message onto
+`CONVERSION_QUEUE` — via `JobService.createJob`, called right after
+`UploadService.createUpload` succeeds in `src/routes/uploads.ts`. The upload
+response shape is now `{ upload, job }` instead of a bare upload object.
+
+`POST /api/jobs` (`{ userId, uploadId, preset?, settings? }`) does the same
+thing on demand — e.g. for re-processing an existing upload with different
+settings. `GET /api/jobs/:id` returns the current job.
+
+| Status | Cause |
+|---|---|
+| 201 | Job created and enqueued (POST /api/jobs) |
+| 200 | Job found (GET /api/jobs/:id) |
+| 400 | Missing `userId`/`uploadId`, or the referenced upload doesn't exist / isn't owned by that user |
+| 404 | No job with that id (GET only) |
+| 405 | Unsupported method |
+| 500 | Unexpected failure |
+
+**The queue consumer does not run AI yet** (per this phase's explicit scope)
+— `Worker.queue()` in `src/index.ts` only exercises the state machine:
+`queued` → `processing` → `completed`, then acks the message. On any error
+during that (e.g. the job lookup fails), it calls `JobService.markFailed`
+(setting `status: 'failed'`, `errorMessage`, and incrementing `retryCount`)
+and calls `message.retry()` so Cloudflare's native Queue redelivery handles
+the retry — our own `retryCount` field is bookkeeping for a future
+dead-letter cutoff, not itself driving redelivery.
+
+**Job fields:** `status` (`queued | processing | completed | failed`),
+`retryCount` (starts at 0, incremented by `markFailed`), `createdAt` /
+`updatedAt` (ISO timestamps), `completedAt` (set only on `markCompleted`).
+
+**Repository fallback:** `createJobsRepository` follows the exact same
+real-Supabase-or-in-memory pattern as `createUploadsRepository` — see below
+for a subtlety that pattern surfaced.
 
 ## Upload API (implemented)
 
@@ -35,12 +73,23 @@ and writes an `Upload` row, returning it as JSON with `201`.
 | 405 | Method other than POST |
 | 500 | Unexpected failure (e.g. R2 or Supabase error) |
 
-**Repository fallback:** `createUploadsRepository` (in `src/repositories/`)
-uses the real `SupabaseUploadsRepository` when `SUPABASE_URL` /
-`SUPABASE_SERVICE_ROLE_KEY` are configured, and an `InMemoryUploadsRepository`
-otherwise — this is what makes the upload flow testable locally with no real
-Supabase project. Production always sets both secrets, so it always gets the
-real one.
+**Repository fallback:** `createUploadsRepository` / `createJobsRepository`
+(in `src/repositories/`) use the real `Supabase*Repository` when
+`SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` are configured, and an
+`InMemory*Repository` otherwise — this is what makes the upload/job flow
+testable locally with no real Supabase project. Production always sets both
+secrets, so it always gets the real ones.
+
+A subtlety this surfaced: `UploadService` and `JobService` each call their
+own repository factory independently. In production that's fine — every
+`SupabaseXRepository` instance is a stateless client over the same external
+DB. But the in-memory fallback's `new InMemoryXRepository()` is isolated
+per-instance, so within one request `JobService`'s existence-check
+(`uploads.findById`) couldn't see an upload `UploadService` just created a
+moment earlier in a *different* in-memory instance. Both factories now cache
+one in-memory repository per `env` object (a `WeakMap<Env, ...>`, scoped only
+to the fallback path — never touches the real-Supabase branch), so instances
+constructed within the same request/test share state.
 
 **Known limitations:**
 - No rollback if the R2 write succeeds but the Supabase write fails — would
@@ -49,19 +98,26 @@ real one.
   auth doesn't exist yet — not secure, documented as a TODO in the code.
 - `GET /api/uploads/:id` and `DELETE /api/uploads/:id` are still stubs
   (`UploadService.getUpload` / `deleteUpload` still throw).
+- `POST /api/uploads`'s response shape changed in Phase 10, from a bare
+  `Upload` to `{ upload, job }` — there's no real frontend/API consumer yet,
+  so this wasn't a breaking change for anyone, but flagging it since it's a
+  shape change to a previously-"final" response.
 
-**Testing locally:** two smoke-test scripts run with plain Node (via `tsx`,
+**Testing locally:** five smoke-test scripts run with plain Node (via `tsx`,
 a dev dependency) and need no real Cloudflare/Supabase credentials:
 
 ```bash
-npx tsx src/services/UploadService.smoke-test.ts   # validation rules, in-memory fakes for R2 + repository
-npx tsx src/routes/uploads.smoke-test.ts            # the actual route handler, verifying every HTTP status code
+npx tsx src/services/UploadService.smoke-test.ts   # upload validation rules, in-memory fakes for R2 + repository
+npx tsx src/services/JobService.smoke-test.ts       # job creation/lookup + the queued/processing/completed/failed state machine
+npx tsx src/routes/uploads.smoke-test.ts            # POST /api/uploads, verifying every HTTP status code + the auto-created job
+npx tsx src/routes/jobs.smoke-test.ts               # POST /api/jobs and GET /api/jobs/:id, verifying every HTTP status code
+npx tsx src/index.smoke-test.ts                     # the Worker's queue() consumer, using a fake MessageBatch
 ```
 
 `wrangler dev` itself did not start cleanly in the sandbox this was built in
 (a `workerd` runtime crash, likely a Windows/Git-Bash process-handling
-quirk) — but both scripts call the exact same functions Wrangler would
-invoke, so the business logic is verified either way. Worth re-trying
+quirk) — but every script above calls the exact same functions Wrangler
+would invoke, so the business logic is verified either way. Worth re-trying
 `wrangler dev` in a normal terminal/CI environment before shipping.
 
 ## Request flow (once implemented)

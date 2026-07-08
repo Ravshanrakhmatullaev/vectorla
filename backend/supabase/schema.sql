@@ -30,6 +30,7 @@ create table if not exists jobs (
   preset text,
   settings jsonb,
   error_message text,
+  retry_count integer not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   completed_at timestamptz

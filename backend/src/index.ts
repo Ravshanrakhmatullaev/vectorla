@@ -1,6 +1,7 @@
 import type { ExportedHandler, MessageBatch } from '@cloudflare/workers-types'
 import type { Env } from './env'
 import type { ConversionQueueMessage } from './integrations/queue'
+import { createJobService } from './services/JobService'
 import { handleHealthRoute } from './routes/health'
 import { handleUploadsRoute } from './routes/uploads'
 import { handleJobsRoute } from './routes/jobs'
@@ -32,7 +33,26 @@ export default {
     }
   },
 
-  async queue(_batch: MessageBatch<ConversionQueueMessage>, _env: Env): Promise<void> {
-    throw new Error('Not implemented')
+  // TODO(backend): real AI vectorization goes where the comment below marks
+  // it (ConversionService.processJob) — for now this consumer only exercises
+  // the state machine: queued -> processing -> completed.
+  async queue(batch: MessageBatch<ConversionQueueMessage>, env: Env): Promise<void> {
+    const jobService = createJobService(env)
+
+    for (const message of batch.messages) {
+      try {
+        await jobService.markProcessing(message.body.jobId)
+        // TODO(backend): call ConversionService.processJob(job) here once a
+        // real vectorization engine exists.
+        await jobService.markCompleted(message.body.jobId)
+        message.ack()
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : 'Unknown error'
+        await jobService.markFailed(message.body.jobId, reason).catch((markFailedError: unknown) => {
+          console.error(`Failed to mark job ${message.body.jobId} as failed:`, markFailedError)
+        })
+        message.retry()
+      }
+    }
   },
 } satisfies ExportedHandler<Env, ConversionQueueMessage>

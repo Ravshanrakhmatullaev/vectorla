@@ -1,5 +1,6 @@
 import type { Env } from '../env'
 import { createUploadService } from '../services/UploadService'
+import { createJobService } from '../services/JobService'
 import { ValidationError, PayloadTooLargeError, UnsupportedMediaTypeError } from '../errors'
 import { isUserPlan } from '../types'
 
@@ -49,7 +50,14 @@ export async function handleUploadsRoute(request: Request, env: Env): Promise<Re
       originalFileName: file.name,
       mimeType: file.type,
     })
-    return jsonResponse(upload, 201)
+
+    // Goal of Phase 10: every successful upload automatically gets a
+    // conversion job created and enqueued — no separate client call needed
+    // (though POST /api/jobs also exists for re-processing an existing upload).
+    const jobService = createJobService(env)
+    const job = await jobService.createJob({ userId, uploadId: upload.id })
+
+    return jsonResponse({ upload, job }, 201)
   } catch (error) {
     if (error instanceof UnsupportedMediaTypeError) return jsonResponse({ error: error.message }, 415)
     if (error instanceof PayloadTooLargeError) return jsonResponse({ error: error.message }, 413)
