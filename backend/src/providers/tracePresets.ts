@@ -25,11 +25,19 @@ export const TRACE_PRESETS: Record<TracePresetName, TraceOptions> = {
   // detail high and drop only true single-pixel noise.
   logo: { ltres: 1, qtres: 1, pathomit: 8, rightangleenhance: true, numberofcolors: 16, colorquantcycles: 3, blurradius: 0 },
   // Even simpler than a logo (often 1-2 colors, small canvas) — tighter
-  // color count keeps output minimal.
-  icon: { ltres: 0.5, qtres: 0.5, pathomit: 4, rightangleenhance: true, numberofcolors: 8, colorquantcycles: 3, blurradius: 0 },
+  // color count keeps output minimal. qtres is slightly looser than ltres
+  // (Phase 23 quality testing): icons are small enough that any round
+  // glyph/mark needs a little curve-fitting slack, or ImageTracer facets it
+  // into visibly jagged straight segments instead of a smooth curve.
+  icon: { ltres: 0.5, qtres: 0.75, pathomit: 4, rightangleenhance: true, numberofcolors: 8, colorquantcycles: 3, blurradius: 0 },
   // Bold flat-color art, often with a die-cut outline — a bit more path
   // tolerance than a logo since stickers can have more shapes/colors.
-  sticker: { ltres: 1, qtres: 1, pathomit: 6, rightangleenhance: true, numberofcolors: 24, colorquantcycles: 3, blurradius: 0 },
+  // pathomit/blurradius bumped slightly (Phase 23 quality testing): this
+  // preset also catches transparent PNGs with soft (non-die-cut) alpha
+  // edges, where a soft edge otherwise traces into dozens of thin
+  // concentric noise paths; a true hard die-cut edge is unaffected by
+  // either change.
+  sticker: { ltres: 1, qtres: 1, pathomit: 10, rightangleenhance: true, numberofcolors: 24, colorquantcycles: 3, blurradius: 1 },
   // More colors and softer shapes than a logo — relax right-angle
   // enhancement (illustrations aren't grid-aligned) and allow more paths.
   illustration: { ltres: 1.5, qtres: 1.5, pathomit: 10, rightangleenhance: false, numberofcolors: 32, colorquantcycles: 4, blurradius: 1 },
