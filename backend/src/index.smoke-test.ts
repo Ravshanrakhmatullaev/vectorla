@@ -5,6 +5,7 @@
 // Run with: npx tsx src/index.smoke-test.ts (from inside backend/)
 import worker from './index'
 import { createJobService } from './services/JobService'
+import { createCreditsService } from './services/CreditsService'
 import { createUploadsRepository } from './repositories/createUploadsRepository'
 import type { Env } from './env'
 import type { R2Bucket, Queue, Message, MessageBatch } from '@cloudflare/workers-types'
@@ -14,6 +15,10 @@ function assertEqual<T>(actual: T, expected: T, message: string): void {
   if (actual !== expected) {
     throw new Error(`${message}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`)
   }
+}
+
+function assertTrue(condition: boolean, message: string): void {
+  if (!condition) throw new Error(message)
 }
 
 function createFakeEnv(): Env {
@@ -104,6 +109,11 @@ async function run() {
   const job = await jobService.createJob({ userId: 'user-1', uploadId: 'upload-1' })
   assertEqual(job.status, 'queued', 'seeded job starts queued')
 
+  // ConversionService.processJob (Phase 15) now enforces credits before
+  // vectorizing — grant user-1 enough to cover the base conversion cost.
+  const creditsService = createCreditsService(env)
+  await creditsService.grantMonthlyCredits('user-1', 'free')
+
   // 1. Happy path: queued -> processing -> completed, message acked
   const message = createFakeMessage({ jobId: job.id })
   const batch = createFakeBatch([message])
@@ -123,6 +133,35 @@ async function run() {
   assertEqual(badMessage.retried, true, 'message.retry() called when the job lookup fails')
   assertEqual(badMessage.acked, false, 'message.ack() not called when the job lookup fails')
   console.log('PASS: queue() consumer retries (does not crash) when the job cannot be found')
+
+  // 3. Insufficient credits: the job's user has a 0 balance (no grant), so
+  // ConversionService.processJob throws InsufficientCreditsError, which the
+  // consumer's catch block turns into a clear job failure (same path as any
+  // other processing error) rather than a crash.
+  await uploads.create({
+    id: 'upload-2',
+    userId: 'poor-user',
+    originalFileName: 'logo2.png',
+    mimeType: 'image/png',
+    sizeBytes: 10,
+    storageKey: 'uploads/poor-user/upload-2/logo2.png',
+    status: 'stored',
+    createdAt: new Date().toISOString(),
+  })
+  const poorJob = await jobService.createJob({ userId: 'poor-user', uploadId: 'upload-2' })
+  const poorMessage = createFakeMessage({ jobId: poorJob.id })
+  const poorBatch = createFakeBatch([poorMessage])
+  await worker.queue(poorBatch, env) // must not throw
+
+  const afterInsufficientCredits = await jobService.getJob(poorJob.id)
+  assertEqual(afterInsufficientCredits.status, 'failed', 'job status when the user has insufficient credits')
+  assertTrue(
+    (afterInsufficientCredits.errorMessage ?? '').includes('credit'),
+    'errorMessage mentions credits for the insufficient-credits failure',
+  )
+  assertEqual(poorMessage.retried, true, 'message.retry() called on insufficient credits')
+  assertEqual(poorMessage.acked, false, 'message.ack() not called on insufficient credits')
+  console.log('PASS: queue() consumer fails a job with a clear message when the user lacks enough credits')
 
   console.log('\nAll queue() consumer smoke tests passed.')
 }

@@ -12,6 +12,8 @@ import { StorageService } from './StorageService'
 import { InMemoryJobsRepository } from '../repositories/InMemoryJobsRepository'
 import { InMemoryUploadsRepository } from '../repositories/InMemoryUploadsRepository'
 import { InMemoryConversionsRepository } from '../repositories/InMemoryConversionsRepository'
+import { InMemoryCreditsRepository } from '../repositories/InMemoryCreditsRepository'
+import { CreditsService } from './CreditsService'
 import { PlaceholderProvider } from '../providers/PlaceholderProvider'
 import type { QueueClient } from '../integrations/queue'
 import type { R2Client } from '../integrations/r2'
@@ -80,17 +82,59 @@ async function run() {
   const jobsRepo = new InMemoryJobsRepository()
   const uploadsRepo = new InMemoryUploadsRepository()
   const conversionsRepo = new InMemoryConversionsRepository()
+  const creditsRepo = new InMemoryCreditsRepository()
+  const creditsService = new CreditsService(creditsRepo)
   const queueService = new QueueService(createFakeQueueClient())
   const jobService = new JobService(jobsRepo, uploadsRepo, queueService)
   const r2 = createFakeR2Client()
   const storage = new StorageService(r2, 'test-secret')
-  const service = new ConversionService(jobService, uploadsRepo, storage, conversionsRepo, new PlaceholderProvider())
+  const service = new ConversionService(
+    jobService,
+    uploadsRepo,
+    storage,
+    conversionsRepo,
+    new PlaceholderProvider(),
+    creditsService,
+  )
 
   await seedUpload(uploadsRepo)
+  await seedUpload(uploadsRepo, { id: 'upload-broke', userId: 'broke-user', storageKey: 'uploads/broke-user/upload-broke/logo.png' })
 
-  // 1. Happy path: full pipeline runs end-to-end
+  // 0. Not enough credits: processJob rejects before vectorizing/storing/debiting
+  const brokeJob = await jobService.createJob({ userId: 'broke-user', uploadId: 'upload-broke' })
+  await assertRejects(() => service.processJob(brokeJob.id), /has 0 credits, needs 1/, 'insufficient credits')
+  const brokeBalance = await creditsService.getBalance('broke-user')
+  assertEqual(brokeBalance.balance, 0, 'balance untouched after an insufficient-credits rejection')
+  assertEqual(
+    (await creditsRepo.findTransactionsByUserId('broke-user')).length,
+    0,
+    'no transaction recorded after an insufficient-credits rejection',
+  )
+  assertEqual(
+    await service.listUserConversions('broke-user').then((c) => c.length),
+    0,
+    'no conversion created after an insufficient-credits rejection',
+  )
+  console.log('PASS: processJob rejects when the user has insufficient credits, with no side effects')
+
+  // Grant user-1 credits to cover the tests below (free plan: 10/mo).
+  await creditsService.grantMonthlyCredits('user-1', 'free')
+  const balanceAfterGrant = await creditsService.getBalance('user-1')
+  assertEqual(balanceAfterGrant.balance, 10, 'grantMonthlyCredits credits the free plan amount')
+  console.log('PASS: grantMonthlyCredits grants PLAN_LIMITS[plan].monthlyCredits')
+
+  // 1. Happy path: full pipeline runs end-to-end, and credits are debited
   const job = await jobService.createJob({ userId: 'user-1', uploadId: 'upload-1' })
   const conversions = await service.processJob(job.id)
+
+  const balanceAfterConversion = await creditsService.getBalance('user-1')
+  assertEqual(balanceAfterConversion.balance, 9, 'processJob debits the base conversion cost on success')
+  const transactions = await creditsRepo.findTransactionsByUserId('user-1')
+  const debitTransaction = transactions.find((t) => t.type === 'debit')
+  assertTrue(Boolean(debitTransaction), 'a debit transaction was recorded')
+  assertEqual(debitTransaction?.amount, 1, 'debit transaction amount matches the base conversion cost')
+  assertEqual(debitTransaction?.jobId, job.id, 'debit transaction references the job')
+  console.log('PASS: processJob debits credits and records a transaction after a successful conversion')
 
   assertEqual(conversions.length, 1, 'processJob returns one conversion')
   const conversion = conversions[0]

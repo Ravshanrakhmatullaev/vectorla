@@ -15,3 +15,6 @@ export class UnauthorizedError extends Error {}
 
 /** Thrown when an authenticated caller tries to access another user's resource — routes map this to HTTP 403. */
 export class ForbiddenError extends Error {}
+
+/** Thrown by CreditsService.ensureEnoughCredits when a user can't cover a job's cost. */
+export class InsufficientCreditsError extends Error {}

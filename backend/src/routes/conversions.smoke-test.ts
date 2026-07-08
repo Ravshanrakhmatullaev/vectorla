@@ -10,6 +10,7 @@ import { handleUploadsRoute } from './uploads'
 import { handleJobsRoute } from './jobs'
 import { handleConversionsRoute } from './conversions'
 import { createJobService } from '../services/JobService'
+import { createCreditsService } from '../services/CreditsService'
 import type { Env } from '../env'
 import type { R2Bucket, Queue, Message, MessageBatch } from '@cloudflare/workers-types'
 import type { ConversionQueueMessage } from '../integrations/queue'
@@ -103,6 +104,12 @@ function authedRequest(userId: string | null, path: string): Request {
 
 async function run() {
   const env = createFakeEnv()
+
+  // ConversionService.processJob (Phase 15) now enforces credits before
+  // vectorizing — grant both test users enough to cover their conversions.
+  const creditsService = createCreditsService(env)
+  await creditsService.grantMonthlyCredits('conv-user', 'free')
+  await creditsService.grantMonthlyCredits('conv-user-2', 'free')
 
   // Seed a completed job + conversion via the real upload -> queue pipeline.
   const file = new File([toArrayBuffer('bytes')], 'logo.png', { type: 'image/png' })

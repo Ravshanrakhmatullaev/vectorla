@@ -9,6 +9,7 @@ import type { UploadsRepository } from '../repositories/UploadsRepository'
 import type { ConversionsRepository } from '../repositories/ConversionsRepository'
 import type { VectorizationProvider } from '../providers/VectorizationProvider'
 import { createVectorizationProvider } from '../providers/ProviderFactory'
+import { CreditsService, createCreditsService, calculateRequiredCredits } from './CreditsService'
 import { NotFoundError } from '../errors'
 
 /** Result of looking up a job's conversion — see ConversionService.getConversionByJob. */
@@ -28,15 +29,18 @@ export class ConversionService {
     private readonly storage: StorageService,
     private readonly conversions: ConversionsRepository,
     private readonly provider: VectorizationProvider,
+    private readonly credits: CreditsService,
   ) {}
 
   /**
    * Runs the conversion pipeline for a queued job: load job + upload, mark
-   * processing, vectorize via the configured provider (see
-   * providers/ProviderFactory.ts — only PlaceholderProvider actually works
-   * today), store the result in R2, save the Conversion row, then mark the
-   * job completed. Called by the Worker's queue() consumer (see index.ts)
-   * once per queue message.
+   * processing, verify the user can cover the credit cost (see
+   * CreditsService.ensureEnoughCredits — throwing here leaves the job for
+   * the Worker's queue() consumer to mark 'failed' with a clear message,
+   * same as any other processing error), vectorize via the configured
+   * provider (see providers/ProviderFactory.ts — only PlaceholderProvider
+   * actually works today), store the result in R2, save the Conversion row,
+   * debit the credits, then mark the job completed.
    */
   async processJob(jobId: string): Promise<Conversion[]> {
     const job = await this.jobs.getJob(jobId)
@@ -46,6 +50,11 @@ export class ConversionService {
     }
 
     await this.jobs.markProcessing(job.id)
+
+    // TODO(backend): formatCount/printReady are hardcoded until Job carries
+    // the caller's requested formats/print-ready flag — see calculateRequiredCredits.
+    const requiredCredits = calculateRequiredCredits(1, false)
+    await this.credits.ensureEnoughCredits(job.userId, requiredCredits)
 
     const result = await this.provider.vectorize(upload)
     const storageKey = `conversions/${job.userId}/${job.id}/output.${result.format}`
@@ -62,6 +71,12 @@ export class ConversionService {
       createdAt: new Date().toISOString(),
     }
     const created = await this.conversions.create(conversion)
+
+    // NOTE: if this debit fails after the conversion row above was already
+    // created, the job is left for the queue consumer to mark 'failed' with
+    // that error — same "no rollback on partial failure" trade-off as
+    // UploadService's R2-then-Supabase write (see backend/README.md).
+    await this.credits.debitCredits(job.userId, requiredCredits, `Conversion for job "${job.id}"`, job.id)
 
     await this.jobs.markCompleted(job.id)
 
@@ -125,5 +140,6 @@ export function createConversionService(env: Env): ConversionService {
   const storage = new StorageService(r2, env.DOWNLOAD_URL_SECRET)
   const conversions = createConversionsRepository(env)
   const provider = createVectorizationProvider(env)
-  return new ConversionService(jobs, uploads, storage, conversions, provider)
+  const credits = createCreditsService(env)
+  return new ConversionService(jobs, uploads, storage, conversions, provider, credits)
 }
