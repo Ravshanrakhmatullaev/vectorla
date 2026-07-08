@@ -10,6 +10,10 @@
 // frontend to match.
 export type UserPlan = 'free' | 'starter' | 'pro' | 'business'
 
+export function isUserPlan(value: string): value is UserPlan {
+  return value === 'free' || value === 'starter' || value === 'pro' || value === 'business'
+}
+
 export interface User {
   id: string
   email: string

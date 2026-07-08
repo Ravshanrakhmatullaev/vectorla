@@ -10,16 +10,17 @@ export interface R2Client {
  * Thin wrapper over the Cloudflare R2 binding — see StorageService for the
  * business-facing API (key naming convention, signed URLs) built on top of this.
  */
-export function createR2Client(_bucket: R2Bucket): R2Client {
+export function createR2Client(bucket: R2Bucket): R2Client {
   return {
-    async put(): Promise<void> {
-      throw new Error('Not implemented')
+    async put(key, data) {
+      await bucket.put(key, data)
     },
-    async get(): Promise<ReadableStream | null> {
-      throw new Error('Not implemented')
+    async get(key) {
+      const object = await bucket.get(key)
+      return object ? object.body : null
     },
-    async delete(): Promise<void> {
-      throw new Error('Not implemented')
+    async delete(key) {
+      await bucket.delete(key)
     },
   }
 }

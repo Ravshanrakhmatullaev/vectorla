@@ -1,4 +1,4 @@
-# Vectorla API (backend) — architecture scaffold, not yet implemented
+# Vectorla API (backend)
 
 This is a **Cloudflare Worker**, deployed separately from the frontend
 (`src/`, deployed to Cloudflare Pages). It is not wired into the root
@@ -6,11 +6,63 @@ This is a **Cloudflare Worker**, deployed separately from the frontend
 `package.json`, `tsconfig.json`, and `wrangler.toml`, and is a fully
 independent deployable.
 
-**Nothing here works yet.** Every route handler and every service method
-throws `new Error('Not implemented')`. This exists purely to define the
-shape of the API, the data model, and the integration points so real
-implementation (including AI vectorization) can be dropped in later without
-re-architecting anything.
+**Most of this is still scaffolding.** Every route handler and service method
+throws `new Error('Not implemented')` *except* `POST /api/uploads`, which is
+real (see "Upload API" below). This exists purely to define the shape of the
+API, the data model, and the integration points so real implementation
+(including AI vectorization) can be dropped in later without re-architecting
+anything.
+
+## Upload API (implemented)
+
+`POST /api/uploads` (`src/routes/uploads.ts`) is the first real feature.
+Send `multipart/form-data` with a `file` field, a `userId` field, and an
+optional `plan` field (defaults to `free` — see the TODO in
+`UploadService.CreateUploadInput` about this being a stand-in for real auth).
+
+Validates, in order: file name present → MIME type allowed → extension
+matches the declared MIME type → not empty → within the caller's plan's
+`maxFileSizeBytes` → no existing upload with the same filename for that user.
+On success, stores the file in R2 (key: `uploads/<userId>/<uploadId>/<filename>`)
+and writes an `Upload` row, returning it as JSON with `201`.
+
+| Status | Cause |
+|---|---|
+| 201 | Created — file stored, metadata saved |
+| 400 | Missing `file`/`userId` field, empty file, or duplicate filename |
+| 413 | File exceeds the caller's plan's max size |
+| 415 | Unsupported MIME type, or extension doesn't match the declared type |
+| 405 | Method other than POST |
+| 500 | Unexpected failure (e.g. R2 or Supabase error) |
+
+**Repository fallback:** `createUploadsRepository` (in `src/repositories/`)
+uses the real `SupabaseUploadsRepository` when `SUPABASE_URL` /
+`SUPABASE_SERVICE_ROLE_KEY` are configured, and an `InMemoryUploadsRepository`
+otherwise — this is what makes the upload flow testable locally with no real
+Supabase project. Production always sets both secrets, so it always gets the
+real one.
+
+**Known limitations:**
+- No rollback if the R2 write succeeds but the Supabase write fails — would
+  orphan an R2 object. Fine for a first pass; needs a cleanup job later.
+- `plan` is caller-supplied, not derived from an authenticated session, since
+  auth doesn't exist yet — not secure, documented as a TODO in the code.
+- `GET /api/uploads/:id` and `DELETE /api/uploads/:id` are still stubs
+  (`UploadService.getUpload` / `deleteUpload` still throw).
+
+**Testing locally:** two smoke-test scripts run with plain Node (via `tsx`,
+a dev dependency) and need no real Cloudflare/Supabase credentials:
+
+```bash
+npx tsx src/services/UploadService.smoke-test.ts   # validation rules, in-memory fakes for R2 + repository
+npx tsx src/routes/uploads.smoke-test.ts            # the actual route handler, verifying every HTTP status code
+```
+
+`wrangler dev` itself did not start cleanly in the sandbox this was built in
+(a `workerd` runtime crash, likely a Windows/Git-Bash process-handling
+quirk) — but both scripts call the exact same functions Wrangler would
+invoke, so the business logic is verified either way. Worth re-trying
+`wrangler dev` in a normal terminal/CI environment before shipping.
 
 ## Request flow (once implemented)
 

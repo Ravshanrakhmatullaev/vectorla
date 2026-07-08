@@ -1,11 +1,13 @@
 import type { R2Client } from '../integrations/r2'
 
-// TODO(backend): key naming convention + signed URL generation go here once R2 is provisioned.
+// TODO(backend): getFile/getSignedDownloadUrl/deleteFile still need real
+// implementations — not needed until the conversion/export/download flow is
+// built. storeFile is real, used by UploadService.
 export class StorageService {
   constructor(private readonly r2: R2Client) {}
 
-  async storeFile(_key: string, _data: ReadableStream | ArrayBuffer): Promise<void> {
-    throw new Error('Not implemented')
+  async storeFile(key: string, data: ReadableStream | ArrayBuffer): Promise<void> {
+    await this.r2.put(key, data)
   }
 
   async getFile(_key: string): Promise<ReadableStream> {

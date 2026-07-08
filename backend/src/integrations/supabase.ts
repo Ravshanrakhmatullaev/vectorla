@@ -1,10 +1,11 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
 /**
  * Creates the Supabase client every service uses for reads/writes against
- * Postgres. See backend/supabase/schema.sql for the tables this will query
- * once implemented.
+ * Postgres. See backend/supabase/schema.sql for the tables this queries.
  */
-export function createSupabaseClient(_url: string, _serviceRoleKey: string): SupabaseClient {
-  throw new Error('Not implemented')
+export function createSupabaseClient(url: string, serviceRoleKey: string): SupabaseClient {
+  return createClient(url, serviceRoleKey, {
+    auth: { persistSession: false },
+  })
 }
