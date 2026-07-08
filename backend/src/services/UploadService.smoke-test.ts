@@ -57,7 +57,7 @@ function createFakeR2Client(): R2Client & { objects: Map<string, ReadableStream 
 
 async function run() {
   const r2 = createFakeR2Client()
-  const storage = new StorageService(r2)
+  const storage = new StorageService(r2, 'test-secret')
   const repository = new InMemoryUploadsRepository()
   const service = new UploadService(storage, repository)
 

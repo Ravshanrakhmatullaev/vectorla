@@ -23,7 +23,8 @@ max_batch_timeout = 30
 [vars]
 ENVIRONMENT = "development"
 
-# Supabase credentials are secrets, not vars — set them with:
+# Supabase credentials, and the download-URL signing key, are secrets, not vars — set them with:
 #   wrangler secret put SUPABASE_URL
 #   wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+#   wrangler secret put DOWNLOAD_URL_SECRET
 # For local `wrangler dev`, copy .dev.vars.example to .dev.vars instead.

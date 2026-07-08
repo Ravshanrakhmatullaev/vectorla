@@ -37,6 +37,7 @@ function createFakeEnv(): Env {
     CONVERSION_QUEUE: queue,
     SUPABASE_URL: '',
     SUPABASE_SERVICE_ROLE_KEY: '',
+    DOWNLOAD_URL_SECRET: 'test-secret',
     ENVIRONMENT: 'development',
   }
 }

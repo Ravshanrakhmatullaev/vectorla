@@ -1,5 +1,6 @@
 import type { Env } from '../env'
 import { createJobService } from '../services/JobService'
+import { createConversionService } from '../services/ConversionService'
 import { NotFoundError, ValidationError } from '../errors'
 
 function jsonResponse(body: unknown, status: number): Response {
@@ -64,16 +65,48 @@ async function handleGetJob(jobId: string, env: Env): Promise<Response> {
   }
 }
 
-/** Handles POST /api/jobs (create + enqueue) and GET /api/jobs/:id (poll status). */
+/**
+ * GET /api/jobs/:id/conversion — maps the job's current state to an HTTP
+ * status: 200 once the conversion is ready (with a download URL), 202 while
+ * still queued/processing, 410 if the job failed (won't ever produce one),
+ * 404 if the job itself doesn't exist.
+ */
+async function handleGetJobConversion(jobId: string, env: Env): Promise<Response> {
+  try {
+    const conversionService = createConversionService(env)
+    const result = await conversionService.getConversionByJob(jobId)
+
+    if (result.jobStatus === 'completed') {
+      return jsonResponse({ status: result.jobStatus, conversion: result.conversion }, 200)
+    }
+    if (result.jobStatus === 'failed') {
+      return jsonResponse({ status: result.jobStatus, error: result.errorMessage }, 410)
+    }
+    return jsonResponse({ status: result.jobStatus }, 202)
+  } catch (error) {
+    if (error instanceof NotFoundError) return jsonResponse({ error: error.message }, 404)
+    console.error('Unexpected error in GET /api/jobs/:id/conversion:', error)
+    return jsonResponse({ error: 'Internal Server Error' }, 500)
+  }
+}
+
+/**
+ * Handles POST /api/jobs (create + enqueue), GET /api/jobs/:id (poll status),
+ * and GET /api/jobs/:id/conversion (resolve to the job's conversion result).
+ */
 export async function handleJobsRoute(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url)
-  const segments = url.pathname.split('/').filter(Boolean) // ['api', 'jobs', maybe ':id']
+  const segments = url.pathname.split('/').filter(Boolean) // ['api', 'jobs', maybe ':id', maybe 'conversion']
   const jobId = segments[2]
+  const subResource = segments[3]
 
   if (request.method === 'POST' && !jobId) {
     return handleCreateJob(request, env)
   }
-  if (request.method === 'GET' && jobId) {
+  if (request.method === 'GET' && jobId && subResource === 'conversion') {
+    return handleGetJobConversion(jobId, env)
+  }
+  if (request.method === 'GET' && jobId && !subResource) {
     return handleGetJob(jobId, env)
   }
   return jsonResponse({ error: 'Method not allowed' }, 405)

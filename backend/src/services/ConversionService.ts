@@ -1,4 +1,4 @@
-import type { Conversion } from '../types'
+import type { Conversion, JobStatus } from '../types'
 import type { Env } from '../env'
 import { JobService, createJobService } from './JobService'
 import { StorageService } from './StorageService'
@@ -19,6 +19,14 @@ function buildPlaceholderSvg(): ArrayBuffer {
   <text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" font-size="28" fill="#18181b">Vectorla Preview</text>
 </svg>`
   return new TextEncoder().encode(svg).buffer as ArrayBuffer
+}
+
+/** Result of looking up a job's conversion — see ConversionService.getConversionByJob. */
+export interface ConversionByJobResult {
+  jobStatus: JobStatus
+  conversion: Conversion | null
+  /** Only populated when jobStatus is 'failed' (mirrors Job.errorMessage). */
+  errorMessage: string | null
 }
 
 export class ConversionService {
@@ -65,10 +73,48 @@ export class ConversionService {
     return [created]
   }
 
+  /** GET /api/conversions/:id — a Conversion row only ever exists for a completed job, so a download URL is always attached. */
   async getConversion(conversionId: string): Promise<Conversion> {
     const conversion = await this.conversions.findById(conversionId)
     if (!conversion) throw new NotFoundError(`No conversion found with id "${conversionId}"`)
-    return conversion
+    return this.attachDownloadUrl(conversion)
+  }
+
+  /**
+   * GET /api/jobs/:id/conversion — resolves the job's current state into a
+   * shape the route can map straight to an HTTP status: queued/processing
+   * (still working), completed (conversion + download URL attached), or
+   * failed (error information, no conversion).
+   */
+  async getConversionByJob(jobId: string): Promise<ConversionByJobResult> {
+    const job = await this.jobs.getJob(jobId)
+
+    if (job.status === 'failed') {
+      return { jobStatus: 'failed', conversion: null, errorMessage: job.errorMessage }
+    }
+    if (job.status !== 'completed') {
+      return { jobStatus: job.status, conversion: null, errorMessage: null }
+    }
+
+    const conversion = await this.conversions.findByJobId(jobId)
+    if (!conversion) {
+      // Shouldn't happen given processJob's pipeline (the conversion row is
+      // created before the job is marked completed), but a missing row is
+      // exactly as unavailable to the caller as a missing job would be.
+      throw new NotFoundError(`No conversion found for completed job "${jobId}"`)
+    }
+    return { jobStatus: 'completed', conversion: await this.attachDownloadUrl(conversion), errorMessage: null }
+  }
+
+  /** Lists a user's completed conversions, most recent first, each with a fresh download URL. */
+  async listUserConversions(userId: string): Promise<Conversion[]> {
+    const conversions = await this.conversions.findByUserId(userId)
+    return Promise.all(conversions.map((conversion) => this.attachDownloadUrl(conversion)))
+  }
+
+  private async attachDownloadUrl(conversion: Conversion): Promise<Conversion> {
+    const downloadUrl = await this.storage.getSignedDownloadUrl(conversion.storageKey)
+    return { ...conversion, downloadUrl }
   }
 }
 
@@ -76,7 +122,7 @@ export function createConversionService(env: Env): ConversionService {
   const jobs = createJobService(env)
   const uploads = createUploadsRepository(env)
   const r2 = createR2Client(env.UPLOADS_BUCKET)
-  const storage = new StorageService(r2)
+  const storage = new StorageService(r2, env.DOWNLOAD_URL_SECRET)
   const conversions = createConversionsRepository(env)
   return new ConversionService(jobs, uploads, storage, conversions)
 }

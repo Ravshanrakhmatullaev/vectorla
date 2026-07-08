@@ -17,4 +17,17 @@ export class InMemoryConversionsRepository implements ConversionsRepository {
   async findById(id: string): Promise<Conversion | null> {
     return this.conversionsById.get(id) ?? null
   }
+
+  async findByJobId(jobId: string): Promise<Conversion | null> {
+    for (const conversion of this.conversionsById.values()) {
+      if (conversion.jobId === jobId) return conversion
+    }
+    return null
+  }
+
+  async findByUserId(userId: string): Promise<Conversion[]> {
+    return Array.from(this.conversionsById.values())
+      .filter((conversion) => conversion.userId === userId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  }
 }

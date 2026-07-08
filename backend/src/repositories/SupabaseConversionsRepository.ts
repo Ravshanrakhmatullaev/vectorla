@@ -55,4 +55,29 @@ export class SupabaseConversionsRepository implements ConversionsRepository {
     if (error) throw new Error(`Failed to fetch conversion: ${error.message}`)
     return data ? mapRowToConversion(data) : null
   }
+
+  async findByJobId(jobId: string): Promise<Conversion | null> {
+    const { data, error } = await this.client
+      .from('conversions')
+      .select()
+      .eq('job_id', jobId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle<ConversionRow>()
+
+    if (error) throw new Error(`Failed to fetch conversion for job: ${error.message}`)
+    return data ? mapRowToConversion(data) : null
+  }
+
+  async findByUserId(userId: string): Promise<Conversion[]> {
+    const { data, error } = await this.client
+      .from('conversions')
+      .select()
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .returns<ConversionRow[]>()
+
+    if (error) throw new Error(`Failed to list conversions: ${error.message}`)
+    return (data ?? []).map(mapRowToConversion)
+  }
 }

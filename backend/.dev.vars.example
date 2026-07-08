@@ -4,3 +4,7 @@
 
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
+
+# HMAC key for signing conversion download URLs (StorageService.getSignedDownloadUrl).
+# Any random string works locally; use a real generated secret in production.
+DOWNLOAD_URL_SECRET=

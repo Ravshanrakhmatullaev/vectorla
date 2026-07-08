@@ -7,5 +7,7 @@ export interface Env {
   CONVERSION_QUEUE: Queue<ConversionQueueMessage>
   SUPABASE_URL: string
   SUPABASE_SERVICE_ROLE_KEY: string
+  /** HMAC key for StorageService's self-signed download URLs (see StorageService.getSignedDownloadUrl). */
+  DOWNLOAD_URL_SECRET: string
   ENVIRONMENT: 'development' | 'staging' | 'production'
 }

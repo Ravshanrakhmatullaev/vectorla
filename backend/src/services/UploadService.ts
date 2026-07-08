@@ -76,7 +76,7 @@ export class UploadService {
 
 export function createUploadService(env: Env): UploadService {
   const r2 = createR2Client(env.UPLOADS_BUCKET)
-  const storage = new StorageService(r2)
+  const storage = new StorageService(r2, env.DOWNLOAD_URL_SECRET)
   const repository = createUploadsRepository(env)
   return new UploadService(storage, repository)
 }
