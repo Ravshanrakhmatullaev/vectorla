@@ -11,6 +11,8 @@ import {
   validateExtensionMatchesMimeType,
   validateNotEmpty,
   validateFileSize,
+  validateFileSignature,
+  getCanonicalExtension,
 } from './validateUpload'
 
 export interface CreateUploadInput {
@@ -38,6 +40,7 @@ export class UploadService {
     validateExtensionMatchesMimeType(input.originalFileName, input.mimeType)
     validateNotEmpty(input.file.byteLength)
     validateFileSize(input.file.byteLength, input.plan)
+    validateFileSignature(input.file, input.mimeType)
 
     const existing = await this.repository.findByUserAndFilename(input.userId, input.originalFileName)
     if (existing) {
@@ -45,7 +48,11 @@ export class UploadService {
     }
 
     const id = crypto.randomUUID()
-    const storageKey = `uploads/${input.userId}/${id}/${input.originalFileName}`
+    // Deliberately excludes the caller-supplied originalFileName: keys must
+    // be fully random with no user-controlled path segments (see Phase 17
+    // security audit). The extension comes from the already-validated
+    // mimeType, never from the raw filename.
+    const storageKey = `uploads/${input.userId}/${id}${getCanonicalExtension(input.mimeType)}`
 
     await this.storage.storeFile(storageKey, input.file)
 

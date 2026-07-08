@@ -1,4 +1,5 @@
 import type { Env } from '../env'
+import type { Conversion } from '../types'
 import { createConversionService } from '../services/ConversionService'
 import { requireAuth } from '../middleware/requireAuth'
 import { NotFoundError, UnauthorizedError } from '../errors'
@@ -10,6 +11,13 @@ function jsonResponse(body: unknown, status: number): Response {
   })
 }
 
+// The raw R2 object key must never reach a client (see Phase 17 security
+// audit) — downloads always go through the signed downloadUrl instead.
+function toPublicConversion(conversion: Conversion): Omit<Conversion, 'storageKey'> {
+  const { storageKey: _storageKey, ...publicConversion } = conversion
+  return publicConversion
+}
+
 async function handleGetConversion(conversionId: string, callerUserId: string, env: Env): Promise<Response> {
   try {
     const conversionService = createConversionService(env)
@@ -17,7 +25,7 @@ async function handleGetConversion(conversionId: string, callerUserId: string, e
     if (conversion.userId !== callerUserId) {
       return jsonResponse({ error: `Conversion "${conversionId}" does not belong to the authenticated user` }, 403)
     }
-    return jsonResponse(conversion, 200)
+    return jsonResponse(toPublicConversion(conversion), 200)
   } catch (error) {
     if (error instanceof NotFoundError) return jsonResponse({ error: error.message }, 404)
     console.error('Unexpected error in GET /api/conversions/:id:', error)

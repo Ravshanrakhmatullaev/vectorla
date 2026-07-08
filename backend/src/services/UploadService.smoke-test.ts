@@ -31,11 +31,12 @@ async function assertRejects(fn: () => Promise<unknown>, pattern: RegExp, messag
   throw new Error(`${message}: expected the call to reject, but it resolved`)
 }
 
-function toArrayBuffer(text: string): ArrayBuffer {
-  // TextEncoder().encode().buffer is typed as ArrayBufferLike (which includes
-  // SharedArrayBuffer) — this documents that a plain string always yields a
-  // real ArrayBuffer, never a SharedArrayBuffer.
-  return new TextEncoder().encode(text).buffer as ArrayBuffer
+// Phase 17 added magic-byte signature validation (see validateUpload.ts) —
+// fixtures declaring image/png must start with the real PNG signature.
+function pngBytes(size = 16): ArrayBuffer {
+  const buffer = new ArrayBuffer(Math.max(size, 8))
+  new Uint8Array(buffer).set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  return buffer
 }
 
 function createFakeR2Client(): R2Client & { objects: Map<string, ReadableStream | ArrayBuffer> } {
@@ -61,7 +62,7 @@ async function run() {
   const repository = new InMemoryUploadsRepository()
   const service = new UploadService(storage, repository)
 
-  const validPng = toArrayBuffer('fake-png-bytes')
+  const validPng = pngBytes()
 
   // 1. Successful upload
   const upload = await service.createUpload({
@@ -76,6 +77,44 @@ async function run() {
   assertTrue(Boolean(upload.id), 'upload.id should be set')
   assertTrue(r2.objects.has(upload.storageKey), 'file should be stored in R2')
   console.log('PASS: valid upload succeeds and is stored in R2')
+
+  // 1b. Security (Phase 17): storage key is fully random, no user-controlled
+  // path segments — it must not contain the original filename at all.
+  assertTrue(!upload.storageKey.includes('logo'), 'storage key must not embed the original filename')
+  assertTrue(/^uploads\/user-1\/[0-9a-f-]+\.png$/.test(upload.storageKey), 'storage key is <prefix>/<userId>/<uuid>.<ext>')
+  console.log('PASS: storage key contains no user-controlled filename, only random id + canonical extension')
+
+  // 1c. Security (Phase 17): uploaded SVGs are rejected outright, even with
+  // a matching extension — only backend-generated SVGs are ever allowed.
+  await assertRejects(
+    () =>
+      service.createUpload({
+        userId: 'user-1',
+        plan: 'free',
+        file: new TextEncoder().encode('<svg onload="alert(1)"></svg>').buffer as ArrayBuffer,
+        originalFileName: 'logo.svg',
+        mimeType: 'image/svg+xml',
+      }),
+    /Unsupported file type/,
+    'svg upload rejected outright',
+  )
+  console.log('PASS: uploaded SVG files are rejected outright')
+
+  // 1d. Security (Phase 17): declared MIME type must match the file's actual
+  // magic bytes, not just its label — a mislabeled file is rejected.
+  await assertRejects(
+    () =>
+      service.createUpload({
+        userId: 'user-1',
+        plan: 'free',
+        file: new TextEncoder().encode('#!/bin/sh\necho pwned').buffer as ArrayBuffer,
+        originalFileName: 'shell.png',
+        mimeType: 'image/png',
+      }),
+    /File content does not match declared type/,
+    'content signature mismatch rejected',
+  )
+  console.log('PASS: a file whose content does not match its declared image type is rejected')
 
   // 2. Duplicate filename rejected
   await assertRejects(
@@ -138,7 +177,7 @@ async function run() {
   console.log('PASS: empty file rejected')
 
   // 6. Oversized file rejected (free plan max is 5MB)
-  const oversized = new ArrayBuffer(6 * 1024 * 1024)
+  const oversized = pngBytes(6 * 1024 * 1024)
   await assertRejects(
     () =>
       service.createUpload({

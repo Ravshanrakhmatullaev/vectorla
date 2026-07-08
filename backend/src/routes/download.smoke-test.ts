@@ -26,8 +26,12 @@ function assertTrue(condition: boolean, message: string): void {
   if (!condition) throw new Error(message)
 }
 
-function toArrayBuffer(text: string): ArrayBuffer {
-  return new TextEncoder().encode(text).buffer as ArrayBuffer
+// Phase 17 added magic-byte signature validation (see validateUpload.ts) —
+// fixtures declaring image/png must start with the real PNG signature.
+function pngBytes(size = 16): ArrayBuffer {
+  const buffer = new ArrayBuffer(Math.max(size, 8))
+  new Uint8Array(buffer).set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  return buffer
 }
 
 function arrayBufferToStream(buffer: ArrayBuffer): ReadableStream {
@@ -114,7 +118,7 @@ function downloadRequest(userId: string | null, downloadUrl: string): Request {
 }
 
 async function uploadAndComplete(env: Env, userId: string): Promise<{ conversionId: string; storageKey: string }> {
-  const file = new File([toArrayBuffer('bytes')], 'logo.png', { type: 'image/png' })
+  const file = new File([pngBytes()], 'logo.png', { type: 'image/png' })
   const uploadRes = await handleUploadsRoute(makeUploadRequest(userId, { file }), env)
   const { job } = (await uploadRes.json()) as { job: { id: string } }
   await runJobToCompletion(env, job.id)

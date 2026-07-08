@@ -15,8 +15,12 @@ function assertEqual<T>(actual: T, expected: T, message: string): void {
   }
 }
 
-function toArrayBuffer(text: string): ArrayBuffer {
-  return new TextEncoder().encode(text).buffer as ArrayBuffer
+// Phase 17 added magic-byte signature validation (see validateUpload.ts) —
+// fixtures declaring image/png must start with the real PNG signature.
+function pngBytes(size = 16): ArrayBuffer {
+  const buffer = new ArrayBuffer(Math.max(size, 8))
+  new Uint8Array(buffer).set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  return buffer
 }
 
 function createFakeEnv(): Env {
@@ -74,7 +78,7 @@ async function run() {
   const env = createFakeEnv()
 
   // Seed an upload the same way a real client would, via the real upload route.
-  const file = new File([toArrayBuffer('bytes')], 'jobs-route-test.png', { type: 'image/png' })
+  const file = new File([pngBytes()], 'jobs-route-test.png', { type: 'image/png' })
   const uploadRes = await handleUploadsRoute(makeUploadRequest('jobs-user', { file }), env)
   const { upload } = (await uploadRes.json()) as { upload: { id: string } }
 

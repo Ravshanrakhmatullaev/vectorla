@@ -25,8 +25,12 @@ function assertTrue(condition: boolean, message: string): void {
   if (!condition) throw new Error(message)
 }
 
-function toArrayBuffer(text: string): ArrayBuffer {
-  return new TextEncoder().encode(text).buffer as ArrayBuffer
+// Phase 17 added magic-byte signature validation (see validateUpload.ts) —
+// fixtures declaring image/png must start with the real PNG signature.
+function pngBytes(size = 16): ArrayBuffer {
+  const buffer = new ArrayBuffer(Math.max(size, 8))
+  new Uint8Array(buffer).set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  return buffer
 }
 
 function createFakeEnv(): Env {
@@ -112,7 +116,7 @@ async function run() {
   await creditsService.grantMonthlyCredits('conv-user-2', 'free')
 
   // Seed a completed job + conversion via the real upload -> queue pipeline.
-  const file = new File([toArrayBuffer('bytes')], 'logo.png', { type: 'image/png' })
+  const file = new File([pngBytes()], 'logo.png', { type: 'image/png' })
   const uploadRes = await handleUploadsRoute(makeUploadRequest('conv-user', { file }), env)
   const { job: completedJob } = (await uploadRes.json()) as { job: { id: string } }
   await runJobToCompletion(env, completedJob.id)
@@ -129,6 +133,11 @@ async function run() {
   }
   assertEqual(jobConversionBody.status, 'completed', 'body.status for completed job')
   assertTrue(Boolean(jobConversionBody.conversion.downloadUrl), 'body.conversion.downloadUrl is present')
+  assertEqual(
+    (jobConversionBody.conversion as unknown as { storageKey?: string }).storageKey,
+    undefined,
+    'Security (Phase 17): raw R2 storageKey must never be exposed in the API response',
+  )
   console.log('PASS: 200 OK for GET /api/jobs/:id/conversion once completed, with a download URL')
 
   // 401 — no auth
@@ -156,6 +165,11 @@ async function run() {
   const conversionBody = (await getConversionRes.json()) as { id: string; downloadUrl: string | null }
   assertEqual(conversionBody.id, conversionId, 'GET /api/conversions/:id returns the right conversion')
   assertTrue(Boolean(conversionBody.downloadUrl), 'GET /api/conversions/:id attaches a downloadUrl')
+  assertEqual(
+    (conversionBody as unknown as { storageKey?: string }).storageKey,
+    undefined,
+    'Security (Phase 17): raw R2 storageKey must never be exposed in the API response',
+  )
   console.log('PASS: 200 OK for GET /api/conversions/:id with a download URL')
 
   // 401 — no auth

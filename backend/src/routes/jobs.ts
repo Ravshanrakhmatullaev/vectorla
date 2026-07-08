@@ -1,4 +1,5 @@
 import type { Env } from '../env'
+import type { Conversion } from '../types'
 import { createJobService } from '../services/JobService'
 import { createConversionService } from '../services/ConversionService'
 import { requireAuth } from '../middleware/requireAuth'
@@ -9,6 +10,13 @@ function jsonResponse(body: unknown, status: number): Response {
     status,
     headers: { 'content-type': 'application/json' },
   })
+}
+
+// The raw R2 object key must never reach a client (see Phase 17 security
+// audit) — downloads always go through the signed downloadUrl instead.
+function toPublicConversion(conversion: Conversion): Omit<Conversion, 'storageKey'> {
+  const { storageKey: _storageKey, ...publicConversion } = conversion
+  return publicConversion
 }
 
 interface CreateJobBody {
@@ -83,7 +91,8 @@ async function handleGetJobConversion(jobId: string, callerUserId: string, env: 
       return jsonResponse({ error: `Job "${jobId}" does not belong to the authenticated user` }, 403)
     }
     if (result.jobStatus === 'completed') {
-      return jsonResponse({ status: result.jobStatus, conversion: result.conversion }, 200)
+      const conversion = result.conversion ? toPublicConversion(result.conversion) : null
+      return jsonResponse({ status: result.jobStatus, conversion }, 200)
     }
     if (result.jobStatus === 'failed') {
       return jsonResponse({ status: result.jobStatus, error: result.errorMessage }, 410)

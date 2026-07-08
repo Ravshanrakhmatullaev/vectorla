@@ -20,6 +20,14 @@ function toArrayBuffer(text: string): ArrayBuffer {
   return new TextEncoder().encode(text).buffer as ArrayBuffer
 }
 
+// Phase 17 added magic-byte signature validation (see validateUpload.ts) —
+// fixtures declaring image/png must start with the real PNG signature.
+function pngBytes(size = 16): ArrayBuffer {
+  const buffer = new ArrayBuffer(Math.max(size, 8))
+  new Uint8Array(buffer).set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  return buffer
+}
+
 function createFakeBucket(shouldFail = false): R2Bucket {
   const store = new Map<string, ArrayBuffer>()
   return {
@@ -73,7 +81,7 @@ async function run() {
   const env = createFakeEnv()
 
   // 201 on success — Phase 10: response now also includes the auto-created job
-  const goodFile = new File([toArrayBuffer('bytes')], 'route-test.png', { type: 'image/png' })
+  const goodFile = new File([pngBytes()], 'route-test.png', { type: 'image/png' })
   const res1 = await handleUploadsRoute(makeUploadRequest('route-user', { file: goodFile }), env)
   assertEqual(res1.status, 201, 'status for valid upload')
   const body1 = (await res1.json()) as {
@@ -113,7 +121,7 @@ async function run() {
   console.log('PASS: 415 Unsupported Media Type for disallowed mime type')
 
   // 413 — oversized file (free plan default, 5MB limit)
-  const bigFile = new File([new ArrayBuffer(6 * 1024 * 1024)], 'big.png', { type: 'image/png' })
+  const bigFile = new File([pngBytes(6 * 1024 * 1024)], 'big.png', { type: 'image/png' })
   const res5 = await handleUploadsRoute(makeUploadRequest('route-user-3', { file: bigFile, plan: 'free' }), env)
   assertEqual(res5.status, 413, 'status for oversized file')
   console.log('PASS: 413 Payload Too Large for oversized file')
@@ -125,7 +133,7 @@ async function run() {
 
   // 500 — unexpected failure (R2 put throws)
   const brokenEnv = createFakeEnv(true)
-  const okFile = new File([toArrayBuffer('bytes')], 'will-fail.png', { type: 'image/png' })
+  const okFile = new File([pngBytes()], 'will-fail.png', { type: 'image/png' })
   const res7 = await handleUploadsRoute(makeUploadRequest('route-user-4', { file: okFile }), brokenEnv)
   assertEqual(res7.status, 500, 'status for unexpected storage failure')
   console.log('PASS: 500 Internal Server Error on unexpected storage failure')

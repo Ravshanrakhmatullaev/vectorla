@@ -1,6 +1,9 @@
 import type { PlanLimitsByPlan, ExportFormat } from '../types'
 
-export const ALLOWED_UPLOAD_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'] as const
+// SVG is deliberately excluded — an uploaded SVG can carry <script>/event-handler
+// payloads (stored-XSS risk) if ever rendered or served back. Only backend-generated
+// SVG output (see providers/PlaceholderProvider.ts) is ever produced by this system.
+export const ALLOWED_UPLOAD_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const
 
 /** Content-Type to send when streaming a conversion's file — see routes/download.ts. */
 export const EXPORT_FORMAT_MIME_TYPES: Record<ExportFormat, string> = {
