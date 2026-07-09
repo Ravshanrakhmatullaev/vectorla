@@ -40,8 +40,61 @@ async function routeRequest(url: URL, request: Request, env: Env, requestId: str
   return mapErrorToResponse(new NotFoundError(`No route for "${url.pathname}"`), requestId)
 }
 
+/**
+ * Wasm-as-binding (wrangler.toml's old [wasm_modules]) only works for the
+ * legacy Service Worker format — workerd requires a direct ES import for
+ * modules-format Workers like this one. That import only happens here, and
+ * only if env doesn't already carry these fields — e.g. index.smoke-test.ts
+ * builds a fake Env with its own Node-loaded WebAssembly.Module values (see
+ * testSupport/wasmTestFixtures.ts) and must never trigger it: a *static*
+ * top-level `.wasm` import (tried in an earlier version of this file) broke
+ * that smoke test, since Node's own ESM loader tries to parse the
+ * wasm-bindgen-compiled binary itself (looking for its internal "wbg" glue
+ * import) as soon as the module is loaded, regardless of whether the import
+ * is ever used — a dynamic `import()`, run lazily and only on the real
+ * Workers runtime, avoids that entirely.
+ */
+// Memoized per rawEnv identity: fetch() and queue() invocations that share
+// the same underlying Env object (the normal case — bindings are stable for
+// an isolate's lifetime) must resolve to the exact same merged object too,
+// not a fresh `{...env}` copy each call. UploadService/JobService/etc.'s
+// in-memory-fallback repositories are themselves cached in a
+// WeakMap<Env, ...> (see createJobsRepository.ts) — a fresh object identity
+// on every call would silently defeat that cache, making a job created by
+// one request invisible to a later request/queue delivery that reads it back
+// with a differently-identitied (but equivalent) env.
+const envWithWasmModulesCache = new WeakMap<Env, Env>()
+
+async function withWasmModules(env: Env): Promise<Env> {
+  if (env.PNG_DECODER_WASM && env.JPEG_DECODER_WASM && env.WEBP_DECODER_WASM) return env
+  const cached = envWithWasmModulesCache.get(env)
+  if (cached) return cached
+  // A dynamic `import()` resolves to the module's namespace object (same
+  // shape as `import * as ns`) — the compiled WebAssembly.Module itself is
+  // its default export, not the namespace object. Cast through `unknown`:
+  // each .wasm file has its own wasm-bindgen-generated .d.ts colocated next
+  // to it (describing the codec's *exported functions*, for its own JS
+  // glue's internal use — see src/wasm.d.ts) which doesn't declare a
+  // `default` export, so TS won't allow a direct cast to { default: Module }.
+  type WasmModuleExports = { default: WebAssembly.Module }
+  const [png, jpeg, webp] = await Promise.all([
+    import('../node_modules/@jsquash/png/codec/pkg/squoosh_png_bg.wasm') as unknown as Promise<WasmModuleExports>,
+    import('../node_modules/@jsquash/jpeg/codec/dec/mozjpeg_dec.wasm') as unknown as Promise<WasmModuleExports>,
+    import('../node_modules/@jsquash/webp/codec/dec/webp_dec.wasm') as unknown as Promise<WasmModuleExports>,
+  ] as const)
+  const merged: Env = {
+    ...env,
+    PNG_DECODER_WASM: env.PNG_DECODER_WASM ?? png.default,
+    JPEG_DECODER_WASM: env.JPEG_DECODER_WASM ?? jpeg.default,
+    WEBP_DECODER_WASM: env.WEBP_DECODER_WASM ?? webp.default,
+  }
+  envWithWasmModulesCache.set(env, merged)
+  return merged
+}
+
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, rawEnv: Env): Promise<Response> {
+    const env = await withWasmModules(rawEnv)
     const requestId = crypto.randomUUID()
     const start = Date.now()
     const url = new URL(request.url)
@@ -72,7 +125,8 @@ export default {
   // TODO(backend): real AI vectorization goes inside ConversionService.processJob
   // — for now it produces a placeholder SVG, so the full pipeline (queued ->
   // processing -> stored -> completed) can be exercised end-to-end.
-  async queue(batch: MessageBatch<ConversionQueueMessage>, env: Env): Promise<void> {
+  async queue(batch: MessageBatch<ConversionQueueMessage>, rawEnv: Env): Promise<void> {
+    const env = await withWasmModules(rawEnv)
     const jobService = createJobService(env)
     const conversionService = createConversionService(env)
 
