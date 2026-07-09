@@ -76,6 +76,22 @@ export function jsonError(code: ApiErrorCode, message: string, status: number, r
 }
 
 /**
+ * Adds Cache-Control: no-store to an already-built response — for the
+ * polling/status endpoints a client hits repeatedly against the exact same
+ * URL (GET /jobs/:id, /jobs/:id/conversion, /conversions/:id). Without this,
+ * an intermediary or the browser's own HTTP cache can serve a stale status
+ * (observed client-side — see src/lib/api/client.ts's matching `no-store`
+ * fetch option), freezing the frontend's poll loop on an old job state.
+ * Wraps both success and error responses from these routes, never mutates
+ * the original Response object.
+ */
+export function withNoStore(response: Response): Response {
+  const headers = new Headers(response.headers)
+  headers.set('Cache-Control', 'no-store')
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
+}
+
+/**
  * The single place mapping a thrown error to (code, HTTP status, message) —
  * every route's catch block calls this instead of its own instanceof chain,
  * so the mapping only has to be right in one place.

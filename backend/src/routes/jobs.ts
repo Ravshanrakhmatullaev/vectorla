@@ -3,7 +3,7 @@ import type { Conversion } from '../types'
 import { createJobService } from '../services/JobService'
 import { createConversionService } from '../services/ConversionService'
 import { requireAuth } from '../middleware/requireAuth'
-import { jsonSuccess, jsonError, mapErrorToResponse } from '../api/response'
+import { jsonSuccess, jsonError, mapErrorToResponse, withNoStore } from '../api/response'
 import { UnauthorizedError } from '../errors'
 
 // The raw R2 object key must never reach a client (see Phase 17 security
@@ -113,11 +113,11 @@ export async function handleJobsRoute(request: Request, env: Env, requestId: str
     }
     if (request.method === 'GET' && jobId && subResource === 'conversion') {
       const { userId } = await requireAuth(request, env)
-      return await handleGetJobConversion(jobId, userId, env, requestId)
+      return withNoStore(await handleGetJobConversion(jobId, userId, env, requestId))
     }
     if (request.method === 'GET' && jobId && !subResource) {
       const { userId } = await requireAuth(request, env)
-      return await handleGetJob(jobId, userId, env, requestId)
+      return withNoStore(await handleGetJob(jobId, userId, env, requestId))
     }
   } catch (error) {
     if (error instanceof UnauthorizedError) return mapErrorToResponse(error, requestId)

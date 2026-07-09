@@ -2,7 +2,7 @@ import type { Env } from '../env'
 import type { Conversion } from '../types'
 import { createConversionService } from '../services/ConversionService'
 import { requireAuth } from '../middleware/requireAuth'
-import { jsonSuccess, jsonPaginated, jsonError, mapErrorToResponse } from '../api/response'
+import { jsonSuccess, jsonPaginated, jsonError, mapErrorToResponse, withNoStore } from '../api/response'
 import { UnauthorizedError } from '../errors'
 
 const DEFAULT_LIST_LIMIT = 20
@@ -64,7 +64,7 @@ export async function handleConversionsRoute(request: Request, env: Env, request
 
   try {
     const { userId } = await requireAuth(request, env)
-    if (conversionId) return await handleGetConversion(conversionId, userId, env, requestId)
+    if (conversionId) return withNoStore(await handleGetConversion(conversionId, userId, env, requestId))
     return await handleListConversions(url, userId, env, requestId)
   } catch (error) {
     if (error instanceof UnauthorizedError) return mapErrorToResponse(error, requestId)

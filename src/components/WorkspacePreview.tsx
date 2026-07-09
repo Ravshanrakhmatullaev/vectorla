@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   UploadCloud,
@@ -11,6 +11,8 @@ import {
   RefreshCcw,
   Loader2,
   AlertTriangle,
+  Lock,
+  Coins,
   Download,
 } from 'lucide-react'
 import { SectionHeading } from '@/components/ui/SectionHeading'
@@ -22,7 +24,7 @@ import { useCompareSlider } from '@/hooks/useCompareSlider'
 import { useDropzone } from '@/hooks/useDropzone'
 import { useUploadFlow } from '@/hooks/useUploadFlow'
 import { isBackendConfigured } from '@/lib/api/client'
-import { resolveDownloadUrl } from '@/lib/api/conversions'
+import { fetchConversionFile } from '@/lib/api/conversions'
 import { cn } from '@/utils/cn'
 
 const backendConfigured = isBackendConfigured()
@@ -43,12 +45,46 @@ export function WorkspacePreview() {
   const { t } = useLanguage()
   const { state: uploadState, upload, retry, reset } = useUploadFlow()
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [vectorizedUrl, setVectorizedUrl] = useState<string | null>(null)
+  const [resultFetchError, setResultFetchError] = useState<string | null>(null)
+  const fetchedConversionIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     return () => {
       if (previewUrl) URL.revokeObjectURL(previewUrl)
     }
   }, [previewUrl])
+
+  useEffect(() => {
+    return () => {
+      if (vectorizedUrl) URL.revokeObjectURL(vectorizedUrl)
+    }
+  }, [vectorizedUrl])
+
+  const fetchResult = useCallback(async (downloadUrl: string) => {
+    setResultFetchError(null)
+    try {
+      const blob = await fetchConversionFile(downloadUrl)
+      setVectorizedUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev)
+        return URL.createObjectURL(blob)
+      })
+    } catch (error) {
+      setResultFetchError(error instanceof Error ? error.message : 'Could not load the result. Please try again.')
+    }
+  }, [])
+
+  // Fetches the actual SVG bytes exactly once per completed conversion — a
+  // plain <img src={downloadUrl}> can't work here, since GET /download
+  // requires the same auth header as every other route (see
+  // lib/api/conversions.ts's fetchConversionFile).
+  useEffect(() => {
+    if (uploadState.status !== 'completed' || !uploadState.conversion) return
+    const conversion = uploadState.conversion
+    if (fetchedConversionIdRef.current === conversion.id) return
+    fetchedConversionIdRef.current = conversion.id
+    if (conversion.downloadUrl) void fetchResult(conversion.downloadUrl)
+  }, [uploadState, fetchResult])
 
   function handleFiles(files: FileList | null) {
     const file = files?.[0]
@@ -61,6 +97,10 @@ export function WorkspacePreview() {
 
     if (previewUrl) URL.revokeObjectURL(previewUrl)
     setPreviewUrl(URL.createObjectURL(file))
+    if (vectorizedUrl) URL.revokeObjectURL(vectorizedUrl)
+    setVectorizedUrl(null)
+    setResultFetchError(null)
+    fetchedConversionIdRef.current = null
     void upload(file)
   }
 
@@ -69,6 +109,20 @@ export function WorkspacePreview() {
     reset()
     if (previewUrl) URL.revokeObjectURL(previewUrl)
     setPreviewUrl(null)
+    if (vectorizedUrl) URL.revokeObjectURL(vectorizedUrl)
+    setVectorizedUrl(null)
+    setResultFetchError(null)
+    fetchedConversionIdRef.current = null
+  }
+
+  function triggerDownload() {
+    if (!vectorizedUrl || !completedFormat) return
+    const anchor = document.createElement('a')
+    anchor.href = vectorizedUrl
+    anchor.download = `vectorla-export.${completedFormat.toLowerCase()}`
+    document.body.appendChild(anchor)
+    anchor.click()
+    document.body.removeChild(anchor)
   }
 
   const { isDragOver, dropzoneHandlers } = useDropzone(handleFiles)
@@ -76,14 +130,21 @@ export function WorkspacePreview() {
   const isCompleted = backendConfigured && uploadState.status === 'completed'
   const isFailed = backendConfigured && uploadState.status === 'failed'
   const isActive = backendConfigured ? isWorking || isCompleted || isFailed : showDemo
-  const completedDownloadUrl =
-    isCompleted && uploadState.status === 'completed' && uploadState.conversion?.downloadUrl
-      ? resolveDownloadUrl(uploadState.conversion.downloadUrl)
-      : null
   const completedFormat =
     isCompleted && uploadState.status === 'completed' && uploadState.conversion
       ? uploadState.conversion.format.toUpperCase()
       : null
+  const failureTitle =
+    uploadState.status === 'failed'
+      ? uploadState.kind === 'auth'
+        ? t.workspace.authRequiredTitle
+        : uploadState.kind === 'insufficient-credits'
+          ? t.workspace.insufficientCreditsTitle
+          : uploadState.stage === 'upload'
+            ? t.workspace.uploadFailedTitle
+            : t.workspace.statusFailedTitle
+      : ''
+  const FailureIcon = uploadState.status === 'failed' && uploadState.kind === 'auth' ? Lock : uploadState.status === 'failed' && uploadState.kind === 'insufficient-credits' ? Coins : AlertTriangle
 
   return (
     <section className="px-5 py-20 sm:px-8">
@@ -257,26 +318,79 @@ export function WorkspacePreview() {
 
                 {isActive && backendConfigured && (
                   <motion.div
+                    ref={isCompleted && vectorizedUrl ? containerRef : undefined}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ duration: 0.3, ease: 'easeOut' }}
-                    className="relative flex h-full w-full items-center justify-center p-6"
+                    className="relative h-full w-full"
+                    {...(isCompleted && vectorizedUrl ? containerHandlers : {})}
                   >
-                    {isWorking && (
-                      <div className="flex flex-col items-center gap-3 text-center">
+                    {/* Original: shown the instant a file is selected, never blank while we wait on the backend. */}
+                    {previewUrl && (
+                      <div className="absolute inset-0 flex items-center justify-center p-6">
+                        <img src={previewUrl} alt="" className="h-full w-full object-contain" />
+                      </div>
+                    )}
+                    {previewUrl && (
+                      <span className="absolute left-3 top-3 rounded-md bg-black/55 px-2 py-1 text-[11px] font-medium text-white">
+                        {t.hero.original}
+                      </span>
+                    )}
+
+                    {/* Vectorized: only once the job is done and the real SVG bytes are fetched. */}
+                    {isCompleted && vectorizedUrl && (
+                      <>
+                        <div
+                          className="absolute inset-0 flex items-center justify-center p-6"
+                          style={{ clipPath: `inset(0 ${100 - splitPct}% 0 0)` }}
+                        >
+                          <img src={vectorizedUrl} alt="" className="h-full w-full object-contain" />
+                        </div>
+                        <div
+                          role="slider"
+                          tabIndex={0}
+                          aria-label={t.common.compareSliderLabel}
+                          aria-orientation="horizontal"
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={Math.round(splitPct)}
+                          onKeyDown={onHandleKeyDown}
+                          className="absolute inset-y-0 w-0.5 cursor-ew-resize bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.12)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                          style={{ left: `${splitPct}%` }}
+                        />
+                        <span className="absolute right-3 top-3 rounded-md bg-black/55 px-2 py-1 text-[11px] font-medium text-white">
+                          {t.hero.vectorized}
+                        </span>
+                        <div className="absolute inset-x-3 bottom-3 flex items-center justify-between gap-2 rounded-lg bg-black/55 px-3 py-2">
+                          <span className="flex items-center gap-1.5 text-[11px] font-medium text-white">
+                            <CheckCircle2 size={13} className="text-emerald-400" />
+                            {completedFormat}
+                          </span>
+                          <Button size="sm" onClick={triggerDownload}>
+                            <Download size={14} />
+                            {t.workspace.download}
+                          </Button>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Loading overlay: uploading/queued/processing, and the brief window after completion while the result is still being fetched. */}
+                    {(isWorking || (isCompleted && !vectorizedUrl && !resultFetchError)) && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[var(--bg-elevated)]/85 text-center">
                         <Loader2 className="animate-spin text-[var(--accent)]" size={28} />
                         <p className="text-sm font-semibold text-[var(--ink)]">
                           {uploadState.status === 'uploading' && t.workspace.statusUploading}
                           {uploadState.status === 'queued' && t.workspace.statusQueued}
                           {uploadState.status === 'processing' && t.workspace.statusProcessing}
+                          {isCompleted && t.workspace.statusFetchingResult}
                         </p>
                       </div>
                     )}
 
                     {isFailed && uploadState.status === 'failed' && (
-                      <div className="flex flex-col items-center gap-3 text-center">
-                        <AlertTriangle className="text-red-500" size={28} />
-                        <p className="text-sm font-semibold text-[var(--ink)]">{t.workspace.statusFailedTitle}</p>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[var(--bg-elevated)]/95 p-6 text-center">
+                        <FailureIcon className="text-red-500" size={28} />
+                        <p className="text-sm font-semibold text-[var(--ink)]">{failureTitle}</p>
                         <p className="max-w-[220px] text-xs text-[var(--ink-faint)]">{uploadState.message}</p>
                         <Button variant="secondary" size="sm" onClick={retry}>
                           <RefreshCcw size={14} />
@@ -285,27 +399,24 @@ export function WorkspacePreview() {
                       </div>
                     )}
 
-                    {isCompleted && (
-                      <>
-                        {previewUrl && (
-                          <img src={previewUrl} alt="" className="absolute inset-0 h-full w-full object-contain p-6" />
-                        )}
-                        <div className="absolute inset-x-3 bottom-3 flex items-center justify-between gap-2 rounded-lg bg-black/55 px-3 py-2">
-                          <span className="flex items-center gap-1.5 text-[11px] font-medium text-white">
-                            <CheckCircle2 size={13} className="text-emerald-400" />
-                            {completedFormat}
-                          </span>
-                          {completedDownloadUrl && (
-                            <Button
-                              size="sm"
-                              onClick={() => window.open(completedDownloadUrl, '_blank', 'noopener,noreferrer')}
-                            >
-                              <Download size={14} />
-                              {t.workspace.download}
-                            </Button>
-                          )}
-                        </div>
-                      </>
+                    {isCompleted && resultFetchError && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[var(--bg-elevated)]/95 p-6 text-center">
+                        <AlertTriangle className="text-red-500" size={28} />
+                        <p className="text-sm font-semibold text-[var(--ink)]">{t.workspace.fetchResultFailedTitle}</p>
+                        <p className="max-w-[220px] text-xs text-[var(--ink-faint)]">{resultFetchError}</p>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => {
+                            if (uploadState.status === 'completed' && uploadState.conversion?.downloadUrl) {
+                              void fetchResult(uploadState.conversion.downloadUrl)
+                            }
+                          }}
+                        >
+                          <RefreshCcw size={14} />
+                          {t.workspace.retry}
+                        </Button>
+                      </div>
                     )}
                   </motion.div>
                 )}
@@ -401,7 +512,7 @@ export function WorkspacePreview() {
               <span className="text-xs text-[var(--ink-faint)]">{t.workspace.exportAs}</span>
               <div className="flex flex-wrap gap-2">
                 {exportFormats.map((format) => {
-                  const isReady = completedFormat === format && completedDownloadUrl
+                  const isReady = completedFormat === format && Boolean(vectorizedUrl)
                   return (
                     <Button
                       key={format}
@@ -409,11 +520,7 @@ export function WorkspacePreview() {
                       size="sm"
                       disabled={!isReady}
                       title={isReady ? undefined : t.workspace.exportDisabledNote}
-                      onClick={
-                        isReady
-                          ? () => window.open(completedDownloadUrl, '_blank', 'noopener,noreferrer')
-                          : undefined
-                      }
+                      onClick={isReady ? triggerDownload : undefined}
                     >
                       {format}
                     </Button>

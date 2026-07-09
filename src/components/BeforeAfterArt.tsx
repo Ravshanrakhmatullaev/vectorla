@@ -1,6 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useDemoAsset } from '@/lib/demoAsset'
-import { cn } from '@/utils/cn'
 
 const noiseSvg =
   "<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'>" +
@@ -10,8 +9,17 @@ const noiseSvg =
 const noiseBackgroundImage = `url("data:image/svg+xml,${encodeURIComponent(noiseSvg)}")`
 
 // TODO(backend): once real demo asset files exist at the paths declared in
-// src/data/demoAssets.ts, this component needs no changes — it already reads
-// the shared random pick from useDemoAsset() and renders it via <img>.
+// src/data/demoAssets.ts, this component needs no further changes beyond the
+// fallback below — it already reads the shared random pick from
+// useDemoAsset() and renders it via <img>.
+//
+// Temporary fix: none of the /demo/*.webp files referenced in
+// src/data/demoAssets.ts exist yet (see public/demo/README.md) — every pick
+// 404s. Falling straight back to the always-present public/og-image.png
+// keeps the before/after slider visibly showing *something* instead of a
+// blank pane, until the real demo assets are added.
+const FALLBACK_ASSET_SRC = '/og-image.png'
+
 /**
  * Renders the same shared demo asset image twice — once with a "raster"
  * filter (blur, lower contrast, desaturation, grain) and once crisp/vibrant —
@@ -19,15 +27,23 @@ const noiseBackgroundImage = `url("data:image/svg+xml,${encodeURIComponent(noise
  */
 export function BeforeAfterArt({ crisp }: { crisp: boolean }) {
   const { asset } = useDemoAsset()
-  const [failedToLoad, setFailedToLoad] = useState(false)
+  const [src, setSrc] = useState(asset.file)
+
+  // asset.file only actually changes across a full remount in practice (see
+  // useDemoAsset), but resetting on it keeps this correct if that ever changes.
+  useEffect(() => {
+    setSrc(asset.file)
+  }, [asset.file])
 
   return (
     <div className="relative h-full w-full">
       <img
-        src={asset.file}
+        src={src}
         alt={asset.alt}
-        onError={() => setFailedToLoad(true)}
-        className={cn('h-full w-full object-contain transition-opacity', failedToLoad && 'opacity-0')}
+        onError={() => {
+          if (src !== FALLBACK_ASSET_SRC) setSrc(FALLBACK_ASSET_SRC)
+        }}
+        className="h-full w-full object-contain"
         style={{
           filter: crisp
             ? 'saturate(1.35) contrast(1.08)'

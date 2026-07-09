@@ -162,7 +162,12 @@ export interface Translation {
     statusUploading: string
     statusQueued: string
     statusProcessing: string
+    statusFetchingResult: string
     statusFailedTitle: string
+    uploadFailedTitle: string
+    authRequiredTitle: string
+    insufficientCreditsTitle: string
+    fetchResultFailedTitle: string
     retry: string
     download: string
   }
@@ -297,7 +302,12 @@ export const translations: Record<Language, Translation> = {
       statusUploading: 'Uploading…',
       statusQueued: 'Queued — waiting to start',
       statusProcessing: 'Vectorizing your image…',
+      statusFetchingResult: 'Fetching your result…',
       statusFailedTitle: 'Conversion failed',
+      uploadFailedTitle: 'Upload failed',
+      authRequiredTitle: 'Sign in required',
+      insufficientCreditsTitle: 'Not enough credits',
+      fetchResultFailedTitle: 'Could not load result',
       retry: 'Retry',
       download: 'Download',
     },
@@ -608,7 +618,12 @@ export const translations: Record<Language, Translation> = {
       statusUploading: 'Yuklanmoqda…',
       statusQueued: 'Navbatda — boshlanishini kutmoqda',
       statusProcessing: 'Rasm vektorlashtirilmoqda…',
+      statusFetchingResult: 'Natija yuklab olinmoqda…',
       statusFailedTitle: 'Konvertatsiya muvaffaqiyatsiz tugadi',
+      uploadFailedTitle: 'Yuklash muvaffaqiyatsiz tugadi',
+      authRequiredTitle: 'Tizimga kirish talab qilinadi',
+      insufficientCreditsTitle: 'Kredit yetarli emas',
+      fetchResultFailedTitle: 'Natijani yuklab bo\'lmadi',
       retry: 'Qayta urinish',
       download: 'Yuklab olish',
     },
@@ -930,7 +945,12 @@ export const translations: Record<Language, Translation> = {
       statusUploading: 'Загрузка…',
       statusQueued: 'В очереди — ожидает начала',
       statusProcessing: 'Векторизация изображения…',
+      statusFetchingResult: 'Загрузка результата…',
       statusFailedTitle: 'Не удалось выполнить конвертацию',
+      uploadFailedTitle: 'Не удалось загрузить файл',
+      authRequiredTitle: 'Требуется вход в систему',
+      insufficientCreditsTitle: 'Недостаточно кредитов',
+      fetchResultFailedTitle: 'Не удалось загрузить результат',
       retry: 'Повторить',
       download: 'Скачать',
     },

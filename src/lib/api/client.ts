@@ -103,7 +103,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const baseUrl = requireBaseUrl()
   let response: Response
   try {
-    response = await fetch(`${baseUrl}${path}`, { ...init, headers: buildHeaders(init?.headers) })
+    // no-store: GET /jobs/:id/conversion is polled against the exact same
+    // URL every second (see useUploadFlow) — the backend sets no explicit
+    // Cache-Control on its JSON responses, and this was observed to get
+    // served stale from the browser's HTTP cache under default caching,
+    // which would freeze the UI on an old status forever.
+    response = await fetch(`${baseUrl}${path}`, { ...init, headers: buildHeaders(init?.headers), cache: 'no-store' })
   } catch {
     throw new ApiError('Could not reach the API server', 'NETWORK_ERROR', 0, null)
   }
@@ -116,4 +121,19 @@ export function apiGet<T>(path: string): Promise<T> {
 
 export function apiPostForm<T>(path: string, form: FormData): Promise<T> {
   return request<T>(path, { method: 'POST', body: form })
+}
+
+/**
+ * Raw (non-JSON-envelope) fetch, for the one endpoint that streams bytes on
+ * success — GET /download (see backend/API.md). Still attaches the same auth
+ * headers as every other call; a plain `<a href>`/`window.open` navigation
+ * can't do that, since custom headers aren't available to browser navigation.
+ */
+export async function apiFetchRaw(path: string, init?: RequestInit): Promise<Response> {
+  const baseUrl = requireBaseUrl()
+  try {
+    return await fetch(`${baseUrl}${path}`, { ...init, headers: buildHeaders(init?.headers) })
+  } catch {
+    throw new ApiError('Could not reach the API server', 'NETWORK_ERROR', 0, null)
+  }
 }
