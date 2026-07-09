@@ -14,6 +14,11 @@ import {
   Lock,
   Coins,
   Download,
+  Zap,
+  Sparkles,
+  Image as ImageIcon,
+  Camera,
+  Palette,
 } from 'lucide-react'
 import { SectionHeading } from '@/components/ui/SectionHeading'
 import { Button } from '@/components/ui/Button'
@@ -29,6 +34,21 @@ import { cn } from '@/utils/cn'
 
 const backendConfigured = isBackendConfigured()
 
+// Mirrors backend's CREDIT_COST_BASE_CONVERSION (1) * AI_PROVIDER_CREDIT_MULTIPLIER
+// (2) — see backend/src/services/ImageAnalysisService.ts. A fixed display
+// figure (Professional Trace's cost doesn't vary per image), not derived
+// from analysis.estimatedCredits (which only reflects the *recommended*
+// provider for this specific image, not "what Professional Trace costs").
+const PROFESSIONAL_TRACE_CREDITS = 2
+
+type TraceMode = 'quick' | 'professional'
+
+const IMAGE_TYPE_ICONS = { photo: Camera, illustration: Palette, logo: ImageIcon } as const
+
+function formatEstimatedTime(ms: number): string {
+  return ms < 1000 ? `~${ms}ms` : `~${(ms / 1000).toFixed(1)}s`
+}
+
 /**
  * When the backend isn't configured, this stays Preview Mode only (no image
  * is uploaded, read, or processed) — see PROJECT_CONTEXT.md's honesty
@@ -43,10 +63,11 @@ export function WorkspacePreview() {
   const { splitPct, containerRef, containerHandlers, onHandleKeyDown } = useCompareSlider(55)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { t } = useLanguage()
-  const { state: uploadState, upload, retry, reset } = useUploadFlow()
+  const { state: uploadState, analysis, upload, retry, reset } = useUploadFlow()
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [vectorizedUrl, setVectorizedUrl] = useState<string | null>(null)
   const [resultFetchError, setResultFetchError] = useState<string | null>(null)
+  const [selectedMode, setSelectedMode] = useState<TraceMode>('quick')
   const fetchedConversionIdRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -60,6 +81,16 @@ export function WorkspacePreview() {
       if (vectorizedUrl) URL.revokeObjectURL(vectorizedUrl)
     }
   }, [vectorizedUrl])
+
+  // Task 3: auto-highlight Professional Trace when the analysis recommends
+  // an AI-tier provider ('vision'/'openai' — currently only photographs, see
+  // ProviderSelector.ts) — still just a UI selection, since AI itself isn't
+  // implemented yet (see the "coming soon" note rendered below).
+  useEffect(() => {
+    if (!analysis) return
+    const isAiRecommended = analysis.recommendedProvider === 'vision' || analysis.recommendedProvider === 'openai'
+    setSelectedMode(isAiRecommended ? 'professional' : 'quick')
+  }, [analysis])
 
   const fetchResult = useCallback(async (downloadUrl: string) => {
     setResultFetchError(null)
@@ -112,6 +143,7 @@ export function WorkspacePreview() {
     if (vectorizedUrl) URL.revokeObjectURL(vectorizedUrl)
     setVectorizedUrl(null)
     setResultFetchError(null)
+    setSelectedMode('quick')
     fetchedConversionIdRef.current = null
   }
 
@@ -145,6 +177,8 @@ export function WorkspacePreview() {
             : t.workspace.statusFailedTitle
       : ''
   const FailureIcon = uploadState.status === 'failed' && uploadState.kind === 'auth' ? Lock : uploadState.status === 'failed' && uploadState.kind === 'insufficient-credits' ? Coins : AlertTriangle
+  const isAiRecommended = analysis ? analysis.recommendedProvider === 'vision' || analysis.recommendedProvider === 'openai' : false
+  const ImageTypeIcon = analysis ? IMAGE_TYPE_ICONS[analysis.imageType] : ImageIcon
 
   return (
     <section className="px-5 py-20 sm:px-8">
@@ -421,6 +455,121 @@ export function WorkspacePreview() {
                   </motion.div>
                 )}
               </div>
+
+              {backendConfigured && analysis && (
+                <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] p-3">
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
+                    {t.workspace.analysis.title}
+                  </p>
+
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-[var(--bg-muted)] px-2.5 py-1 text-[10px] font-semibold text-[var(--ink-muted)]">
+                      <ImageTypeIcon size={11} />
+                      {t.workspace.analysis.imageTypes[analysis.imageType]}
+                    </span>
+                    {analysis.imageType === 'logo' && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-soft)] px-2.5 py-1 text-[10px] font-semibold text-[var(--accent)]">
+                        {t.workspace.analysis.badges.bestForLogos}
+                      </span>
+                    )}
+                    {analysis.imageType === 'photo' && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-soft)] px-2.5 py-1 text-[10px] font-semibold text-[var(--accent)]">
+                        {t.workspace.analysis.badges.bestForPhotos}
+                      </span>
+                    )}
+                    {analysis.estimatedQuality === 'high' && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                        <CheckCircle2 size={11} />
+                        {t.workspace.analysis.badges.printReady}
+                      </span>
+                    )}
+                    {isAiRecommended && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-soft)] px-2.5 py-1 text-[10px] font-semibold text-[var(--accent)]">
+                        <Sparkles size={11} />
+                        {t.workspace.analysis.badges.aiRecommended}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px] sm:grid-cols-4">
+                    <div>
+                      <span className="text-[var(--ink-faint)]">{t.workspace.analysis.complexityLabel}: </span>
+                      <span className="font-medium text-[var(--ink)]">{Math.round(analysis.complexityScore * 100)}%</span>
+                    </div>
+                    <div>
+                      <span className="text-[var(--ink-faint)]">{t.workspace.analysis.qualityLabel}: </span>
+                      <span className="font-medium text-[var(--ink)]">{t.workspace.analysis.qualityLevels[analysis.estimatedQuality]}</span>
+                    </div>
+                    <div>
+                      <span className="text-[var(--ink-faint)]">{t.workspace.analysis.timeLabel}: </span>
+                      <span className="font-medium text-[var(--ink)]">{formatEstimatedTime(analysis.estimatedProcessingTimeMs)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[var(--ink-faint)]">{t.workspace.analysis.providerLabel}: </span>
+                      <span className="font-medium text-[var(--ink)]">{t.workspace.analysis.providers[analysis.recommendedProvider]}</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedMode('quick')}
+                      aria-pressed={selectedMode === 'quick'}
+                      className={cn(
+                        'rounded-lg border p-2.5 text-left transition-colors',
+                        selectedMode === 'quick'
+                          ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
+                          : 'border-[var(--border)] hover:border-[var(--border-strong)]',
+                      )}
+                    >
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--ink)]">
+                        <Zap size={13} className="text-[var(--accent)]" />
+                        {t.workspace.analysis.quickTraceTitle}
+                      </div>
+                      <p className="mt-0.5 text-[11px] text-[var(--ink-faint)]">{t.workspace.analysis.quickTraceDescription}</p>
+                      <p className="mt-1 text-[11px] font-medium text-[var(--ink-muted)]">
+                        1 {t.workspace.analysis.creditsSuffix}
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setSelectedMode('professional')}
+                      aria-pressed={selectedMode === 'professional'}
+                      className={cn(
+                        'relative rounded-lg border p-2.5 text-left transition-colors',
+                        selectedMode === 'professional'
+                          ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
+                          : 'border-[var(--border)] hover:border-[var(--border-strong)]',
+                      )}
+                    >
+                      {isAiRecommended && (
+                        <span className="absolute -top-2 right-2 rounded-full bg-[var(--accent)] px-1.5 py-0.5 text-[9px] font-semibold text-white">
+                          {t.workspace.analysis.recommendedBadge}
+                        </span>
+                      )}
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--ink)]">
+                        <Sparkles size={13} className="text-[var(--accent)]" />
+                        {t.workspace.analysis.professionalTraceTitle}
+                      </div>
+                      <p className="mt-0.5 text-[11px] text-[var(--ink-faint)]">{t.workspace.analysis.professionalTraceDescription}</p>
+                      <p className="mt-1 text-[11px] font-medium text-[var(--ink-muted)]">
+                        {PROFESSIONAL_TRACE_CREDITS} {t.workspace.analysis.creditsSuffix}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-[var(--accent)]">
+                        {t.workspace.analysis.qualityImprovement[analysis.estimatedQuality]}
+                      </p>
+                    </button>
+                  </div>
+
+                  {selectedMode === 'professional' && (
+                    <p className="mt-2 flex items-start gap-1.5 text-[11px] text-[var(--ink-faint)]">
+                      <Info size={12} className="mt-0.5 flex-none text-[var(--accent)]" />
+                      {t.workspace.analysis.professionalComingSoonNote}
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div className="mt-3 flex items-center justify-between gap-2 text-xs text-[var(--ink-faint)]">
                 <span>

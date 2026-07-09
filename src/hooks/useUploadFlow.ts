@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { uploadImage } from '@/lib/api/uploads'
 import { getJobConversion } from '@/lib/api/jobs'
 import { ApiError } from '@/lib/api/client'
-import type { Conversion } from '@/lib/api/types'
+import type { Conversion, ImageAnalysisResult } from '@/lib/api/types'
 
 const POLL_INTERVAL_MS = 1000
 
@@ -19,14 +19,20 @@ export type UploadFlowState =
 /** Real upload → job → poll flow against the backend API (see backend/API.md). Replaces the old fake "showDemo" toggle. */
 export function useUploadFlow() {
   const [state, setState] = useState<UploadFlowState>({ status: 'idle' })
+  // Available as soon as the upload responds, independent of job status (see
+  // WorkspacePreview.tsx's analysis card) — not part of UploadFlowState since
+  // it doesn't change across queued/processing/completed for the same upload.
+  const [analysis, setAnalysis] = useState<ImageAnalysisResult | null>(null)
   const lastFileRef = useRef<File | null>(null)
   const pollJobIdRef = useRef<string | null>(null)
 
   const upload = useCallback(async (file: File) => {
     lastFileRef.current = file
     setState({ status: 'uploading' })
+    setAnalysis(null)
     try {
-      const { job } = await uploadImage(file)
+      const { job, analysis: uploadAnalysis } = await uploadImage(file)
+      setAnalysis(uploadAnalysis)
       if (job.status === 'failed') {
         setState({ status: 'failed', stage: 'processing', kind: classifyFailureMessage(job.errorMessage), message: job.errorMessage ?? 'Conversion failed' })
       } else if (job.status === 'completed') {
@@ -47,6 +53,7 @@ export function useUploadFlow() {
   const reset = useCallback(() => {
     lastFileRef.current = null
     setState({ status: 'idle' })
+    setAnalysis(null)
   }, [])
 
   useEffect(() => {
@@ -80,7 +87,7 @@ export function useUploadFlow() {
     return () => window.clearInterval(interval)
   }, [state])
 
-  return { state, upload, retry, reset }
+  return { state, analysis, upload, retry, reset }
 }
 
 function classifyError(error: unknown): UploadFailureKind {

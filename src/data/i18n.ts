@@ -1,3 +1,5 @@
+import type { ImageType, EstimatedQuality, VectorizationProviderName } from '@/lib/api/types'
+
 export type Language = 'en' | 'uz' | 'ru'
 
 export interface LanguageOption {
@@ -170,6 +172,31 @@ export interface Translation {
     fetchResultFailedTitle: string
     retry: string
     download: string
+    analysis: {
+      title: string
+      imageTypeLabel: string
+      complexityLabel: string
+      qualityLabel: string
+      timeLabel: string
+      providerLabel: string
+      imageTypes: Record<ImageType, string>
+      qualityLevels: Record<EstimatedQuality, string>
+      providers: Record<VectorizationProviderName, string>
+      badges: {
+        bestForLogos: string
+        bestForPhotos: string
+        printReady: string
+        aiRecommended: string
+      }
+      recommendedBadge: string
+      quickTraceTitle: string
+      quickTraceDescription: string
+      professionalTraceTitle: string
+      professionalTraceDescription: string
+      qualityImprovement: Record<EstimatedQuality, string>
+      professionalComingSoonNote: string
+      creditsSuffix: string
+    }
   }
   features: {
     eyebrow: string
@@ -310,6 +337,35 @@ export const translations: Record<Language, Translation> = {
       fetchResultFailedTitle: 'Could not load result',
       retry: 'Retry',
       download: 'Download',
+      analysis: {
+        title: 'Analysis',
+        imageTypeLabel: 'Type',
+        complexityLabel: 'Complexity',
+        qualityLabel: 'Quality',
+        timeLabel: 'Time',
+        providerLabel: 'Engine',
+        imageTypes: { photo: 'Photo', illustration: 'Illustration', logo: 'Logo' },
+        qualityLevels: { high: 'High', medium: 'Medium', low: 'Low' },
+        providers: { placeholder: 'ImageTracer', potrace: 'Potrace', vision: 'Professional AI', openai: 'Professional AI' },
+        badges: {
+          bestForLogos: 'Best for logos',
+          bestForPhotos: 'Best for photos',
+          printReady: 'Print ready',
+          aiRecommended: 'AI recommended',
+        },
+        recommendedBadge: 'Recommended',
+        quickTraceTitle: 'Quick Trace',
+        quickTraceDescription: 'Fast · 1 credit · our free tracing engine',
+        professionalTraceTitle: 'Professional Trace ⭐',
+        professionalTraceDescription: 'Highest quality · AI pipeline (coming soon)',
+        qualityImprovement: {
+          high: 'Minor quality improvement expected',
+          medium: 'Noticeable quality improvement expected',
+          low: 'Major quality improvement expected',
+        },
+        professionalComingSoonNote: "Professional Trace (AI) isn't available yet — this image will be processed with Quick Trace.",
+        creditsSuffix: 'credits',
+      },
     },
     features: {
       eyebrow: 'Features',
@@ -626,6 +682,35 @@ export const translations: Record<Language, Translation> = {
       fetchResultFailedTitle: 'Natijani yuklab bo\'lmadi',
       retry: 'Qayta urinish',
       download: 'Yuklab olish',
+      analysis: {
+        title: 'Tahlil',
+        imageTypeLabel: 'Turi',
+        complexityLabel: 'Murakkablik',
+        qualityLabel: 'Sifat',
+        timeLabel: 'Vaqt',
+        providerLabel: 'Dvigatel',
+        imageTypes: { photo: 'Foto', illustration: 'Illyustratsiya', logo: 'Logotip' },
+        qualityLevels: { high: 'Yuqori', medium: "O'rtacha", low: 'Past' },
+        providers: { placeholder: 'ImageTracer', potrace: 'Potrace', vision: 'Professional AI', openai: 'Professional AI' },
+        badges: {
+          bestForLogos: 'Logotiplar uchun eng yaxshi',
+          bestForPhotos: 'Fotolar uchun eng yaxshi',
+          printReady: 'Bosishga tayyor',
+          aiRecommended: 'AI tavsiya etadi',
+        },
+        recommendedBadge: 'Tavsiya etiladi',
+        quickTraceTitle: 'Tezkor trace',
+        quickTraceDescription: 'Tez · 1 kredit · bizning bepul trace dvigatelimiz',
+        professionalTraceTitle: 'Professional Trace ⭐',
+        professionalTraceDescription: 'Eng yuqori sifat · AI pipeline (tez orada)',
+        qualityImprovement: {
+          high: 'Sifat kam darajada yaxshilanadi',
+          medium: 'Sifat sezilarli darajada yaxshilanadi',
+          low: 'Sifat sezilarli darajada oshadi',
+        },
+        professionalComingSoonNote: "Professional Trace (AI) hali mavjud emas — bu rasm Tezkor Trace bilan qayta ishlanadi.",
+        creditsSuffix: 'kredit',
+      },
     },
     features: {
       eyebrow: 'Imkoniyatlar',
@@ -953,6 +1038,35 @@ export const translations: Record<Language, Translation> = {
       fetchResultFailedTitle: 'Не удалось загрузить результат',
       retry: 'Повторить',
       download: 'Скачать',
+      analysis: {
+        title: 'Анализ',
+        imageTypeLabel: 'Тип',
+        complexityLabel: 'Сложность',
+        qualityLabel: 'Качество',
+        timeLabel: 'Время',
+        providerLabel: 'Движок',
+        imageTypes: { photo: 'Фото', illustration: 'Иллюстрация', logo: 'Логотип' },
+        qualityLevels: { high: 'Высокое', medium: 'Среднее', low: 'Низкое' },
+        providers: { placeholder: 'ImageTracer', potrace: 'Potrace', vision: 'Профессиональный ИИ', openai: 'Профессиональный ИИ' },
+        badges: {
+          bestForLogos: 'Лучше для логотипов',
+          bestForPhotos: 'Лучше для фото',
+          printReady: 'Готово к печати',
+          aiRecommended: 'Рекомендовано ИИ',
+        },
+        recommendedBadge: 'Рекомендуется',
+        quickTraceTitle: 'Быстрая трассировка',
+        quickTraceDescription: 'Быстро · 1 кредит · наш бесплатный движок трассировки',
+        professionalTraceTitle: 'Профессиональная трассировка ⭐',
+        professionalTraceDescription: 'Максимальное качество · AI pipeline (скоро)',
+        qualityImprovement: {
+          high: 'Ожидается небольшое улучшение качества',
+          medium: 'Ожидается заметное улучшение качества',
+          low: 'Ожидается значительное улучшение качества',
+        },
+        professionalComingSoonNote: 'Профессиональная трассировка (ИИ) пока недоступна — это изображение будет обработано в режиме Быстрой трассировки.',
+        creditsSuffix: 'кредитов',
+      },
     },
     features: {
       eyebrow: 'Возможности',

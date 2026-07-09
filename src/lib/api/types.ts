@@ -43,9 +43,35 @@ export interface Conversion {
   createdAt: string
 }
 
+// Mirrors backend/src/services/ImageAnalysisService.ts's ImageAnalysisResult (Phase 21/22).
+export type ImageType = 'photo' | 'illustration' | 'logo'
+export type EstimatedQuality = 'high' | 'medium' | 'low'
+export type VectorizationProviderName = 'placeholder' | 'potrace' | 'vision' | 'openai'
+
+export interface ImageAnalysisResult {
+  width: number
+  height: number
+  aspectRatio: number
+  colorCountEstimate: number
+  hasAlphaChannel: boolean
+  hasTransparency: boolean
+  dominantColors: string[]
+  edgeDensity: number
+  noiseLevel: number
+  isGrayscale: boolean
+  imageType: ImageType
+  complexityScore: number
+  recommendedProvider: VectorizationProviderName
+  estimatedQuality: EstimatedQuality
+  estimatedCredits: number
+  estimatedProcessingTimeMs: number
+}
+
 export interface UploadResult {
   upload: Upload
   job: Job
+  /** Null if best-effort analysis failed for this upload — see backend/API.md. */
+  analysis: ImageAnalysisResult | null
 }
 
 export type JobConversionResult =
