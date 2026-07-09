@@ -1,19 +1,12 @@
 import type { Upload } from '../types'
 import type { VectorizationProvider, VectorizationResult } from './VectorizationProvider'
-import { UnsupportedMediaTypeError } from '../errors'
 import { optimizeSvg } from './svgOptimizer'
 import { TRACE_PRESETS, isTracePresetName } from './tracePresets'
 import { analyzeImage, type ImageAnalysis } from './imageAnalysis'
+import { decodeImage, type RasterDecoderWasm } from './imageDecoder'
 import ImageTracer from 'imagetracerjs'
-import { init as initPngDecoder, default as decodePng } from '@jsquash/png/decode.js'
-import { init as initJpegDecoder, default as decodeJpeg } from '@jsquash/jpeg/decode.js'
-import { init as initWebpDecoder, default as decodeWebp } from '@jsquash/webp/decode.js'
 
-export interface RasterDecoderWasm {
-  png: WebAssembly.Module
-  jpeg: WebAssembly.Module
-  webp: WebAssembly.Module
-}
+export type { RasterDecoderWasm } from './imageDecoder'
 
 /**
  * The real vectorization engine (Phase 19) — despite the name/file location
@@ -34,7 +27,7 @@ export class PlaceholderProvider implements VectorizationProvider {
   constructor(private readonly wasm: RasterDecoderWasm) {}
 
   async vectorize(upload: Upload, fileBytes: ArrayBuffer, requestedPreset?: string | null): Promise<VectorizationResult> {
-    const imageData = await this.decode(upload.mimeType, fileBytes)
+    const imageData = await decodeImage(upload.mimeType, fileBytes, this.wasm)
     const analysis = analyzeImage(imageData)
     const preset = requestedPreset && isTracePresetName(requestedPreset) ? requestedPreset : analysis.recommendedPreset
 
@@ -49,29 +42,7 @@ export class PlaceholderProvider implements VectorizationProvider {
 
   /** Exposed for callers/tests that want the analysis+preset decision without re-running the full trace (see smoke tests). */
   async analyze(upload: Upload, fileBytes: ArrayBuffer): Promise<{ analysis: ImageAnalysis; imageData: ImageData }> {
-    const imageData = await this.decode(upload.mimeType, fileBytes)
+    const imageData = await decodeImage(upload.mimeType, fileBytes, this.wasm)
     return { analysis: analyzeImage(imageData), imageData }
-  }
-
-  private async decode(mimeType: string, fileBytes: ArrayBuffer): Promise<ImageData> {
-    try {
-      switch (mimeType) {
-        case 'image/png':
-          await initPngDecoder(this.wasm.png)
-          return await decodePng(fileBytes)
-        case 'image/jpeg':
-          await initJpegDecoder(this.wasm.jpeg)
-          return await decodeJpeg(fileBytes)
-        case 'image/webp':
-          await initWebpDecoder(this.wasm.webp)
-          return await decodeWebp(fileBytes)
-        default:
-          throw new UnsupportedMediaTypeError(`Cannot vectorize unsupported mime type "${mimeType}"`)
-      }
-    } catch (error) {
-      if (error instanceof UnsupportedMediaTypeError) throw error
-      const reason = error instanceof Error ? error.message : String(error)
-      throw new Error(`Failed to decode ${mimeType} image: ${reason}`)
-    }
   }
 }

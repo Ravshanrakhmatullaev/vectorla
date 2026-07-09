@@ -7,10 +7,12 @@ import { createUploadsRepository } from '../repositories/createUploadsRepository
 import { createConversionsRepository } from '../repositories/createConversionsRepository'
 import type { UploadsRepository } from '../repositories/UploadsRepository'
 import type { ConversionsRepository } from '../repositories/ConversionsRepository'
-import type { VectorizationProvider } from '../providers/VectorizationProvider'
-import { createVectorizationProvider } from '../providers/ProviderFactory'
+import type { RasterDecoderWasm } from '../providers/imageDecoder'
+import type { VectorizationResult } from '../providers/VectorizationProvider'
+import { createProviderByName } from '../providers/ProviderFactory'
+import { ImageAnalysisService, createImageAnalysisService } from './ImageAnalysisService'
 import { CreditsService, createCreditsService, calculateRequiredCredits } from './CreditsService'
-import { NotFoundError, ConflictError } from '../errors'
+import { NotFoundError, ConflictError, NotImplementedError } from '../errors'
 
 /** Result of looking up a job's conversion — see ConversionService.getConversionByJob. */
 export interface ConversionByJobResult {
@@ -28,7 +30,8 @@ export class ConversionService {
     private readonly uploads: UploadsRepository,
     private readonly storage: StorageService,
     private readonly conversions: ConversionsRepository,
-    private readonly provider: VectorizationProvider,
+    private readonly imageAnalysis: ImageAnalysisService,
+    private readonly decoderWasm: RasterDecoderWasm,
     private readonly credits: CreditsService,
   ) {}
 
@@ -37,10 +40,17 @@ export class ConversionService {
    * processing, verify the user can cover the credit cost (see
    * CreditsService.ensureEnoughCredits — throwing here leaves the job for
    * the Worker's queue() consumer to mark 'failed' with a clear message,
-   * same as any other processing error), vectorize via the configured
-   * provider (see providers/ProviderFactory.ts — only PlaceholderProvider
-   * actually works today), store the result in R2, save the Conversion row,
-   * debit the credits, then mark the job completed.
+   * same as any other processing error), analyze the image (Phase 21 — see
+   * ImageAnalysisService) and let ProviderSelector pick a provider for it,
+   * vectorize, store the result in R2, save the Conversion row, debit the
+   * credits, then mark the job completed.
+   *
+   * ProviderSelector can pick a provider that isn't built yet (Potrace/
+   * Vision — see ProviderSelector.ts's doc comment); if that provider throws
+   * NotImplementedError, this transparently falls back to the working
+   * ImageTracer engine ('placeholder') instead of failing the job — real
+   * uploads keep converting successfully today, while the selection logic
+   * is already real and needs no further changes once those providers land.
    *
    * Idempotent against queue redelivery: a message for an already-completed
    * job returns the existing conversion(s) as a no-op (no re-vectorizing, no
@@ -75,7 +85,20 @@ export class ConversionService {
 
     const fileStream = await this.storage.getFile(upload.storageKey)
     const fileBytes = await new Response(fileStream).arrayBuffer()
-    const result = await this.provider.vectorize(upload, fileBytes, job.preset)
+
+    const analysis = await this.imageAnalysis.analyze(upload, fileBytes)
+    let result: VectorizationResult
+    try {
+      const provider = createProviderByName(analysis.recommendedProvider, this.decoderWasm)
+      result = await provider.vectorize(upload, fileBytes, job.preset)
+    } catch (error) {
+      if (!(error instanceof NotImplementedError)) throw error
+      console.error(
+        `Provider "${analysis.recommendedProvider}" recommended for job "${job.id}" is not implemented yet — falling back to the ImageTracer engine`,
+      )
+      const fallbackProvider = createProviderByName('placeholder', this.decoderWasm)
+      result = await fallbackProvider.vectorize(upload, fileBytes, job.preset)
+    }
     const storageKey = `conversions/${job.userId}/${job.id}/output.${result.format}`
     await this.storage.storeFile(storageKey, result.data)
 
@@ -158,7 +181,8 @@ export function createConversionService(env: Env): ConversionService {
   const r2 = createR2Client(env.UPLOADS_BUCKET)
   const storage = new StorageService(r2, env.DOWNLOAD_URL_SECRET)
   const conversions = createConversionsRepository(env)
-  const provider = createVectorizationProvider(env)
+  const decoderWasm: RasterDecoderWasm = { png: env.PNG_DECODER_WASM, jpeg: env.JPEG_DECODER_WASM, webp: env.WEBP_DECODER_WASM }
+  const imageAnalysis = createImageAnalysisService(decoderWasm)
   const credits = createCreditsService(env)
-  return new ConversionService(jobs, uploads, storage, conversions, provider, credits)
+  return new ConversionService(jobs, uploads, storage, conversions, imageAnalysis, decoderWasm, credits)
 }

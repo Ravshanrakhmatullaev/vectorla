@@ -64,9 +64,19 @@ detail (e.g. both 413 and 415 are `VALIDATION_ERROR`).
 ### `POST /uploads`
 
 `multipart/form-data` with a `file` field (PNG/JPEG/WEBP) and optional `plan`
-field. Also auto-creates and enqueues a conversion `Job`.
+field. Also auto-creates and enqueues a conversion `Job`, and runs
+`ImageAnalysisService` (Phase 21) on the uploaded image — dimensions, color/
+transparency/grayscale stats, a `photo`/`illustration`/`logo` classification,
+the provider `ConversionService` will actually attempt (`recommendedProvider`),
+and rough `estimatedQuality`/`estimatedCredits`/`estimatedProcessingTimeMs`
+figures. This is computed fresh on each call (not persisted or re-fetchable
+later) — see `ImageAnalysisResult` in `src/services/ImageAnalysisService.ts`.
+Best-effort: if decoding fails here (rare — `validateFileSignature` already
+rejected anything with the wrong magic bytes), `analysis` is `null` and the
+upload/job still succeed as normal; the queue consumer still runs the same
+decode for real when it processes the job.
 
-`data: { upload: Upload, job: Job }` · `201`
+`data: { upload: Upload, job: Job, analysis: ImageAnalysis | null }` · `201`
 
 ### `POST /jobs`
 

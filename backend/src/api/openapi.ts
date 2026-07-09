@@ -54,6 +54,29 @@ export const OPENAPI_DOCUMENT = {
           completedAt: { type: 'string', format: 'date-time', nullable: true },
         },
       },
+      ImageAnalysis: {
+        type: 'object',
+        description: 'Phase 21 — computed once at upload time (see POST /uploads) and again internally before vectorization to pick a provider; not persisted.',
+        properties: {
+          width: { type: 'integer' },
+          height: { type: 'integer' },
+          aspectRatio: { type: 'number' },
+          colorCountEstimate: { type: 'integer' },
+          hasAlphaChannel: { type: 'boolean' },
+          hasTransparency: { type: 'boolean' },
+          dominantColors: { type: 'array', items: { type: 'string' }, description: 'Up to 5 approximate hex colors, most-frequent first.' },
+          edgeDensity: { type: 'number' },
+          noiseLevel: { type: 'number' },
+          isGrayscale: { type: 'boolean' },
+          imageType: { type: 'string', enum: ['photo', 'illustration', 'logo'] },
+          complexityScore: { type: 'number' },
+          recommendedProvider: { type: 'string', enum: ['placeholder', 'potrace', 'vision', 'openai'] },
+          recommendedTracePreset: { type: 'string', enum: ['logo', 'icon', 'sticker', 'illustration', 'photo'] },
+          estimatedQuality: { type: 'string', enum: ['high', 'medium', 'low'] },
+          estimatedCredits: { type: 'integer' },
+          estimatedProcessingTimeMs: { type: 'integer' },
+        },
+      },
       Conversion: {
         type: 'object',
         description: 'storageKey is intentionally never included — see Phase 17 security notes in backend/README.md.',
@@ -124,7 +147,23 @@ export const OPENAPI_DOCUMENT = {
                 schema: {
                   allOf: [
                     { type: 'object', properties: { success: { type: 'boolean', enum: [true] }, requestId: { type: 'string' } } },
-                    { type: 'object', properties: { data: { type: 'object', properties: { upload: { $ref: '#/components/schemas/Upload' }, job: { $ref: '#/components/schemas/Job' } } } } },
+                    {
+                      type: 'object',
+                      properties: {
+                        data: {
+                          type: 'object',
+                          properties: {
+                            upload: { $ref: '#/components/schemas/Upload' },
+                            job: { $ref: '#/components/schemas/Job' },
+                            analysis: {
+                              allOf: [{ $ref: '#/components/schemas/ImageAnalysis' }],
+                              nullable: true,
+                              description: 'Null if best-effort analysis failed for this upload (see API.md) — the upload/job themselves still succeeded.',
+                            },
+                          },
+                        },
+                      },
+                    },
                   ],
                 },
               },

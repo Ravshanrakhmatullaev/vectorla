@@ -14,8 +14,9 @@ import { InMemoryUploadsRepository } from '../repositories/InMemoryUploadsReposi
 import { InMemoryConversionsRepository } from '../repositories/InMemoryConversionsRepository'
 import { InMemoryCreditsRepository } from '../repositories/InMemoryCreditsRepository'
 import { CreditsService } from './CreditsService'
-import { PlaceholderProvider } from '../providers/PlaceholderProvider'
+import { createImageAnalysisService } from './ImageAnalysisService'
 import { loadDecoderWasmModules, createTestPng } from '../testSupport/wasmTestFixtures'
+import { encodeTestPng } from '../testSupport/rasterEncode'
 import type { QueueClient } from '../integrations/queue'
 import type { R2Client } from '../integrations/r2'
 import type { Upload } from '../types'
@@ -75,6 +76,26 @@ function createFakeR2Client(): R2Client & { objects: Map<string, ReadableStream 
   }
 }
 
+// Flat grayscale bands — few colors, low edge density, no transparency —
+// ProviderSelector (Phase 21) recommends 'potrace' for this shape, which is
+// still an unimplemented stub (see test 8d below).
+function makeGrayscaleImageData(): ImageData {
+  const size = 40
+  const shades = [20, 60, 100, 140, 180, 220]
+  const data = new Uint8ClampedArray(size * size * 4)
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = (y * size + x) * 4
+      const shade = shades[Math.min(shades.length - 1, Math.floor((x / size) * shades.length))] ?? 0
+      data[i] = shade
+      data[i + 1] = shade
+      data[i + 2] = shade
+      data[i + 3] = 255
+    }
+  }
+  return { width: size, height: size, data } as ImageData
+}
+
 async function seedUpload(uploads: InMemoryUploadsRepository, overrides: Partial<Upload> = {}): Promise<Upload> {
   const upload: Upload = {
     id: 'upload-1',
@@ -101,12 +122,14 @@ async function run() {
   const r2 = createFakeR2Client()
   const storage = new StorageService(r2, 'test-secret')
   const wasm = await loadDecoderWasmModules()
+  const imageAnalysisService = createImageAnalysisService(wasm)
   const service = new ConversionService(
     jobService,
     uploadsRepo,
     storage,
     conversionsRepo,
-    new PlaceholderProvider(wasm),
+    imageAnalysisService,
+    wasm,
     creditsService,
   )
 
@@ -282,6 +305,26 @@ async function run() {
   // otherwise the Phase 18 duplicate-job guard would hand back racingJob
   // (still 'processing') instead of letting a new job be created.
   await jobService.markFailed(racingJob.id, 'simulated: superseded by retry-safety test')
+
+  // 8d. Phase 21: ProviderSelector recommends 'potrace' for a monochrome
+  // logo, which is still an unimplemented stub (PotraceProvider throws
+  // NotImplementedError) — processJob must still succeed end-to-end by
+  // transparently falling back to the working ImageTracer engine, not fail
+  // the job just because the "ideal" provider isn't built yet.
+  await creditsService.grantMonthlyCredits('grayscale-user', 'free')
+  await seedUpload(uploadsRepo, {
+    id: 'upload-grayscale',
+    userId: 'grayscale-user',
+    storageKey: 'uploads/grayscale-user/upload-grayscale/logo.png',
+  })
+  await r2.put('uploads/grayscale-user/upload-grayscale/logo.png', await encodeTestPng(makeGrayscaleImageData()))
+  const grayscaleJob = await jobService.createJob({ userId: 'grayscale-user', uploadId: 'upload-grayscale' })
+  const grayscaleConversions = await service.processJob(grayscaleJob.id)
+  assertEqual(grayscaleConversions.length, 1, 'processJob still produces a conversion when the recommended provider is unimplemented')
+  assertEqual(grayscaleConversions[0]?.format, 'svg', 'fallback to ImageTracer produces a real svg, proving PotraceProvider was not actually used')
+  const grayscaleJobAfter = await jobService.getJob(grayscaleJob.id)
+  assertEqual(grayscaleJobAfter.status, 'completed', 'job completes successfully via the fallback, not failed')
+  console.log('PASS: processJob falls back to the ImageTracer engine when ProviderSelector recommends an unimplemented provider')
 
   // 9. Job whose upload no longer exists is rejected — run last, since it
   // deletes upload-1 out from under any later test that would need it.
