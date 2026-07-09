@@ -14,6 +14,7 @@ import { handleJobsRoute } from './routes/jobs'
 import { handleConversionsRoute } from './routes/conversions'
 import { handleDownloadRoute } from './routes/download'
 import { handleCreditsRoute } from './routes/credits'
+import { handleDevCreditsGrantRoute } from './routes/devCredits'
 import { handleHistoryRoute } from './routes/history'
 
 // Phase 21: every route lives under this version prefix — see backend/API.md.
@@ -33,6 +34,7 @@ async function routeRequest(url: URL, request: Request, env: Env, requestId: str
   if (path.startsWith('/jobs')) return handleJobsRoute(request, env, requestId)
   if (path.startsWith('/conversions')) return handleConversionsRoute(request, env, requestId)
   if (path === '/download') return handleDownloadRoute(request, env, requestId)
+  if (path === '/dev/credits/grant') return handleDevCreditsGrantRoute(request, env, requestId)
   if (path.startsWith('/credits')) return handleCreditsRoute(request, env, requestId)
   if (path.startsWith('/history')) return handleHistoryRoute(request, env, requestId)
   return mapErrorToResponse(new NotFoundError(`No route for "${url.pathname}"`), requestId)
