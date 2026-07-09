@@ -55,7 +55,8 @@ const LOW_RESOLUTION_PIXEL_COUNT = 64 * 64
 const HIGH_COMPLEXITY_FOR_FLAT_TRACING = 0.75
 const VERY_HIGH_COMPLEXITY = 0.85
 
-function toImageType(preset: TracePresetName): ImageType {
+/** Exported for reuse by pipeline/stages/ProviderSelectionStage.ts (Phase 25), which needs the same coarse classification without re-running the whole ImageAnalysisService. */
+export function toImageType(preset: TracePresetName): ImageType {
   if (preset === 'photo') return 'photo'
   if (preset === 'illustration') return 'illustration'
   return 'logo' // 'logo' | 'icon' | 'sticker' — all flat-color mark variants

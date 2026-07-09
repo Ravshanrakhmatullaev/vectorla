@@ -15,6 +15,7 @@ import { InMemoryConversionsRepository } from '../repositories/InMemoryConversio
 import { InMemoryCreditsRepository } from '../repositories/InMemoryCreditsRepository'
 import { CreditsService } from './CreditsService'
 import { createImageAnalysisService } from './ImageAnalysisService'
+import { PROFESSIONAL_TRACE_JOB_PRESET } from '../pipeline/ProfessionalTracePipeline'
 import { loadDecoderWasmModules, createTestPng } from '../testSupport/wasmTestFixtures'
 import { encodeTestPng } from '../testSupport/rasterEncode'
 import type { QueueClient } from '../integrations/queue'
@@ -327,6 +328,30 @@ async function run() {
   const grayscaleJobAfter = await jobService.getJob(grayscaleJob.id)
   assertEqual(grayscaleJobAfter.status, 'completed', 'job completes successfully')
   console.log('PASS: processJob succeeds end-to-end for a job ProviderSelector routes to the (now real) PotraceProvider')
+
+  // 8e. Phase 25: a job whose preset is exactly PROFESSIONAL_TRACE_JOB_PRESET
+  // runs the full preprocessing pipeline instead of the normal flow above —
+  // see pipeline/ProfessionalTracePipeline.ts and PROFESSIONAL_TRACE_JOB_PRESET's
+  // doc comment.
+  await creditsService.grantMonthlyCredits('professional-user', 'free')
+  await seedUpload(uploadsRepo, {
+    id: 'upload-professional',
+    userId: 'professional-user',
+    storageKey: 'uploads/professional-user/upload-professional/logo.png',
+  })
+  await r2.put('uploads/professional-user/upload-professional/logo.png', await createTestPng())
+  const professionalJob = await jobService.createJob({
+    userId: 'professional-user',
+    uploadId: 'upload-professional',
+    preset: PROFESSIONAL_TRACE_JOB_PRESET,
+  })
+  assertEqual(professionalJob.preset, PROFESSIONAL_TRACE_JOB_PRESET, 'job persists the professional-trace sentinel preset')
+  const professionalConversions = await service.processJob(professionalJob.id)
+  assertEqual(professionalConversions.length, 1, 'processJob produces a conversion for a Professional Trace job')
+  assertEqual(professionalConversions[0]?.format, 'svg', 'Professional Trace pipeline produces a real svg')
+  const professionalJobAfter = await jobService.getJob(professionalJob.id)
+  assertEqual(professionalJobAfter.status, 'completed', 'Professional Trace job completes successfully')
+  console.log('PASS: processJob runs the full preprocessing pipeline for a job with the professional-trace sentinel preset')
 
   // 9. Job whose upload no longer exists is rejected — run last, since it
   // deletes upload-1 out from under any later test that would need it.

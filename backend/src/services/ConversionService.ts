@@ -7,10 +7,11 @@ import { createUploadsRepository } from '../repositories/createUploadsRepository
 import { createConversionsRepository } from '../repositories/createConversionsRepository'
 import type { UploadsRepository } from '../repositories/UploadsRepository'
 import type { ConversionsRepository } from '../repositories/ConversionsRepository'
-import type { RasterDecoderWasm } from '../providers/imageDecoder'
+import { decodeImage, type RasterDecoderWasm } from '../providers/imageDecoder'
 import type { VectorizationResult } from '../providers/VectorizationProvider'
 import { createProviderByName } from '../providers/ProviderFactory'
 import { ImageAnalysisService, createImageAnalysisService } from './ImageAnalysisService'
+import { runProfessionalTrace, PROFESSIONAL_TRACE_JOB_PRESET } from '../pipeline/ProfessionalTracePipeline'
 import { CreditsService, createCreditsService, calculateRequiredCredits } from './CreditsService'
 import { NotFoundError, ConflictError, NotImplementedError } from '../errors'
 
@@ -52,6 +53,11 @@ export class ConversionService {
    * uploads keep converting successfully today, while the selection logic
    * is already real and needs no further changes once those providers land.
    *
+   * Phase 25: a job whose preset is exactly PROFESSIONAL_TRACE_JOB_PRESET
+   * runs the full preprocessing pipeline (pipeline/ProfessionalTracePipeline.ts)
+   * instead of the flow described above — see that constant's doc comment.
+   *
+
    * Idempotent against queue redelivery: a message for an already-completed
    * job returns the existing conversion(s) as a no-op (no re-vectorizing, no
    * double debit); a message for a job that's already 'processing' throws
@@ -86,24 +92,41 @@ export class ConversionService {
     const fileStream = await this.storage.getFile(upload.storageKey)
     const fileBytes = await new Response(fileStream).arrayBuffer()
 
-    const analysis = await this.imageAnalysis.analyze(upload, fileBytes)
-    // Phase 23: an explicit Job.preset (from a caller re-processing with a
-    // specific choice) always wins; otherwise the job gets the trace profile
-    // tracePresetSelector.ts actually recommends for this image, not just
-    // "whatever the provider decides on its own" (see PlaceholderProvider's
-    // own narrower fallback, only reached when requestedPreset is unset).
-    const preset = job.preset ?? analysis.recommendedTracePreset
     let result: VectorizationResult
-    try {
-      const provider = createProviderByName(analysis.recommendedProvider, this.decoderWasm)
-      result = await provider.vectorize(upload, fileBytes, preset)
-    } catch (error) {
-      if (!(error instanceof NotImplementedError)) throw error
-      console.error(
-        `Provider "${analysis.recommendedProvider}" recommended for job "${job.id}" is not implemented yet — falling back to the ImageTracer engine`,
+    if (job.preset === PROFESSIONAL_TRACE_JOB_PRESET) {
+      // Phase 25: Professional Trace runs the full preprocessing pipeline
+      // (pipeline/ProfessionalTracePipeline.ts) instead of the normal Quick
+      // Trace flow below. Every other preset value (including unset) falls
+      // through to that unchanged flow — see PROFESSIONAL_TRACE_JOB_PRESET's
+      // doc comment for why this needs no route/schema changes to be safe.
+      const imageData = await decodeImage(upload.mimeType, fileBytes, this.decoderWasm)
+      const pipelineResult = await runProfessionalTrace(imageData)
+      console.log(
+        `[professional-trace] job "${job.id}": provider=${pipelineResult.provider} preset=${pipelineResult.tracePreset} ` +
+          `totalTimeMs=${pipelineResult.totalTimeMs.toFixed(1)} stages=[${pipelineResult.stageTimings
+            .map((t) => `${t.name}:${t.enabled ? `${t.durationMs.toFixed(1)}ms` : 'skipped'}`)
+            .join(', ')}]`,
       )
-      const fallbackProvider = createProviderByName('placeholder', this.decoderWasm)
-      result = await fallbackProvider.vectorize(upload, fileBytes, preset)
+      result = { data: new TextEncoder().encode(pipelineResult.svg).buffer as ArrayBuffer, format: 'svg' }
+    } else {
+      const analysis = await this.imageAnalysis.analyze(upload, fileBytes)
+      // Phase 23: an explicit Job.preset (from a caller re-processing with a
+      // specific choice) always wins; otherwise the job gets the trace profile
+      // tracePresetSelector.ts actually recommends for this image, not just
+      // "whatever the provider decides on its own" (see PlaceholderProvider's
+      // own narrower fallback, only reached when requestedPreset is unset).
+      const preset = job.preset ?? analysis.recommendedTracePreset
+      try {
+        const provider = createProviderByName(analysis.recommendedProvider, this.decoderWasm)
+        result = await provider.vectorize(upload, fileBytes, preset)
+      } catch (error) {
+        if (!(error instanceof NotImplementedError)) throw error
+        console.error(
+          `Provider "${analysis.recommendedProvider}" recommended for job "${job.id}" is not implemented yet — falling back to the ImageTracer engine`,
+        )
+        const fallbackProvider = createProviderByName('placeholder', this.decoderWasm)
+        result = await fallbackProvider.vectorize(upload, fileBytes, preset)
+      }
     }
     const storageKey = `conversions/${job.userId}/${job.id}/output.${result.format}`
     await this.storage.storeFile(storageKey, result.data)

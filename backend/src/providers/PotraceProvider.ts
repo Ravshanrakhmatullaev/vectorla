@@ -27,7 +27,7 @@ import { imageDataToBitmap, traceBitmap, getSVG, calculateAutoThreshold, type Po
  *     curves) — since one config has to serve both, we don't chase either
  *     extreme.
  */
-const POTRACE_OPTIONS: Partial<PotraceOptions> = {
+export const POTRACE_OPTIONS: Partial<PotraceOptions> = {
   turnpolicy: 'minority',
   turdsize: 3,
   optcurve: true,
