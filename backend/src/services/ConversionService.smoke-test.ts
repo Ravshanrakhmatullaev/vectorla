@@ -77,8 +77,8 @@ function createFakeR2Client(): R2Client & { objects: Map<string, ReadableStream 
 }
 
 // Flat grayscale bands — few colors, low edge density, no transparency —
-// ProviderSelector (Phase 21) recommends 'potrace' for this shape, which is
-// still an unimplemented stub (see test 8d below).
+// ProviderSelector (Phase 21) recommends 'potrace' for this shape (see test
+// 8d below).
 function makeGrayscaleImageData(): ImageData {
   const size = 40
   const shades = [20, 60, 100, 140, 180, 220]
@@ -306,11 +306,13 @@ async function run() {
   // (still 'processing') instead of letting a new job be created.
   await jobService.markFailed(racingJob.id, 'simulated: superseded by retry-safety test')
 
-  // 8d. Phase 21: ProviderSelector recommends 'potrace' for a monochrome
-  // logo, which is still an unimplemented stub (PotraceProvider throws
-  // NotImplementedError) — processJob must still succeed end-to-end by
-  // transparently falling back to the working ImageTracer engine, not fail
-  // the job just because the "ideal" provider isn't built yet.
+  // 8d. ProviderSelector recommends 'potrace' for a monochrome logo.
+  // PotraceProvider is a real implementation as of Phase 24 (previously an
+  // unimplemented stub this test exercised the NotImplementedError->
+  // ImageTracer fallback through) — it now also internally compares its own
+  // trace against ImageTracer's and keeps whichever measures objectively
+  // better (see PotraceProvider.smoke-test.ts for that comparison in
+  // detail); either way processJob must succeed end-to-end.
   await creditsService.grantMonthlyCredits('grayscale-user', 'free')
   await seedUpload(uploadsRepo, {
     id: 'upload-grayscale',
@@ -320,11 +322,11 @@ async function run() {
   await r2.put('uploads/grayscale-user/upload-grayscale/logo.png', await encodeTestPng(makeGrayscaleImageData()))
   const grayscaleJob = await jobService.createJob({ userId: 'grayscale-user', uploadId: 'upload-grayscale' })
   const grayscaleConversions = await service.processJob(grayscaleJob.id)
-  assertEqual(grayscaleConversions.length, 1, 'processJob still produces a conversion when the recommended provider is unimplemented')
-  assertEqual(grayscaleConversions[0]?.format, 'svg', 'fallback to ImageTracer produces a real svg, proving PotraceProvider was not actually used')
+  assertEqual(grayscaleConversions.length, 1, 'processJob produces a conversion for a job ProviderSelector routes to potrace')
+  assertEqual(grayscaleConversions[0]?.format, 'svg', 'produces a real svg')
   const grayscaleJobAfter = await jobService.getJob(grayscaleJob.id)
-  assertEqual(grayscaleJobAfter.status, 'completed', 'job completes successfully via the fallback, not failed')
-  console.log('PASS: processJob falls back to the ImageTracer engine when ProviderSelector recommends an unimplemented provider')
+  assertEqual(grayscaleJobAfter.status, 'completed', 'job completes successfully')
+  console.log('PASS: processJob succeeds end-to-end for a job ProviderSelector routes to the (now real) PotraceProvider')
 
   // 9. Job whose upload no longer exists is rejected — run last, since it
   // deletes upload-1 out from under any later test that would need it.

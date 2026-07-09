@@ -263,6 +263,26 @@ function sketch(): ImageData {
   })
 }
 
+// 15. Stamp — a rubber ink-stamp impression: a circular double ring plus a
+// horizontal text-like bar, single dark ink color, with modest random gaps
+// in ink coverage to simulate uneven/worn stamping (Phase 24 — PotraceProvider).
+function stamp(): ImageData {
+  const size = 160
+  const rng = makeRng(21)
+  return makeImageData(size, size, (x, y) => {
+    const cx = size / 2
+    const cy = size / 2
+    const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2)
+    const onOuterRing = dist > size * 0.38 && dist < size * 0.44
+    const onInnerRing = dist > size * 0.22 && dist < size * 0.26
+    const onText = Math.abs(y - cy) < 6 && x > size * 0.3 && x < size * 0.7
+    const ink = onOuterRing || onInnerRing || onText
+    if (!ink) return [255, 255, 255, 255]
+    const worn = rng() < 0.12
+    return worn ? [255, 255, 255, 255] : [40, 20, 20, 255]
+  })
+}
+
 export function buildQualityTestImages(): QualityTestImage[] {
   return [
     { id: 'simple-logo', label: 'Simple logo (flat, hard edges)', category: 'simple logo', mimeType: 'image/png', imageData: simpleLogo() },
@@ -279,5 +299,6 @@ export function buildQualityTestImages(): QualityTestImage[] {
     { id: 'qr-code', label: 'QR code (dense black/white module grid)', category: 'QR code', mimeType: 'image/png', imageData: qrCode() },
     { id: 'blueprint', label: 'Blueprint (thin technical line-work)', category: 'blueprint', mimeType: 'image/png', imageData: blueprint() },
     { id: 'sketch', label: 'Sketch (grayscale, pencil-texture noise)', category: 'sketch', mimeType: 'image/png', imageData: sketch() },
+    { id: 'stamp', label: 'Stamp (worn ink-stamp impression)', category: 'stamp', mimeType: 'image/png', imageData: stamp() },
   ]
 }

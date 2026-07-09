@@ -18,7 +18,7 @@ export function createProviderByName(name: VectorizationProviderName, decoderWas
     case 'placeholder':
       return new PlaceholderProvider(decoderWasm)
     case 'potrace':
-      return new PotraceProvider()
+      return new PotraceProvider(decoderWasm)
     case 'vision':
       return new VisionProvider()
     case 'openai':

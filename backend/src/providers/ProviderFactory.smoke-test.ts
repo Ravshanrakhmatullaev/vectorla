@@ -1,7 +1,9 @@
-// Local smoke test for the provider architecture: only PlaceholderProvider
-// actually works, the rest (Potrace/Vision/OpenAI) throw "Not implemented",
-// and ProviderFactory selects between them based on env.VECTORIZATION_PROVIDER
-// (falling back to "placeholder" for an unset/unrecognized value).
+// Local smoke test for the provider architecture: PlaceholderProvider and
+// (Phase 24) PotraceProvider both actually work, Vision/OpenAI still throw
+// "Not implemented", and ProviderFactory selects between them based on
+// env.VECTORIZATION_PROVIDER (falling back to "placeholder" for an
+// unset/unrecognized value). See PotraceProvider.smoke-test.ts for
+// PotraceProvider's own dedicated coverage.
 //
 // Run with: npx tsx src/providers/ProviderFactory.smoke-test.ts (from inside backend/)
 import { createVectorizationProvider } from './ProviderFactory'
@@ -76,14 +78,14 @@ async function run() {
   assertTrue(result.data.byteLength > 0, 'PlaceholderProvider produces non-empty output')
   console.log('PASS: PlaceholderProvider.vectorize produces real traced SVG output')
 
-  // 2. The other three all throw "Not implemented"
-  await assertRejects(
-    () => new PotraceProvider().vectorize(fakeUpload, new ArrayBuffer(0)),
-    /Not implemented/,
-    'PotraceProvider',
-  )
-  console.log('PASS: PotraceProvider.vectorize throws "Not implemented"')
+  // 2. PotraceProvider (Phase 24) also actually works now.
+  const potrace = new PotraceProvider(wasm)
+  const potraceResult = await potrace.vectorize(pngUpload, await createTestPng())
+  assertEqual(potraceResult.format, 'svg', 'PotraceProvider produces an svg')
+  assertTrue(potraceResult.data.byteLength > 0, 'PotraceProvider produces non-empty output')
+  console.log('PASS: PotraceProvider.vectorize produces real traced SVG output')
 
+  // Vision/OpenAI still throw "Not implemented".
   await assertRejects(
     () => new VisionProvider().vectorize(fakeUpload, new ArrayBuffer(0)),
     /Not implemented/,

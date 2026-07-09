@@ -41,6 +41,15 @@ export const QUALITY_BUDGETS: Record<string, QualityBudget> = {
   // does cost curve smoothness; that's an accepted, measured trade-off, not
   // an oversight.
   sketch: { hasCurvedSilhouette: false, maxSvgBytes: 40_000, maxPathCount: 100, maxNodeCount: 1500 },
+  // Phase 24 — a worn ink stamp isn't one of ImageTracer's 9 tuned named
+  // profiles (see tracePresets.ts); this harness always runs
+  // PlaceholderProvider/ImageTracer regardless of what production's
+  // ProviderSelector would actually pick (Potrace, for monochrome content
+  // like this), so this budget is deliberately loose — it only guards
+  // against a true explosion, not "isn't as good as Potrace". The
+  // meaningful comparison (and where Potrace is expected to measurably
+  // win) lives in PotraceProvider.smoke-test.ts.
+  stamp: { hasCurvedSilhouette: false, maxSvgBytes: 80_000, maxPathCount: 350, maxNodeCount: 3500 },
 }
 
 export interface QualityResult {

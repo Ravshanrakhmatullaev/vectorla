@@ -8,10 +8,10 @@ export interface SvgQualityMetrics {
   pathCount: number
   svgSizeBytes: number
   totalPathDataBytes: number
-  /** Quadratic-curve ("Q"/"q") commands as a fraction of all draw commands ("L"/"l"/"Q"/"q") — low values on a round source mean edges are being faceted into straight segments instead of traced smoothly. */
+  /** Curve commands ("Q"/"q" quadratic, "C"/"c" cubic — Phase 24: PotraceProvider emits cubic beziers, ImageTracer emits quadratic, so both must count as "curved") as a fraction of all draw commands — low values on a round source mean edges are being faceted into straight segments instead of traced smoothly. */
   curveCommandRatio: number
   averagePathDataBytes: number
-  /** Total M/L/Q command count across every path — a proxy for total coordinate/control points (Phase 23), distinct from pathCount (number of `<path>` elements). */
+  /** Total M/L/Q/C command count across every path — a proxy for total coordinate/control points (Phase 23), distinct from pathCount (number of `<path>` elements). */
   nodeCount: number
 }
 
@@ -25,7 +25,11 @@ export function measureSvgQuality(svg: string): SvgQualityMetrics {
   const totalPathDataBytes = pathDataList.reduce((sum, d) => sum + d.length, 0)
   const moveCommands = pathDataList.reduce((sum, d) => sum + (d.match(/[Mm]/g)?.length ?? 0), 0)
   const lineCommands = pathDataList.reduce((sum, d) => sum + (d.match(/[Ll]/g)?.length ?? 0), 0)
-  const curveCommands = pathDataList.reduce((sum, d) => sum + (d.match(/[Qq]/g)?.length ?? 0), 0)
+  // Potrace (Phase 24 — see providers/PotraceProvider.ts) emits cubic ("C")
+  // beziers; ImageTracer emits quadratic ("Q") — both represent a curved
+  // segment, so both count toward curveCommands for a fair cross-engine
+  // comparison.
+  const curveCommands = pathDataList.reduce((sum, d) => sum + (d.match(/[QqCc]/g)?.length ?? 0), 0)
   const totalCommands = lineCommands + curveCommands
 
   return {
@@ -53,7 +57,11 @@ export function detectProblems(metrics: SvgQualityMetrics, budget: QualityBudget
   const problems: ProblemFlag[] = []
 
   if (metrics.pathCount > budget.maxPathCount) problems.push('too-many-paths')
-  if (metrics.pathCount < 2) problems.push('missing-details')
+  // nodeCount, not pathCount: Potrace (Phase 24) legitimately combines every
+  // subpath into a single <path fill-rule="evenodd"> element, so a healthy
+  // Potrace result can have pathCount:1 — path-element count is engine-
+  // dependent, node count isn't.
+  if (metrics.nodeCount < 4) problems.push('missing-details')
   if (budget.hasCurvedSilhouette && metrics.curveCommandRatio < 0.15) problems.push('jagged-edges')
   // Many tiny path fragments (low average bytes/path at a non-trivial count)
   // is the structural signature of speckle noise rather than clean shapes.
