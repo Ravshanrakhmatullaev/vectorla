@@ -62,6 +62,16 @@ export const QUICK_TRACE_CONFIG: PipelineStageConfig = {
  */
 export const PROFESSIONAL_TRACE_JOB_PRESET = 'professional'
 
+/**
+ * Phase 26: how many times CreditsService.calculateRequiredCredits' base
+ * cost is charged for a Professional Trace job, on top of Quick Trace's
+ * normal 1x — see ConversionService.processJob. Mirrors the multiplier
+ * ImageAnalysisService already uses to *estimate* AI-tier provider cost
+ * (AI_PROVIDER_CREDIT_MULTIPLIER), kept as its own constant here since that
+ * one is about provider recommendation, not what this specific preset bills.
+ */
+export const PROFESSIONAL_TRACE_CREDIT_MULTIPLIER = 2
+
 export interface PipelineResult {
   svg: string
   provider: VectorizationProviderName

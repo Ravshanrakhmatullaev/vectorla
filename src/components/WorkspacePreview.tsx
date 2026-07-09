@@ -34,14 +34,14 @@ import { cn } from '@/utils/cn'
 
 const backendConfigured = isBackendConfigured()
 
-// Mirrors backend's CREDIT_COST_BASE_CONVERSION (1) * AI_PROVIDER_CREDIT_MULTIPLIER
-// (2) — see backend/src/services/ImageAnalysisService.ts. A fixed display
-// figure (Professional Trace's cost doesn't vary per image), not derived
-// from analysis.estimatedCredits (which only reflects the *recommended*
-// provider for this specific image, not "what Professional Trace costs").
+// Mirrors backend's PROFESSIONAL_TRACE_CREDIT_MULTIPLIER (2) — see
+// backend/src/pipeline/ProfessionalTracePipeline.ts and
+// ConversionService.processJob, which actually bills this rate for a
+// PROFESSIONAL_TRACE_PRESET job (Phase 26). A fixed display figure
+// (Professional Trace's cost doesn't vary per image), not derived from
+// analysis.estimatedCredits (which only reflects the *recommended* provider
+// for this specific image, not "what Professional Trace costs").
 const PROFESSIONAL_TRACE_CREDITS = 2
-
-type TraceMode = 'quick' | 'professional'
 
 const IMAGE_TYPE_ICONS = { photo: Camera, illustration: Palette, logo: ImageIcon } as const
 
@@ -63,11 +63,10 @@ export function WorkspacePreview() {
   const { splitPct, containerRef, containerHandlers, onHandleKeyDown } = useCompareSlider(55)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { t } = useLanguage()
-  const { state: uploadState, analysis, upload, retry, reset } = useUploadFlow()
+  const { state: uploadState, analysis, traceMode: selectedMode, upload, retry, reset, selectTraceMode } = useUploadFlow()
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [vectorizedUrl, setVectorizedUrl] = useState<string | null>(null)
   const [resultFetchError, setResultFetchError] = useState<string | null>(null)
-  const [selectedMode, setSelectedMode] = useState<TraceMode>('quick')
   const fetchedConversionIdRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -81,16 +80,6 @@ export function WorkspacePreview() {
       if (vectorizedUrl) URL.revokeObjectURL(vectorizedUrl)
     }
   }, [vectorizedUrl])
-
-  // Task 3: auto-highlight Professional Trace when the analysis recommends
-  // an AI-tier provider ('vision'/'openai' — currently only photographs, see
-  // ProviderSelector.ts) — still just a UI selection, since AI itself isn't
-  // implemented yet (see the "coming soon" note rendered below).
-  useEffect(() => {
-    if (!analysis) return
-    const isAiRecommended = analysis.recommendedProvider === 'vision' || analysis.recommendedProvider === 'openai'
-    setSelectedMode(isAiRecommended ? 'professional' : 'quick')
-  }, [analysis])
 
   const fetchResult = useCallback(async (downloadUrl: string) => {
     setResultFetchError(null)
@@ -143,7 +132,6 @@ export function WorkspacePreview() {
     if (vectorizedUrl) URL.revokeObjectURL(vectorizedUrl)
     setVectorizedUrl(null)
     setResultFetchError(null)
-    setSelectedMode('quick')
     fetchedConversionIdRef.current = null
   }
 
@@ -513,7 +501,7 @@ export function WorkspacePreview() {
                   <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <button
                       type="button"
-                      onClick={() => setSelectedMode('quick')}
+                      onClick={() => void selectTraceMode('quick')}
                       aria-pressed={selectedMode === 'quick'}
                       className={cn(
                         'rounded-lg border p-2.5 text-left transition-colors',
@@ -534,7 +522,7 @@ export function WorkspacePreview() {
 
                     <button
                       type="button"
-                      onClick={() => setSelectedMode('professional')}
+                      onClick={() => void selectTraceMode('professional')}
                       aria-pressed={selectedMode === 'professional'}
                       className={cn(
                         'relative rounded-lg border p-2.5 text-left transition-colors',
@@ -565,7 +553,7 @@ export function WorkspacePreview() {
                   {selectedMode === 'professional' && (
                     <p className="mt-2 flex items-start gap-1.5 text-[11px] text-[var(--ink-faint)]">
                       <Info size={12} className="mt-0.5 flex-none text-[var(--accent)]" />
-                      {t.workspace.analysis.professionalComingSoonNote}
+                      {t.workspace.analysis.professionalTraceNote}
                     </p>
                   )}
                 </div>

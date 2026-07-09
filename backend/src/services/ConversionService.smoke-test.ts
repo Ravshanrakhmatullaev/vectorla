@@ -353,6 +353,15 @@ async function run() {
   assertEqual(professionalJobAfter.status, 'completed', 'Professional Trace job completes successfully')
   console.log('PASS: processJob runs the full preprocessing pipeline for a job with the professional-trace sentinel preset')
 
+  // 8f. Phase 26: Professional Trace bills PROFESSIONAL_TRACE_CREDIT_MULTIPLIER
+  // (2x) the base cost, not the plain 1x Quick Trace charges.
+  const professionalBalance = await creditsService.getBalance('professional-user')
+  assertEqual(professionalBalance.balance, 8, 'Professional Trace debits 2 credits (10 granted - 2), not the 1-credit Quick Trace rate')
+  const professionalTransactions = await creditsRepo.findTransactionsByUserId('professional-user')
+  const professionalDebit = professionalTransactions.find((t) => t.type === 'debit')
+  assertEqual(professionalDebit?.amount, 2, 'Professional Trace debit transaction amount is 2 credits')
+  console.log('PASS: processJob bills Professional Trace jobs at the 2x credit rate')
+
   // 9. Job whose upload no longer exists is rejected — run last, since it
   // deletes upload-1 out from under any later test that would need it.
   const orphanJob = await jobService.createJob({ userId: 'user-1', uploadId: 'upload-1' })

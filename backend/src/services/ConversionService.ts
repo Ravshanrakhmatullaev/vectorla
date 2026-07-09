@@ -11,7 +11,11 @@ import { decodeImage, type RasterDecoderWasm } from '../providers/imageDecoder'
 import type { VectorizationResult } from '../providers/VectorizationProvider'
 import { createProviderByName } from '../providers/ProviderFactory'
 import { ImageAnalysisService, createImageAnalysisService } from './ImageAnalysisService'
-import { runProfessionalTrace, PROFESSIONAL_TRACE_JOB_PRESET } from '../pipeline/ProfessionalTracePipeline'
+import {
+  runProfessionalTrace,
+  PROFESSIONAL_TRACE_JOB_PRESET,
+  PROFESSIONAL_TRACE_CREDIT_MULTIPLIER,
+} from '../pipeline/ProfessionalTracePipeline'
 import { CreditsService, createCreditsService, calculateRequiredCredits } from './CreditsService'
 import { NotFoundError, ConflictError, NotImplementedError } from '../errors'
 
@@ -86,14 +90,18 @@ export class ConversionService {
 
     // TODO(backend): formatCount/printReady are hardcoded until Job carries
     // the caller's requested formats/print-ready flag — see calculateRequiredCredits.
-    const requiredCredits = calculateRequiredCredits(1, false)
+    // Phase 26: Professional Trace bills PROFESSIONAL_TRACE_CREDIT_MULTIPLIER
+    // times the base cost — it runs real extra preprocessing work, not just
+    // a different default preset.
+    const isProfessionalTrace = job.preset === PROFESSIONAL_TRACE_JOB_PRESET
+    const requiredCredits = calculateRequiredCredits(1, false) * (isProfessionalTrace ? PROFESSIONAL_TRACE_CREDIT_MULTIPLIER : 1)
     await this.credits.ensureEnoughCredits(job.userId, requiredCredits)
 
     const fileStream = await this.storage.getFile(upload.storageKey)
     const fileBytes = await new Response(fileStream).arrayBuffer()
 
     let result: VectorizationResult
-    if (job.preset === PROFESSIONAL_TRACE_JOB_PRESET) {
+    if (isProfessionalTrace) {
       // Phase 25: Professional Trace runs the full preprocessing pipeline
       // (pipeline/ProfessionalTracePipeline.ts) instead of the normal Quick
       // Trace flow below. Every other preset value (including unset) falls

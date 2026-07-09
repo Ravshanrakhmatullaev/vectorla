@@ -6,6 +6,7 @@ import { createJobsRepository } from '../repositories/createJobsRepository'
 import { createUploadsRepository } from '../repositories/createUploadsRepository'
 import type { JobsRepository } from '../repositories/JobsRepository'
 import type { UploadsRepository } from '../repositories/UploadsRepository'
+import { CreditsService, createCreditsService } from './CreditsService'
 import { NotFoundError, ValidationError, ForbiddenError } from '../errors'
 
 export interface CreateJobInput {
@@ -13,6 +14,15 @@ export interface CreateJobInput {
   uploadId: string
   preset?: string
   settings?: Record<string, number>
+  /**
+   * Phase 26: id of a completed job for the same upload that this job
+   * replaces (e.g. switching Quick Trace -> Professional Trace after Quick
+   * already finished). If that job was billed, its debit is refunded before
+   * this new job is created — so re-choosing how an upload is traced is
+   * never additive on top of a prior charge. Ignored if the referenced job
+   * doesn't belong to the caller, isn't for this upload, or isn't completed.
+   */
+  supersedesJobId?: string
 }
 
 export class JobService {
@@ -20,6 +30,9 @@ export class JobService {
     private readonly repository: JobsRepository,
     private readonly uploads: UploadsRepository,
     private readonly queueService: QueueService,
+    // Optional so existing call sites (and JobService's own smoke test) that
+    // never pass a supersedesJobId don't need to wire this up.
+    private readonly credits?: CreditsService,
   ) {}
 
   /**
@@ -41,6 +54,18 @@ export class JobService {
 
     const active = await this.repository.findActiveByUploadId(input.uploadId)
     if (active) return active
+
+    if (input.supersedesJobId && this.credits) {
+      const superseded = await this.repository.findById(input.supersedesJobId)
+      if (
+        superseded &&
+        superseded.userId === input.userId &&
+        superseded.uploadId === input.uploadId &&
+        superseded.status === 'completed'
+      ) {
+        await this.credits.refundJobDebit(input.userId, superseded.id, `Superseded by a new trace of upload "${input.uploadId}"`)
+      }
+    }
 
     const now = new Date().toISOString()
     const job: Job = {
@@ -114,5 +139,6 @@ export function createJobService(env: Env): JobService {
   const uploads = createUploadsRepository(env)
   const queueClient = createQueueClient(env.CONVERSION_QUEUE)
   const queueService = new QueueService(queueClient)
-  return new JobService(repository, uploads, queueService)
+  const credits = createCreditsService(env)
+  return new JobService(repository, uploads, queueService, credits)
 }

@@ -194,7 +194,7 @@ export interface Translation {
       professionalTraceTitle: string
       professionalTraceDescription: string
       qualityImprovement: Record<EstimatedQuality, string>
-      professionalComingSoonNote: string
+      professionalTraceNote: string
       creditsSuffix: string
     }
   }
@@ -357,13 +357,13 @@ export const translations: Record<Language, Translation> = {
         quickTraceTitle: 'Quick Trace',
         quickTraceDescription: 'Fast · 1 credit · our free tracing engine',
         professionalTraceTitle: 'Professional Trace ⭐',
-        professionalTraceDescription: 'Highest quality · AI pipeline (coming soon)',
+        professionalTraceDescription: 'Highest quality · full preprocessing pipeline',
         qualityImprovement: {
           high: 'Minor quality improvement expected',
           medium: 'Noticeable quality improvement expected',
           low: 'Major quality improvement expected',
         },
-        professionalComingSoonNote: "Professional Trace (AI) isn't available yet — this image will be processed with Quick Trace.",
+        professionalTraceNote: 'Professional Trace runs extra preprocessing (noise reduction, background cleanup, contrast, color, edges) for a cleaner result — it takes a little longer.',
         creditsSuffix: 'credits',
       },
     },
@@ -702,13 +702,13 @@ export const translations: Record<Language, Translation> = {
         quickTraceTitle: 'Tezkor trace',
         quickTraceDescription: 'Tez · 1 kredit · bizning bepul trace dvigatelimiz',
         professionalTraceTitle: 'Professional Trace ⭐',
-        professionalTraceDescription: 'Eng yuqori sifat · AI pipeline (tez orada)',
+        professionalTraceDescription: 'Eng yuqori sifat · to‘liq qayta ishlash pipeline',
         qualityImprovement: {
           high: 'Sifat kam darajada yaxshilanadi',
           medium: 'Sifat sezilarli darajada yaxshilanadi',
           low: 'Sifat sezilarli darajada oshadi',
         },
-        professionalComingSoonNote: "Professional Trace (AI) hali mavjud emas — bu rasm Tezkor Trace bilan qayta ishlanadi.",
+        professionalTraceNote: "Professional Trace qo'shimcha qayta ishlashni bajaradi (shovqinni kamaytirish, fonni tozalash, kontrast, rang, chetlarni) — bu biroz ko'proq vaqt oladi.",
         creditsSuffix: 'kredit',
       },
     },
@@ -1058,13 +1058,13 @@ export const translations: Record<Language, Translation> = {
         quickTraceTitle: 'Быстрая трассировка',
         quickTraceDescription: 'Быстро · 1 кредит · наш бесплатный движок трассировки',
         professionalTraceTitle: 'Профессиональная трассировка ⭐',
-        professionalTraceDescription: 'Максимальное качество · AI pipeline (скоро)',
+        professionalTraceDescription: 'Максимальное качество · полный конвейер обработки',
         qualityImprovement: {
           high: 'Ожидается небольшое улучшение качества',
           medium: 'Ожидается заметное улучшение качества',
           low: 'Ожидается значительное улучшение качества',
         },
-        professionalComingSoonNote: 'Профессиональная трассировка (ИИ) пока недоступна — это изображение будет обработано в режиме Быстрой трассировки.',
+        professionalTraceNote: 'Профессиональная трассировка выполняет дополнительную обработку (шумоподавление, очистка фона, контраст, цвет, края) — это займёт немного больше времени.',
         creditsSuffix: 'кредитов',
       },
     },

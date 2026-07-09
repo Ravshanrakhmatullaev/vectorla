@@ -123,6 +123,11 @@ export function apiPostForm<T>(path: string, form: FormData): Promise<T> {
   return request<T>(path, { method: 'POST', body: form })
 }
 
+export function apiPostJson<T>(path: string, body: unknown): Promise<T> {
+  const headers = new Headers({ 'Content-Type': 'application/json' })
+  return request<T>(path, { method: 'POST', headers, body: JSON.stringify(body) })
+}
+
 /**
  * Raw (non-JSON-envelope) fetch, for the one endpoint that streams bytes on
  * success — GET /download (see backend/API.md). Still attaches the same auth

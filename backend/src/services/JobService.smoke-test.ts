@@ -4,8 +4,10 @@
 // Run with: npx tsx src/services/JobService.smoke-test.ts (from inside backend/)
 import { JobService } from './JobService'
 import { QueueService } from './QueueService'
+import { CreditsService } from './CreditsService'
 import { InMemoryJobsRepository } from '../repositories/InMemoryJobsRepository'
 import { InMemoryUploadsRepository } from '../repositories/InMemoryUploadsRepository'
+import { InMemoryCreditsRepository } from '../repositories/InMemoryCreditsRepository'
 import type { QueueClient, ConversionQueueMessage } from '../integrations/queue'
 import type { Upload } from '../types'
 
@@ -136,6 +138,56 @@ async function run() {
     firstRejected?.status === 'rejected' && firstRejected.reason instanceof Error ? firstRejected.reason.message : ''
   assertTrue(/modified concurrently/.test(rejectionMessage), 'the losing call fails with a conflict, not a silent overwrite')
   console.log('PASS: concurrent job status transitions are optimistically locked — only one wins')
+
+  // 8. Phase 26: supersedesJobId refunds a completed job's debit before a
+  // replacement job is created — e.g. switching Quick Trace -> Professional
+  // Trace after Quick already finished must not stack charges.
+  const creditsRepo = new InMemoryCreditsRepository()
+  const creditsService = new CreditsService(creditsRepo)
+  const serviceWithCredits = new JobService(jobsRepo, uploadsRepo, queueService, creditsService)
+
+  await seedUpload(uploadsRepo, { id: 'upload-2', userId: 'user-2' })
+  await creditsService.grantMonthlyCredits('user-2', 'free')
+
+  const quickJob = await serviceWithCredits.createJob({ userId: 'user-2', uploadId: 'upload-2' })
+  await serviceWithCredits.markProcessing(quickJob.id)
+  await creditsService.debitCredits('user-2', 1, 'Quick Trace conversion', quickJob.id)
+  await serviceWithCredits.markCompleted(quickJob.id)
+  assertEqual((await creditsService.getBalance('user-2')).balance, 9, 'balance after the Quick Trace debit')
+
+  const professionalJob = await serviceWithCredits.createJob({
+    userId: 'user-2',
+    uploadId: 'upload-2',
+    preset: 'professional',
+    supersedesJobId: quickJob.id,
+  })
+  assertTrue(professionalJob.id !== quickJob.id, 'supersedesJobId still creates a distinct new job')
+  assertEqual(
+    (await creditsService.getBalance('user-2')).balance,
+    10,
+    "the superseded Quick Trace job's debit is refunded before the new job is created",
+  )
+  console.log('PASS: createJob refunds a superseded completed job\'s debit before creating the replacement job')
+
+  // 8b. Idempotent: re-requesting with the same supersedesJobId (e.g. a
+  // client retry) must not refund twice.
+  await serviceWithCredits.markFailed(professionalJob.id, 'simulated: forcing upload-2 back to no-active-job so a third createJob is possible')
+  await serviceWithCredits.createJob({
+    userId: 'user-2',
+    uploadId: 'upload-2',
+    preset: 'professional',
+    supersedesJobId: quickJob.id,
+  })
+  assertEqual((await creditsService.getBalance('user-2')).balance, 10, 'a repeated supersedesJobId does not refund a second time')
+  console.log('PASS: refundJobDebit (via supersedesJobId) is idempotent — no double refund')
+
+  // 8c. supersedesJobId is silently ignored (not honored, not an error) if
+  // the referenced job belongs to a different user.
+  await seedUpload(uploadsRepo, { id: 'upload-3', userId: 'user-3' })
+  await creditsService.grantMonthlyCredits('user-3', 'free')
+  await serviceWithCredits.createJob({ userId: 'user-3', uploadId: 'upload-3', supersedesJobId: quickJob.id })
+  assertEqual((await creditsService.getBalance('user-2')).balance, 10, "user-2's balance is untouched by user-3's (ignored) supersedesJobId")
+  console.log('PASS: supersedesJobId referencing a job owned by a different user is silently ignored, not honored')
 
   console.log('\nAll JobService smoke tests passed.')
 }

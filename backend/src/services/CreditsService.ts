@@ -61,6 +61,24 @@ export class CreditsService {
     return this.applyTransaction(userId, amount, amount, 'credit', reason, null)
   }
 
+  /**
+   * Phase 26: refunds a specific job's debit — used when a caller supersedes
+   * an already-completed (and already-billed) job with a new one for the
+   * same upload (see JobService.createJob's `supersedesJobId`), so switching
+   * Quick Trace <-> Professional Trace after a result already exists never
+   * stacks charges on top of each other. Idempotent: a no-op (returns null)
+   * if the job was never actually debited, or was already refunded —
+   * safe to call more than once for the same jobId.
+   */
+  async refundJobDebit(userId: string, jobId: string, reason: string): Promise<CreditTransaction | null> {
+    const transactions = await this.repository.findTransactionsByUserId(userId)
+    const debit = transactions.find((t) => t.jobId === jobId && t.type === 'debit')
+    if (!debit) return null
+    const alreadyRefunded = transactions.some((t) => t.jobId === jobId && t.type === 'refund')
+    if (alreadyRefunded) return null
+    return this.applyTransaction(userId, debit.amount, debit.amount, 'refund', reason, jobId)
+  }
+
   /** Grants PLAN_LIMITS[plan].monthlyCredits — called on billing-cycle renewal (see config/index.ts). */
   async grantMonthlyCredits(userId: string, plan: UserPlan): Promise<CreditTransaction> {
     const amount = PLAN_LIMITS[plan].monthlyCredits

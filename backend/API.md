@@ -80,9 +80,25 @@ decode for real when it processes the job.
 
 ### `POST /jobs`
 
-`{ uploadId, preset?, settings? }` — creates (or resumes) a conversion job.
-An upload with an already-active job returns that job unchanged (see
-backend/README.md's Phase 18 notes on duplicate-job handling).
+`{ uploadId, preset?, settings?, supersedesJobId? }` — creates (or resumes) a
+conversion job. An upload with an already-active job returns that job
+unchanged (see backend/README.md's Phase 18 notes on duplicate-job handling).
+
+Passing `preset: "professional"` (the exact value of
+`PROFESSIONAL_TRACE_JOB_PRESET` in
+`src/pipeline/ProfessionalTracePipeline.ts`) routes the job through the full
+Professional Trace preprocessing pipeline instead of the normal Quick Trace
+flow, and bills `PROFESSIONAL_TRACE_CREDIT_MULTIPLIER` (2x) the base credit
+cost instead of 1x — see `ConversionService.processJob`. Any other preset
+value (including omitted) is unaffected.
+
+`supersedesJobId` (Phase 26): the id of an already-*completed* job for the
+same upload that this new job replaces — e.g. re-tracing an upload with
+Professional Trace after its automatic Quick Trace job already finished. If
+that job was billed, its debit is refunded before the new job is created, so
+re-choosing how an upload is traced never stacks charges on top of a prior
+one. Silently ignored if the referenced job doesn't belong to the caller,
+isn't for this upload, or isn't `completed` (nothing to refund).
 
 `data: Job` · `201`
 

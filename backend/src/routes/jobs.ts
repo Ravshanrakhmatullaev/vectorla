@@ -17,6 +17,7 @@ interface CreateJobBody {
   uploadId?: unknown
   preset?: unknown
   settings?: unknown
+  supersedesJobId?: unknown
 }
 
 function isRecordOfNumbers(value: unknown): value is Record<string, number> {
@@ -45,6 +46,7 @@ async function handleCreateJob(request: Request, env: Env, requestId: string): P
       uploadId: body.uploadId,
       preset: typeof body.preset === 'string' ? body.preset : undefined,
       settings: isRecordOfNumbers(body.settings) ? body.settings : undefined,
+      supersedesJobId: typeof body.supersedesJobId === 'string' ? body.supersedesJobId : undefined,
     })
     return jsonSuccess(job, 201, requestId)
   } catch (error) {
