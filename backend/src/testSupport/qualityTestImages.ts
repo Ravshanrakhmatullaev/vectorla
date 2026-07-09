@@ -194,6 +194,75 @@ function jpegPhoto(): ImageData {
   })
 }
 
+// 11. Signature — thin, sparse dark ink stroke on a transparent background,
+// no straight lines or grid alignment (Phase 23).
+function signature(): ImageData {
+  const width = 200
+  const height = 80
+  return makeImageData(width, height, (x, y) => {
+    const t = x / width
+    const curveY = height * 0.5 + Math.sin(t * Math.PI * 6) * height * 0.18 + Math.sin(t * Math.PI * 13) * height * 0.06
+    const dist = Math.abs(y - curveY)
+    if (dist < 2.2) return [25, 25, 25, 255]
+    return [0, 0, 0, 0]
+  })
+}
+
+// 12. QR code — pure black/white grid of modules, deterministically
+// "random" so it has the dense, high-frequency edge pattern a real QR code
+// has, on a square canvas (Phase 23).
+function qrCode(): ImageData {
+  const modules = 21
+  const moduleSize = 6
+  const size = modules * moduleSize
+  const rng = makeRng(7)
+  const grid = Array.from({ length: modules * modules }, () => rng() < 0.5)
+  return makeImageData(size, size, (x, y) => {
+    const mx = Math.min(modules - 1, Math.floor(x / moduleSize))
+    const my = Math.min(modules - 1, Math.floor(y / moduleSize))
+    const on = grid[my * modules + mx]
+    return on ? [10, 10, 10, 255] : [255, 255, 255, 255]
+  })
+}
+
+// 13. Blueprint — thin technical line-work (rectangle/circle/diagonal) in
+// blueprint-blue ink on an off-white background — not grayscale (the ink is
+// blue), low noise, orthogonal (Phase 23).
+function blueprint(): ImageData {
+  const width = 200
+  const height = 150
+  const bg: [number, number, number] = [240, 245, 250]
+  const ink: [number, number, number] = [20, 70, 160]
+  return makeImageData(width, height, (x, y) => {
+    const onRectBorder = x > 20 && x < 180 && y > 20 && y < 130 && (x < 24 || x > 176 || y < 24 || y > 126)
+    const cx = width / 2
+    const cy = height / 2
+    const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2)
+    const onCircle = Math.abs(dist - 40) < 1.5
+    const onDiagonal = x > 20 && x < 180 && y > 20 && y < 130 && Math.abs(y - 20 - (x - 20) * 0.6) < 1.5
+    if (onRectBorder || onCircle || onDiagonal) return [...ink, 255]
+    return [...bg, 255]
+  })
+}
+
+// 14. Sketch — grayscale, with real per-pixel jitter (not just at edges) to
+// simulate pencil/charcoal texture, which is what makes this category prone
+// to exploding into thousands of speckle paths without help (Phase 23).
+function sketch(): ImageData {
+  const size = 150
+  const rng = makeRng(99)
+  return makeImageData(size, size, (x, y) => {
+    const cx = size / 2
+    const cy = size / 2
+    const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2)
+    const onOutline = Math.abs(dist - size * 0.3) < 3
+    const base = onOutline ? 60 : 235
+    const jitter = (rng() - 0.5) * 30
+    const shade = Math.min(255, Math.max(0, Math.round(base + jitter)))
+    return [shade, shade, shade, 255]
+  })
+}
+
 export function buildQualityTestImages(): QualityTestImage[] {
   return [
     { id: 'simple-logo', label: 'Simple logo (flat, hard edges)', category: 'simple logo', mimeType: 'image/png', imageData: simpleLogo() },
@@ -206,5 +275,9 @@ export function buildQualityTestImages(): QualityTestImage[] {
     { id: 'low-res-logo', label: 'Low-resolution logo (24x24 source)', category: 'low-resolution logo', mimeType: 'image/png', imageData: lowResLogo() },
     { id: 'transparent-png', label: 'Transparent PNG (soft alpha falloff)', category: 'transparent PNG', mimeType: 'image/png', imageData: transparentPng() },
     { id: 'jpeg-photo', label: 'JPEG photo (continuous tone + noise)', category: 'JPEG photo', mimeType: 'image/jpeg', imageData: jpegPhoto() },
+    { id: 'signature', label: 'Signature (thin sparse ink stroke)', category: 'signature', mimeType: 'image/png', imageData: signature() },
+    { id: 'qr-code', label: 'QR code (dense black/white module grid)', category: 'QR code', mimeType: 'image/png', imageData: qrCode() },
+    { id: 'blueprint', label: 'Blueprint (thin technical line-work)', category: 'blueprint', mimeType: 'image/png', imageData: blueprint() },
+    { id: 'sketch', label: 'Sketch (grayscale, pencil-texture noise)', category: 'sketch', mimeType: 'image/png', imageData: sketch() },
   ]
 }

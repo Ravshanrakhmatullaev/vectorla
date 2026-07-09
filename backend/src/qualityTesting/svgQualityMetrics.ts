@@ -11,6 +11,8 @@ export interface SvgQualityMetrics {
   /** Quadratic-curve ("Q"/"q") commands as a fraction of all draw commands ("L"/"l"/"Q"/"q") — low values on a round source mean edges are being faceted into straight segments instead of traced smoothly. */
   curveCommandRatio: number
   averagePathDataBytes: number
+  /** Total M/L/Q command count across every path — a proxy for total coordinate/control points (Phase 23), distinct from pathCount (number of `<path>` elements). */
+  nodeCount: number
 }
 
 function extractPathData(svg: string): string[] {
@@ -21,6 +23,7 @@ function extractPathData(svg: string): string[] {
 export function measureSvgQuality(svg: string): SvgQualityMetrics {
   const pathDataList = extractPathData(svg)
   const totalPathDataBytes = pathDataList.reduce((sum, d) => sum + d.length, 0)
+  const moveCommands = pathDataList.reduce((sum, d) => sum + (d.match(/[Mm]/g)?.length ?? 0), 0)
   const lineCommands = pathDataList.reduce((sum, d) => sum + (d.match(/[Ll]/g)?.length ?? 0), 0)
   const curveCommands = pathDataList.reduce((sum, d) => sum + (d.match(/[Qq]/g)?.length ?? 0), 0)
   const totalCommands = lineCommands + curveCommands
@@ -31,16 +34,19 @@ export function measureSvgQuality(svg: string): SvgQualityMetrics {
     totalPathDataBytes,
     curveCommandRatio: totalCommands > 0 ? curveCommands / totalCommands : 0,
     averagePathDataBytes: pathDataList.length > 0 ? totalPathDataBytes / pathDataList.length : 0,
+    nodeCount: moveCommands + lineCommands + curveCommands,
   }
 }
 
-export type ProblemFlag = 'too-many-paths' | 'missing-details' | 'jagged-edges' | 'noisy-svg' | 'oversized-svg'
+export type ProblemFlag = 'too-many-paths' | 'missing-details' | 'jagged-edges' | 'noisy-svg' | 'oversized-svg' | 'node-count-exploded'
 
 export interface QualityBudget {
   /** Categories whose source has a round/curved silhouette — used for the jagged-edges check. */
   hasCurvedSilhouette: boolean
   maxSvgBytes: number
   maxPathCount: number
+  /** Phase 23 — separate from maxPathCount since a small number of paths can still carry an exploded number of individual nodes/control points. */
+  maxNodeCount: number
 }
 
 export function detectProblems(metrics: SvgQualityMetrics, budget: QualityBudget): ProblemFlag[] {
@@ -53,6 +59,7 @@ export function detectProblems(metrics: SvgQualityMetrics, budget: QualityBudget
   // is the structural signature of speckle noise rather than clean shapes.
   if (metrics.pathCount > 50 && metrics.averagePathDataBytes < 40) problems.push('noisy-svg')
   if (metrics.svgSizeBytes > budget.maxSvgBytes) problems.push('oversized-svg')
+  if (metrics.nodeCount > budget.maxNodeCount) problems.push('node-count-exploded')
 
   return problems
 }

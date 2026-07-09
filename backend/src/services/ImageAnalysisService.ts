@@ -3,6 +3,7 @@ import type { VectorizationProviderName } from '../providers/VectorizationProvid
 import { decodeImage, type RasterDecoderWasm } from '../providers/imageDecoder'
 import { analyzeImage, type ImageAnalysis } from '../providers/imageAnalysis'
 import { selectProvider, type ImageType } from '../providers/ProviderSelector'
+import { selectTracePreset } from '../providers/tracePresetSelector'
 import type { TracePresetName } from '../providers/tracePresets'
 import { CREDIT_COST_BASE_CONVERSION } from '../config'
 
@@ -33,7 +34,7 @@ export interface ImageAnalysisResult {
   imageType: ImageType
   complexityScore: number
   recommendedProvider: VectorizationProviderName
-  /** The ImageTracer trace preset PlaceholderProvider would auto-recommend, exposed for callers that want the finer-grained (5-way) signal too. */
+  /** The fine-grained (9-way) trace profile tracePresetSelector.ts recommends — see tracePresets.ts. ConversionService passes this to whichever provider actually runs when the job has no explicit Job.preset. */
   recommendedTracePreset: TracePresetName
   estimatedQuality: EstimatedQuality
   /** Heuristic credit estimate for display only — CreditsService.ensureEnoughCredits is still the actual enforcement, unaffected by this. */
@@ -94,11 +95,23 @@ export class ImageAnalysisService {
     const imageType = toImageType(base.recommendedPreset)
     const recommendedProvider = selectProvider({ imageType, isGrayscale: base.isGrayscale })
     const pixelCount = imageData.width * imageData.height
+    const aspectRatio = imageData.height > 0 ? imageData.width / imageData.height : 1
+
+    const recommendedTracePreset = selectTracePreset({
+      imageType,
+      isGrayscale: base.isGrayscale,
+      hasTransparency: base.hasTransparency,
+      colorCountEstimate: base.colorCountEstimate,
+      complexityScore: base.complexityScore,
+      edgeDensity: base.edgeDensity,
+      noiseLevel: base.noiseLevel,
+      aspectRatio,
+    })
 
     return {
       width: imageData.width,
       height: imageData.height,
-      aspectRatio: imageData.height > 0 ? imageData.width / imageData.height : 1,
+      aspectRatio,
       colorCountEstimate: base.colorCountEstimate,
       hasAlphaChannel: base.hasAlphaChannel,
       hasTransparency: base.hasTransparency,
@@ -109,7 +122,7 @@ export class ImageAnalysisService {
       imageType,
       complexityScore: base.complexityScore,
       recommendedProvider,
-      recommendedTracePreset: base.recommendedPreset,
+      recommendedTracePreset,
       estimatedQuality: estimateQuality(pixelCount, base.complexityScore, imageType),
       estimatedCredits: estimateCredits(recommendedProvider),
       estimatedProcessingTimeMs: estimateProcessingTimeMs(pixelCount, recommendedProvider),

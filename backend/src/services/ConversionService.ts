@@ -87,17 +87,23 @@ export class ConversionService {
     const fileBytes = await new Response(fileStream).arrayBuffer()
 
     const analysis = await this.imageAnalysis.analyze(upload, fileBytes)
+    // Phase 23: an explicit Job.preset (from a caller re-processing with a
+    // specific choice) always wins; otherwise the job gets the trace profile
+    // tracePresetSelector.ts actually recommends for this image, not just
+    // "whatever the provider decides on its own" (see PlaceholderProvider's
+    // own narrower fallback, only reached when requestedPreset is unset).
+    const preset = job.preset ?? analysis.recommendedTracePreset
     let result: VectorizationResult
     try {
       const provider = createProviderByName(analysis.recommendedProvider, this.decoderWasm)
-      result = await provider.vectorize(upload, fileBytes, job.preset)
+      result = await provider.vectorize(upload, fileBytes, preset)
     } catch (error) {
       if (!(error instanceof NotImplementedError)) throw error
       console.error(
         `Provider "${analysis.recommendedProvider}" recommended for job "${job.id}" is not implemented yet — falling back to the ImageTracer engine`,
       )
       const fallbackProvider = createProviderByName('placeholder', this.decoderWasm)
-      result = await fallbackProvider.vectorize(upload, fileBytes, job.preset)
+      result = await fallbackProvider.vectorize(upload, fileBytes, preset)
     }
     const storageKey = `conversions/${job.userId}/${job.id}/output.${result.format}`
     await this.storage.storeFile(storageKey, result.data)
