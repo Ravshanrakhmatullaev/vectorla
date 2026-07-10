@@ -1,5 +1,6 @@
 import type { CreditBalance, CreditTransaction, CreditTransactionType, UserPlan } from '../types'
 import type { Env } from '../env'
+import { isLocalDevelopment } from '../env'
 import { createCreditsRepository } from '../repositories/createCreditsRepository'
 import type { CreditsRepository } from '../repositories/CreditsRepository'
 import {
@@ -35,7 +36,15 @@ export function calculateRequiredCredits(formatCount: number, printReady: boolea
 }
 
 export class CreditsService {
-  constructor(private readonly repository: CreditsRepository) {}
+  constructor(
+    private readonly repository: CreditsRepository,
+    // Local development only (see env.ts's isLocalDevelopment) — never true
+    // in staging/production. Lets a developer run the full upload -> convert
+    // -> download flow without ever calling POST /api/v1/dev/credits/grant
+    // by hand; the credit model itself (costs, debits, the check below) is
+    // unchanged, this only removes the need to pre-fund a balance locally.
+    private readonly autoGrantInDevelopment: boolean = false,
+  ) {}
 
   /** A user with no balance row yet (yet to receive a monthly grant) reads as a zero balance, not an error. */
   async getBalance(userId: string): Promise<CreditBalance> {
@@ -43,14 +52,22 @@ export class CreditsService {
     return existing ?? { userId, balance: 0, version: 0, updatedAt: new Date().toISOString() }
   }
 
-  /** Throws InsufficientCreditsError if the user can't cover requiredCredits — callers (e.g. ConversionService) let this fail the job. */
+  /**
+   * Throws InsufficientCreditsError if the user can't cover requiredCredits —
+   * callers (e.g. ConversionService) let this fail the job. In local
+   * development (autoGrantInDevelopment), a short balance is topped up
+   * automatically instead of failing — see the constructor's doc comment.
+   */
   async ensureEnoughCredits(userId: string, requiredCredits: number): Promise<void> {
     const { balance } = await this.getBalance(userId)
-    if (balance < requiredCredits) {
-      throw new InsufficientCreditsError(
-        `User "${userId}" has ${balance} credit${balance === 1 ? '' : 's'}, needs ${requiredCredits}`,
-      )
+    if (balance >= requiredCredits) return
+    if (this.autoGrantInDevelopment) {
+      await this.credit(userId, requiredCredits - balance, 'Automatic local-development credit top-up')
+      return
     }
+    throw new InsufficientCreditsError(
+      `User "${userId}" has ${balance} credit${balance === 1 ? '' : 's'}, needs ${requiredCredits}`,
+    )
   }
 
   async debitCredits(userId: string, amount: number, reason: string, jobId: string | null = null): Promise<CreditTransaction> {
@@ -128,5 +145,5 @@ export class CreditsService {
 
 export function createCreditsService(env: Env): CreditsService {
   const repository = createCreditsRepository(env)
-  return new CreditsService(repository)
+  return new CreditsService(repository, isLocalDevelopment(env))
 }

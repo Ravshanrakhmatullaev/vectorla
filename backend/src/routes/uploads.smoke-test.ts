@@ -18,6 +18,10 @@ function assertEqual<T>(actual: T, expected: T, message: string): void {
   }
 }
 
+function assertTrue(condition: boolean, message: string): void {
+  if (!condition) throw new Error(message)
+}
+
 function toArrayBuffer(text: string): ArrayBuffer {
   return new TextEncoder().encode(text).buffer as ArrayBuffer
 }
@@ -54,7 +58,7 @@ function createFakeQueue(): Queue<ConversionQueueMessage> {
   } as unknown as Queue<ConversionQueueMessage>
 }
 
-async function createFakeEnv(shouldFail = false): Promise<Env> {
+async function createFakeEnv(shouldFail = false, environment: Env['ENVIRONMENT'] = 'development'): Promise<Env> {
   // This test never drives a job through the queue consumer (no real
   // decoding ever runs), but Env still requires real WebAssembly.Module
   // values — see testSupport/wasmTestFixtures.ts.
@@ -72,7 +76,7 @@ async function createFakeEnv(shouldFail = false): Promise<Env> {
     PNG_DECODER_WASM: png,
     JPEG_DECODER_WASM: jpeg,
     WEBP_DECODER_WASM: webp,
-    ENVIRONMENT: 'development',
+    ENVIRONMENT: environment,
   }
 }
 
@@ -120,14 +124,38 @@ async function run() {
   assertEqual((await readErrorBody(res2)).code, 'VALIDATION_ERROR', 'error code for missing file field')
   console.log('PASS: 400 Bad Request when "file" field is missing')
 
-  // 409 — duplicate filename for the same user (createUploadsRepository
-  // caches one in-memory repository per env, so this route-level call does
-  // share state with res1 above — see createUploadsRepository.ts)
+  // Local development: a duplicate filename from the same user is no longer
+  // a conflict — re-uploading the same sample file while testing must not
+  // block the developer (createUploadsRepository caches one in-memory
+  // repository per env, so this route-level call does share state with res1
+  // above — see createUploadsRepository.ts). The name is disambiguated so
+  // the repository's real (userId, originalFileName) uniqueness guarantee,
+  // still fully active underneath, is never actually hit.
   const duplicateFile = new File([pngBytes()], 'route-test.png', { type: 'image/png' })
   const res3 = await handleUploadsRoute(makeUploadRequest('route-user', { file: duplicateFile }), env, TEST_REQUEST_ID)
-  assertEqual(res3.status, 409, 'status for a duplicate filename from the same user')
-  assertEqual((await readErrorBody(res3)).code, 'CONFLICT', 'error code for duplicate filename')
-  console.log('PASS: 409 Conflict when the same user uploads a filename they already have')
+  assertEqual(res3.status, 201, 'a duplicate filename in development is accepted, not a conflict')
+  const body3 = await readSuccessBody<{ upload: { originalFileName: string } }>(res3)
+  assertTrue(body3.upload.originalFileName !== 'route-test.png', 'the duplicate name is disambiguated, not stored verbatim')
+  assertTrue(body3.upload.originalFileName.startsWith('route-test.png ('), 'the disambiguated name still starts with the original name')
+  console.log('PASS: a duplicate filename in development is accepted with a disambiguated name, not rejected as a conflict')
+
+  // Staging (a stand-in for "not development" that this test can still
+  // reach with the X-Test-User-Id auth bypass — see requireAuth.ts, which
+  // only honors it outside production; real production auth needs a genuine
+  // Supabase JWT, out of scope for this smoke test): the same scenario must
+  // still behave exactly as before — duplicate filenames are rejected with
+  // 409 Conflict. isLocalDevelopment(env) only ever returns true for
+  // ENVIRONMENT === 'development', so staging and production are identical
+  // here in practice.
+  const stagingEnv = await createFakeEnv(false, 'staging')
+  const stagingFile1 = new File([pngBytes()], 'staging-test.png', { type: 'image/png' })
+  const stagingRes1 = await handleUploadsRoute(makeUploadRequest('staging-user', { file: stagingFile1 }), stagingEnv, TEST_REQUEST_ID)
+  assertEqual(stagingRes1.status, 201, 'status for the first upload in staging')
+  const stagingFile2 = new File([pngBytes()], 'staging-test.png', { type: 'image/png' })
+  const stagingRes2 = await handleUploadsRoute(makeUploadRequest('staging-user', { file: stagingFile2 }), stagingEnv, TEST_REQUEST_ID)
+  assertEqual(stagingRes2.status, 409, 'status for a duplicate filename from the same user outside development')
+  assertEqual((await readErrorBody(stagingRes2)).code, 'CONFLICT', 'error code for duplicate filename outside development')
+  console.log('PASS: staging/production still reject a duplicate filename with 409 Conflict — dev-only behavior unchanged there')
 
   // 415 — unsupported mime type
   const badFile = new File([toArrayBuffer('x')], 'doc.pdf', { type: 'application/pdf' })

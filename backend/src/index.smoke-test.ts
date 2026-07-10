@@ -64,7 +64,14 @@ async function createFakeEnv(): Promise<Env> {
     PNG_DECODER_WASM: png,
     JPEG_DECODER_WASM: jpeg,
     WEBP_DECODER_WASM: webp,
-    ENVIRONMENT: 'development',
+    // Not 'development': this file exercises the real insufficient-credits
+    // failure path (see test 3 below), which CreditsService's
+    // autoGrantInDevelopment convenience would otherwise silently paper
+    // over. 'staging' behaves identically to 'production' for that check
+    // (see env.ts's isLocalDevelopment) and doesn't need real Supabase auth,
+    // since this file talks to worker.queue() directly, never through an
+    // HTTP request/requireAuth.
+    ENVIRONMENT: 'staging',
   }
 }
 

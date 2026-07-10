@@ -23,3 +23,14 @@ export interface Env {
   WEBP_DECODER_WASM: WebAssembly.Module
   ENVIRONMENT: 'development' | 'staging' | 'production'
 }
+
+/**
+ * True only for local `wrangler dev` (never staging, never production) — the
+ * single switch gating every local-development convenience (auto credit
+ * top-up, relaxed duplicate-filename checks — see CreditsService.ts and
+ * UploadService.ts). Staging intentionally behaves like production so it
+ * keeps testing real constraints.
+ */
+export function isLocalDevelopment(env: Env): boolean {
+  return env.ENVIRONMENT === 'development'
+}

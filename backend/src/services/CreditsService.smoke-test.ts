@@ -104,6 +104,30 @@ async function run() {
   assertEqual(user2History.filter((t) => t.type === 'debit').length, 3, 'all three debit transactions were recorded')
   console.log('PASS: concurrent debits for the same user are all applied — optimistic locking prevents lost updates')
 
+  // 10. Local development auto-grant (autoGrantInDevelopment: true) — a short
+  // balance is topped up automatically instead of throwing, so a developer
+  // never has to call POST /api/v1/dev/credits/grant by hand. The default
+  // (used by every test above) stays false, so production/staging behavior
+  // — and every assertion above — is completely unaffected.
+  const devRepository = new InMemoryCreditsRepository()
+  const devService = new CreditsService(devRepository, true)
+  const devBalanceBefore = await devService.getBalance('dev-user')
+  assertEqual(devBalanceBefore.balance, 0, 'dev user starts with no balance, same as any user')
+  await devService.ensureEnoughCredits('dev-user', 3)
+  const devBalanceAfter = await devService.getBalance('dev-user')
+  assertEqual(devBalanceAfter.balance, 3, 'ensureEnoughCredits auto-granted exactly the shortfall in dev mode')
+  const devHistory = await devRepository.findTransactionsByUserId('dev-user')
+  assertEqual(devHistory.length, 1, 'the auto-grant recorded a transaction, same as any other credit')
+  assertEqual(devHistory[0]?.type, 'credit', 'the auto-grant is a normal credit transaction, not a special bypass')
+  console.log('PASS: autoGrantInDevelopment tops up a short balance instead of throwing, and only when explicitly enabled')
+
+  // 10b. A later shortfall only tops up the remaining gap, not the full amount again.
+  await devService.debitCredits('dev-user', 3, 'simulated conversion', 'job-dev-1')
+  await devService.ensureEnoughCredits('dev-user', 2)
+  const devBalanceAfterTopUp = await devService.getBalance('dev-user')
+  assertEqual(devBalanceAfterTopUp.balance, 2, 'auto-grant tops up only the shortfall, not a fixed/arbitrary amount')
+  console.log('PASS: autoGrantInDevelopment tops up only the exact shortfall on repeated use')
+
   console.log('\nAll CreditsService smoke tests passed.')
 }
 

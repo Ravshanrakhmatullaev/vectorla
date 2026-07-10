@@ -74,6 +74,40 @@ function requireBaseUrl(): string {
   return baseUrl
 }
 
+// Local development only (import.meta.env.DEV, Vite's own dev/build switch —
+// false in every production build, so this never runs there). `wrangler dev`
+// briefly refuses connections while it rebuilds after a source-file save; a
+// request that happens to land in that window would otherwise surface as a
+// misleading "Could not reach the API server" even though the backend is
+// actually running. A couple of short retries ride out that window instead
+// of failing the whole request on a one-off blip.
+const DEV_FETCH_RETRY_ATTEMPTS = 2
+const DEV_FETCH_RETRY_DELAY_MS = 300
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function devFetch(url: string, init: RequestInit): Promise<Response> {
+  if (!import.meta.env.DEV) return fetch(url, init)
+  let lastError: unknown
+  for (let attempt = 0; attempt <= DEV_FETCH_RETRY_ATTEMPTS; attempt++) {
+    try {
+      return await fetch(url, init)
+    } catch (error) {
+      lastError = error
+      if (attempt < DEV_FETCH_RETRY_ATTEMPTS) await delay(DEV_FETCH_RETRY_DELAY_MS)
+    }
+  }
+  throw lastError
+}
+
+function describeUnreachable(baseUrl: string): string {
+  return import.meta.env.DEV
+    ? `Could not reach the API server at ${baseUrl}. Is the backend dev server running? (cd backend && npm run dev)`
+    : 'Could not reach the API server'
+}
+
 async function parseEnvelope<T>(response: Response): Promise<T> {
   let body: ApiEnvelope<T> | null = null
   try {
@@ -108,9 +142,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     // Cache-Control on its JSON responses, and this was observed to get
     // served stale from the browser's HTTP cache under default caching,
     // which would freeze the UI on an old status forever.
-    response = await fetch(`${baseUrl}${path}`, { ...init, headers: buildHeaders(init?.headers), cache: 'no-store' })
+    response = await devFetch(`${baseUrl}${path}`, { ...init, headers: buildHeaders(init?.headers), cache: 'no-store' })
   } catch {
-    throw new ApiError('Could not reach the API server', 'NETWORK_ERROR', 0, null)
+    throw new ApiError(describeUnreachable(baseUrl), 'NETWORK_ERROR', 0, null)
   }
   return parseEnvelope<T>(response)
 }
@@ -137,8 +171,8 @@ export function apiPostJson<T>(path: string, body: unknown): Promise<T> {
 export async function apiFetchRaw(path: string, init?: RequestInit): Promise<Response> {
   const baseUrl = requireBaseUrl()
   try {
-    return await fetch(`${baseUrl}${path}`, { ...init, headers: buildHeaders(init?.headers) })
+    return await devFetch(`${baseUrl}${path}`, { ...init, headers: buildHeaders(init?.headers) })
   } catch {
-    throw new ApiError('Could not reach the API server', 'NETWORK_ERROR', 0, null)
+    throw new ApiError(describeUnreachable(baseUrl), 'NETWORK_ERROR', 0, null)
   }
 }
