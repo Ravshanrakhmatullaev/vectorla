@@ -1,127 +1,178 @@
-# Vectorla — AI Print-Ready Vector Platform
+# Vectorla - browser image-to-vector platform
 
-Frontend foundation for **vectorla.app** — a browser-based image-to-vector
-platform positioned for designers, print shops, advertising agencies,
-CNC/laser users, sticker makers, and branding companies.
+Vectorla is a full-stack image-to-vector application for designers, print
+shops, advertising agencies, CNC/laser users, sticker makers, and branding
+teams. It combines a React marketing/workspace frontend with a separately
+deployable Cloudflare Worker API.
 
-This is **v1.0**: a production-quality marketing site + realistic,
-interactive workspace *mockup*. There is no real AI/vectorization backend
-wired in yet — see the `TODO(backend)` comments in the code for where that
-connects later.
+The current product can upload PNG, JPEG, and WebP images, analyze them,
+queue tracing jobs, generate SVG results with ImageTracer or Potrace, poll job
+status, preview/download completed results, enforce credits, and expose
+authenticated conversion, credit, and history APIs. It is an active
+pre-production implementation, not a finished commercial service: production
+login, billing, non-SVG generation, and several product workflows remain.
 
----
+## Current status
 
-## Tech stack
+### Completed
 
-- React 19 + TypeScript
-- Vite 8
-- Tailwind CSS v4 (CSS-first config via `@theme`, no `tailwind.config.js` needed)
-- lucide-react (icons)
-- framer-motion (installed, ready for richer motion — current animations use
-  plain CSS transitions to keep the bundle lean)
+- Responsive React 19 landing page and workspace UI with English, Uzbek, and
+  Russian translations, persisted light/dark themes, SEO/PWA assets, error
+  boundaries, and below-the-fold code splitting.
+- Workspace upload flow when `VITE_API_BASE_URL` is configured: upload ->
+  automatic queued job -> polling -> real SVG preview/download.
+- Honest Preview Mode when no backend URL is configured; files are not sent or
+  processed in that mode.
+- Quick Trace using real bitmap tracing and Professional Trace using noise
+  reduction, background cleanup, contrast normalization, color quantization,
+  edge enhancement, provider selection, and SVG optimization.
+- Image analysis for dimensions, color/transparency/grayscale signals,
+  complexity, image classification, preset/provider recommendation, and rough
+  quality/credit/time estimates.
+- Cloudflare Worker API v1 with standardized envelopes, request IDs, response
+  timing, structured request logs, CORS, OpenAPI output, and a health route.
+- R2-backed uploads and result storage, Cloudflare Queue job processing, and
+  Supabase-backed repositories with shared in-memory fallbacks for local tests.
+- Supabase JWT verification on protected backend routes, ownership checks,
+  signed download URLs, upload signature validation, randomized storage keys,
+  duplicate-job protection, queue idempotency, and optimistic locking.
+- Credit calculation, enforcement, debits/refunds, current-balance/recent-
+  transaction API, and paginated user history API.
+- Twenty-three standalone backend smoke-test files plus a synthetic vector
+  quality harness and report.
 
-## Project structure
+### Partial
 
+- The backend accepts real Supabase bearer tokens, but the frontend has no
+  production sign-in/session flow. Vite development uses the backend's
+  non-production-only `X-Test-User-Id` bypass.
+- The workspace is connected to the API; the Hero upload card and primary
+  marketing CTAs are still illustrative.
+- ImageTracer and Potrace are implemented. Photo analysis may recommend the
+  unimplemented Vision provider, in which case conversion safely falls back
+  to ImageTracer. The OpenAI provider is also a stub.
+- The domain model lists SVG, PNG, PDF, EPS, and DXF, but the current tracing
+  pipeline produces SVG only.
+- Credits are enforced, but the upload plan is still caller-supplied and
+  monthly grants/top-ups are not connected to accounts or billing.
+- The frontend pricing section still shows the older three-plan model; backend
+  limits use Free, Starter, Pro, and Business credit tiers.
+- Orphan detection exists, but cleanup is not scheduled and storage deletion
+  is not implemented.
+
+### Not implemented
+
+- Production frontend authentication/account management.
+- Stripe checkout, subscriptions, billing-cycle credit grants, and paid
+  top-ups.
+- Batch uploads/conversions and archive downloads.
+- PDF, EPS, DXF, and PNG result generation; print-ready CMYK/cut-line handling.
+- `GET /api/v1/uploads/:id` and `DELETE /api/v1/uploads/:id`.
+- Real Vision/OpenAI vectorization and real AI upscaling.
+- Analytics, error tracking, CI, legal pages, and confirmed production/domain
+  deployment from repository evidence.
+
+## Architecture
+
+```text
+Browser (React/Vite)
+  -> Cloudflare Worker API v1
+      -> Supabase Auth + Postgres repositories
+      -> R2 upload/result storage
+      -> Cloudflare Queue consumer
+          -> image analysis
+          -> ImageTracer or Potrace
+          -> SVG storage + credit debit
 ```
-src/
-  components/       Reusable UI: Navbar, Hero, WorkspacePreview, Features,
-                     UseCases, Pricing, Faq, Footer, LogoMark, ThemeToggle
-  components/ui/     Small primitives: Button, SectionHeading
-  pages/            LandingPage.tsx — composes all sections for v1.0
-  layouts/          MainLayout.tsx — Navbar + Footer wrapper
-  lib/              theme.tsx — dark/light ThemeProvider + useTheme hook
-  utils/            cn.ts — tiny className combiner
-  data/             Real copy: features.ts, useCases.ts, pricing.ts, faq.ts,
-                     nav.ts, trustBadges.ts, workspace.ts
-  styles/           globals.css — Tailwind import + design tokens (light/dark)
+
+The frontend and backend are independent packages and deployables:
+
+```text
+src/                         React frontend
+  components/                Marketing and workspace UI
+  hooks/useUploadFlow.ts      Upload, job creation, polling, retry/reset
+  lib/api/                    Typed API client and download helpers
+  data/i18n.ts                EN/UZ/RU copy and typed translation contracts
+
+backend/
+  src/index.ts                Worker fetch router and queue consumer
+  src/routes/                 API v1 handlers
+  src/services/               Auth, upload, jobs, conversion, credits, history
+  src/providers/              ImageTracer, Potrace, and provider interfaces
+  src/pipeline/               Quick/Professional trace pipelines
+  src/repositories/           Supabase and in-memory implementations
+  src/qualityTesting/         Synthetic quality harness and metrics
+  supabase/schema.sql         Postgres schema
+  API.md                      Human-readable API reference
+  QUALITY_REPORT.md           Tracing quality findings
 ```
 
----
+## Local development
 
-## 1. Run locally
+### Frontend
 
 ```bash
 npm install
+cp .env.example .env.local
 npm run dev
 ```
 
-Opens at `http://localhost:5173`.
+Set `VITE_API_BASE_URL` to the Worker origin to enable the real workspace
+flow. Leave it empty to use Preview Mode.
 
-## 2. Build for production
+### Backend
+
+```bash
+cd backend
+npm install
+cp .dev.vars.example .dev.vars
+npm run dev
+```
+
+For a real Supabase-backed environment, apply `backend/supabase/schema.sql`
+and fill `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and
+`DOWNLOAD_URL_SECRET`. Without Supabase credentials, repositories fall back
+to process-local in-memory storage. Local development also auto-funds credit
+shortfalls and relaxes duplicate-filename friction; staging and production do
+not.
+
+## Verification
+
+Frontend:
 
 ```bash
 npm run build
+npm run lint
 ```
 
-Type-checks with `tsc -b`, then builds with Vite. Output goes to `dist/`.
+Backend type-check:
 
 ```bash
-npm run preview   # serve the production build locally to sanity-check it
+cd backend
+npm run typecheck
 ```
 
-## 3. Deploy to Cloudflare Pages
+Backend smoke tests are plain `tsx` scripts. Run one directly, for example:
 
-**Option A — Dashboard**
-1. Push this project to a GitHub/GitLab repo.
-2. In the Cloudflare dashboard: Workers & Pages → Create → Pages → connect
-   the repo.
-3. Build settings:
-   - **Framework preset:** Vite
-   - **Build command:** `npm run build`
-   - **Build output directory:** `dist`
-4. Deploy. Attach your `vectorla.app` domain under the project's custom
-   domains once the first deploy succeeds.
-
-**Option B — Wrangler CLI**
 ```bash
-npm install -g wrangler
-npm run build
-wrangler pages deploy dist --project-name=vectorla
+cd backend
+npx tsx src/routes/history.smoke-test.ts
 ```
 
-No `wrangler.toml` is required for a static Vite site like this one; add one
-later only if you introduce Pages Functions (e.g. for the real API/backend).
+The repository currently contains 23 `*.smoke-test.ts` files. There is no
+single test script or CI workflow yet.
 
----
+## API and deployment
 
-## 4. Files created (high-level)
+- API base path: `/api/v1`
+- Human reference: `backend/API.md`
+- Machine-readable spec: `GET /api/v1/openapi.json`
+- Frontend target: Cloudflare Pages (`npm run build`, output `dist`)
+- Backend target: Cloudflare Workers (`cd backend && npm run deploy`)
+- Worker bindings: R2 bucket `UPLOADS_BUCKET` and queue
+  `CONVERSION_QUEUE`; Supabase credentials and download signing key are
+  Worker secrets.
 
-- `index.html` — SEO meta tags (title, description, Open Graph, Twitter card,
-  canonical URL), favicon.
-- `src/styles/globals.css` — Tailwind v4 import, `@theme` design tokens, and
-  the light/dark CSS variable sets switched via `data-theme`.
-- `src/lib/theme.tsx` — theme context, persists choice in `localStorage`,
-  respects `prefers-color-scheme` on first visit.
-- `src/components/*` — every section listed in the brief: Navbar (responsive
-  mobile menu), Hero (headline, CTAs, draggable before/after demo, trust
-  badges), WorkspacePreview (left/center/right/bottom panel mockup with
-  presets, sliders, print-ready toggle, export row), Features (10 cards),
-  UseCases (9 cards), Pricing (3 plans), Faq (accordion), Footer (4 link
-  columns).
-- `src/data/*` — all real copy from the brief, kept out of components so it's
-  easy to edit without touching markup.
-
-The project type-checks cleanly (`tsc -b`) and builds cleanly
-(`npm run build`) as of this version.
-
-## 5. What to build next
-
-1. **Real vectorization engine** — the Hero and WorkspacePreview demos are
-   currently illustrative UI state (see `TODO(backend)` in
-   `WorkspacePreview.tsx`). Decide whether tracing runs client-side (Web
-   Worker + a tracing library) or server-side (for heavier AI-based
-   vectorization), then wire the upload buttons to it.
-2. **Auth** — Sign in / Start free currently render but don't do anything.
-   Add a real auth provider (Clerk, Auth.js, Supabase Auth, or Cloudflare
-   Access) before connecting billing.
-3. **Billing** — Pricing CTAs need a checkout flow (Stripe is the common
-   choice) once Pro/Business plans go live.
-4. **API** — the nav has an "API" link and Business plan promises API access;
-   this needs actual endpoints (likely Cloudflare Workers) plus docs.
-5. **File export** — SVG/PDF/DXF/EPS export buttons in the workspace need
-   real export logic once tracing is implemented.
-6. **Analytics + error tracking** — add before public launch (e.g. Plausible
-   for privacy-friendly analytics, Sentry for errors).
-7. **Legal pages** — Privacy Policy and Terms are linked in the footer but
-   not yet written; needed before accepting real signups, especially given
-   the "private processing" claim made on the homepage.
+Repository configuration describes the deployment targets, but does not by
+itself prove that `vectorla.app`, the Worker, R2, Queue, or Supabase resources
+are live in production.

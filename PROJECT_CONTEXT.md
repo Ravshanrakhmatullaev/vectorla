@@ -1,233 +1,325 @@
-# Vectorla — Project Context
+# Vectorla - Project Context
 
 ## Project vision
 
-Vectorla is **vectorla.app** — a browser-based image-to-vector platform for
+Vectorla is `vectorla.app`, a browser-based raster-to-vector platform for
 designers, print shops, advertising agencies, CNC/laser users, sticker
-makers, and branding companies. Users upload a raster image (logo, sketch,
-signature, QR code, photo) and get back clean, production-ready vector
-files (SVG/PDF/DXF/EPS) suitable for print and cutting workflows — not just
-decorative web SVGs.
+makers, and branding companies. The target is clean production-oriented
+vector output rather than decorative web-only SVGs.
 
-**Current state: frontend-only.** This repo is the marketing site plus a
-fully interactive but *simulated* product UI (workspace, upload, before/after
-preview). There is no real AI vectorization engine, no auth, and no billing
-wired up yet. The UI is intentionally honest about this — see "Preview Mode"
-under Current completed features.
+## Source-of-truth status
+
+This repository is now full-stack:
+
+- `src/` is a React/Vite marketing site and interactive workspace.
+- `backend/` is a separately packaged Cloudflare Worker with R2, Queue, and
+  Supabase integration.
+- The workspace can perform a real upload -> analysis -> queued trace -> poll
+  -> SVG preview/download flow when `VITE_API_BASE_URL` is configured.
+- With no backend URL, the workspace deliberately falls back to visibly
+  disclosed Preview Mode and does not read or upload the selected file.
+
+The product is pre-production. Core tracing and API foundations work, while
+production auth UX, billing, multi-format export, batch workflows, and launch
+operations remain incomplete.
 
 ## Tech stack
 
-- React 19 + TypeScript (`strict: true`, plus `noUncheckedIndexedAccess` and
-  `noImplicitOverride` — see `tsconfig.app.json`)
-- Vite 8 (`vite.config.ts`), path alias `@` → `src/`
-- Tailwind CSS v4 — CSS-first config via `@theme` in `src/styles/globals.css`,
-  no `tailwind.config.js`. Dark mode via a custom `dark:` variant keyed off
-  `[data-theme="dark"]` on `<html>` (not `prefers-color-scheme` alone)
-- `framer-motion` for subtle animation (workflow stepper, fade-ins)
-- `lucide-react` for icons
-- `oxlint` for linting (`.oxlintrc.json`)
-- No backend framework, no database, no server — pure static SPA
+### Frontend
 
-## Current completed features
+- React 19 and React DOM 19
+- TypeScript with strict mode, `noUncheckedIndexedAccess`, and
+  `noImplicitOverride`
+- Vite 8 with `@` -> `src/`
+- Tailwind CSS v4 using CSS-first `@theme` configuration
+- Framer Motion and Lucide React
+- Hand-built theme and i18n contexts; no external i18n package
+- oxlint
 
-- **Landing page** (`src/pages/LandingPage.tsx`): Hero → CompatibleWith →
-  WorkspacePreview → Features → UseCases → Pricing → Faq, wrapped in
-  `MainLayout` (Navbar + Footer).
-- **Premium Hero section** (`src/components/Hero.tsx`): two-column layout,
-  gradient/blob backdrop, primary/secondary CTAs, star-rating trust block,
-  animated 3-step workflow indicator, and a before/after comparison slider.
-- **Before/after artwork** (`src/components/BeforeAfterArt.tsx`): a single
-  shared illustration rendered twice with different CSS filters (blurred/
-  desaturated/noisy vs. sharp/saturated), revealed via `clip-path` so the
-  slider shows one continuous artwork with no visual seam — used by both
-  Hero and WorkspacePreview. **This artwork is being iterated on** — see
-  Current TODOs.
-- **Workspace preview** (`src/components/WorkspacePreview.tsx`): a fake
-  "browser window" UI (presets, recent files, vector-setting sliders,
-  print-ready checklist, export bar) demonstrating the intended product.
-  Explicitly marked **"Preview Mode"** with a visible badge and a persistent
-  disclosure banner: *"This is a frontend preview. Real AI vectorization
-  will be connected in the next version."* Export buttons are disabled with
-  the message *"Available after AI processing is connected."* This is a
-  deliberate honesty requirement — do not reintroduce fake
-  processing/loading animations that imply real AI work is happening.
-- **i18n**: custom-built (no external library) — `src/lib/language.tsx`
-  (`LanguageProvider`/`useLanguage`, mirrors `src/lib/theme.tsx`'s pattern),
-  translations in `src/data/i18n.ts`. Three languages: English (`en`,
-  default), Uzbek (`uz`), Russian (`ru`). Persisted to `localStorage`
-  (`vectorla-lang`). Language switcher in navbar (desktop, next to theme
-  toggle) and in the mobile menu.
-- **Dark/light theme**: `src/lib/theme.tsx`, persisted to `localStorage`
-  (`vectorla-theme`), defaults to `prefers-color-scheme` on first visit.
-  Theme is applied via a **blocking inline script in `index.html`** before
-  React mounts, specifically to avoid a flash-of-wrong-theme (FOUC) — the
-  React provider reads the already-applied `data-theme` attribute rather
-  than recomputing it.
-- **SEO/PWA basics**: `public/robots.txt`, `public/sitemap.xml`,
-  `public/manifest.webmanifest`, `public/favicon.svg`.
-- **`.env.example`**: placeholders for future `VITE_API_BASE_URL`,
-  `VITE_AUTH_PUBLISHABLE_KEY`, `VITE_STRIPE_PUBLISHABLE_KEY`,
-  `VITE_ANALYTICS_DOMAIN`, `VITE_SENTRY_DSN`. Real `.env`/`.env.local` are
-  gitignored.
+### Backend
 
-## UI principles
+- Cloudflare Worker in ES module format
+- Cloudflare R2 for uploaded rasters and generated results
+- Cloudflare Queues for conversion jobs
+- Supabase Auth verification and Postgres repositories through
+  `@supabase/supabase-js`
+- In-memory repository fallbacks keyed by `Env` identity for local tests
+- ImageTracer.js, `@cadit-app/potrace-ts`, and jSquash PNG/JPEG/WebP WASM
+  decoders
+- Standalone TypeScript package under `backend/`; root build/lint scripts do
+  not include it
 
-- **Modern minimal SaaS aesthetic** in the style of Vercel/Framer/Linear/
-  Raycast: soft gradient blobs, glassmorphism (`backdrop-blur` + translucent
-  borders), generous whitespace, restrained motion.
-- **Every visible string goes through the i18n `Translation` object**
-  (`src/data/i18n.ts`) — never hardcode UI copy in components. Brand names
-  and universal acronyms (e.g. "Adobe Illustrator", "SVG", "PDF") are the
-  exception — they stay in plain data files since they don't need
-  translating.
-- **Data/text separation**: components read structural metadata (icons,
-  ids, numeric values) from `src/data/*.ts`, and display text from
-  `t.<section>` via `useLanguage()`. Data files type their arrays against
-  id unions exported from `src/data/i18n.ts` (e.g. `FeatureId`,
-  `PricingPlanId`) so TypeScript's `Record<Id, T>` typing forces every
-  language to define every key — a missing translation is a compile error,
-  not a silent runtime gap.
-- **Honesty over illusion**: do not simulate fake processing/loading delays
-  that imply a real backend is doing work. If something isn't wired up yet,
-  say so visibly (see WorkspacePreview's "Preview Mode").
-- **Excellent dark mode is not optional** — every new visual element must
-  be checked in both themes before considering the work done.
-- **Responsive by default** — verify both a mobile viewport (~375px) and a
-  real desktop width (1280px) in the browser preview, not just by reading
-  Tailwind breakpoints.
+## Completed implementation
 
-## Code principles
+### Frontend foundation
 
-- Keep `tsconfig.app.json`/`tsconfig.node.json` `strict: true` +
-  `noUncheckedIndexedAccess` + `noImplicitOverride` — never disable these to
-  make an error go away. Fix the underlying type issue (see git history:
-  array indexing under `noUncheckedIndexedAccess` returns `T | undefined`
-  and must be guarded, not asserted away).
-  before making any changes.
-- No external i18n library — the hand-rolled context in `src/lib/language.tsx`
-  is intentional (mirrors `src/lib/theme.tsx`). Don't replace it with
-  react-i18next/etc. without being asked.
-- `src/utils/cn.ts` is a tiny hand-rolled className combiner — intentional,
-  do not pull in `clsx`/`tailwind-merge` for this.
-- No comments explaining *what* code does; only *why*, when non-obvious
-  (see the FOUC fix in `src/lib/theme.tsx` for the expected style).
-- Don't add abstractions, error handling, or validation for scenarios that
-  can't happen in this codebase (no backend yet — there is nothing to
-  validate against).
-- Remove dead code/translations when a feature changes shape (e.g. when the
-  fake processing pipeline was replaced by Preview Mode, its now-unused
-  `WorkspaceStageId` type, `processingStages` data, and `stages`/
-  `processingLabel` translation keys were deleted, not left orphaned).
-- Before committing to a new dependency, check if the existing stack
-  already covers the need (`framer-motion` is already installed for
-  animation; no need for a second animation library).
+- Landing page sections: Hero, compatibility strip, workspace, features, use
+  cases, pricing, FAQ, navbar, and footer.
+- Responsive navigation, mobile menu, accessible comparison sliders, and
+  light/dark themes with pre-mount FOUC prevention.
+- English, Uzbek, and Russian translations persisted under `vectorla-lang`.
+- Theme persistence under `vectorla-theme`.
+- Error boundary/fallback components and lazy-loaded below-the-fold sections.
+- SEO metadata, canonical/social preview metadata, sitemap, robots file, PWA
+  manifest/icons, Cloudflare Pages security/cache headers.
+- Shared single-artwork before/after presentation; CSS reveals filtered and
+  crisp renderings of the same composition rather than two unrelated images.
 
-## Deployment information
+### Real workspace flow
 
-- **Target: Cloudflare Pages** (static site, no `wrangler.toml` needed
-  unless/until Pages Functions are introduced for a real backend).
-- Build settings for Cloudflare: Framework preset **Vite**, build command
-  `npm run build`, output directory `dist`.
-- `npm run build` runs `tsc -b && vite build` — type-checks before bundling.
-- Repo is on GitHub: `github.com/Ravshanrakhmatullaev/vectorla`, default
-  branch `main`.
-- No CI pipeline configured yet (no `.github/workflows`).
-- Domain: `vectorla.app` (referenced in SEO meta tags and `sitemap.xml`; not
-  confirmed live/attached in this repo).
+- `src/hooks/useUploadFlow.ts` owns upload state, Quick/Professional mode,
+  polling, retry, reset, and superseding-job behavior.
+- `src/lib/api/` implements typed envelope parsing, form/JSON requests,
+  no-store polling, development retry behavior, and authenticated raw result
+  downloads.
+- `WorkspacePreview` supports file input/drop, original preview, real analysis
+  display, job status, classified failure states, trace-mode switching,
+  vector result fetch, comparison, and browser download.
+- Quick Trace uses the automatically created upload job. Professional Trace
+  creates a replacement job with the `professional` preset and refunds a
+  completed superseded job so switching modes does not stack charges.
 
-## Current roadmap
+### API platform
 
-From the README's "what to build next" (still accurate):
+- All application routes are under `/api/v1`.
+- Standard success/error/paginated envelopes with a fixed error-code
+  vocabulary.
+- Per-request UUID, `X-Request-Id`, `X-Response-Time`, structured JSON logs,
+  and centralized CORS.
+- Public `GET /api/v1/health` and `GET /api/v1/openapi.json`.
+- Protected routes authenticate through Supabase `auth.getUser(token)`.
+- Non-production-only `X-Test-User-Id` bypass for smoke tests/local Vite; it
+  is ignored in production and never overrides a real bearer token.
 
-1. **Real vectorization engine** — decide client-side (Web Worker + tracing
-   library) vs. server-side (AI-based), then wire up `WorkspacePreview` and
-   Hero's upload flow. All current "processing" UI is Preview Mode only.
-2. **Auth** — Sign in / Start free currently render but do nothing. Needs a
-   real provider (Clerk, Auth.js, Supabase Auth, or Cloudflare Access).
-3. **Billing** — Stripe is the likely choice once Pro/Business plans go live.
-4. **API** — nav has an "API" link and the Business plan promises API
-   access; needs real endpoints (likely Cloudflare Workers) plus docs.
-5. **File export** — SVG/PDF/DXF/EPS export buttons need real export logic
-   once tracing exists. They are currently always disabled by design.
-6. **Analytics + error tracking** — before public launch (e.g. Plausible,
-   Sentry). Env var placeholders already exist in `.env.example`.
-7. **Legal pages** — Privacy Policy and Terms are linked in the footer but
-   not written yet; needed before real signups, especially given the
-   "private processing" trust badge claim on the homepage.
+### Uploads, jobs, and storage
 
-## Current TODOs
+- `POST /api/v1/uploads` accepts PNG/JPEG/WebP multipart uploads, validates
+  filename, MIME type, extension, size, content signature, emptiness, and
+  duplicate filenames, then stores bytes in R2 and metadata in a repository.
+- Storage keys exclude the caller-supplied filename and use randomized IDs.
+- Every successful upload automatically creates and enqueues a job.
+- `POST /api/v1/jobs` supports reprocessing, presets/settings, active-job
+  deduplication, and `supersedesJobId` refunds.
+- `GET /api/v1/jobs/:id` and `GET /api/v1/jobs/:id/conversion` expose
+  ownership-checked status/results with no-store responses.
+- Queue processing is idempotent around job transitions and uses Cloudflare
+  retry behavior on failures.
+- Completed conversion metadata never exposes raw R2 `storageKey` values.
+- Signed, expiring, ownership-checked `GET /api/v1/download` streams result
+  bytes from R2 with `Cache-Control: no-store`.
 
-- **Before/after demo artwork** (`src/components/BeforeAfterArt.tsx`) is
-  actively being redesigned. It must remain **one continuous artwork**
-  rendered twice (blurred/desaturated "before" vs. sharp/vibrant "after")
-  revealed via `clip-path` across the slider — never two different images.
-  The subject should read as a premium/professional illustration, not a
-  cartoon icon.
-- Both `src/components/Hero.tsx` (drag & drop) and
-  `src/components/WorkspacePreview.tsx` (Preview Mode) have
-  `TODO(backend)` comments marking exactly where real upload/processing
-  needs to be wired in later — read those comments before touching that code.
-- No test suite exists yet.
+### Vectorization and quality
 
-## Assets structure
+- Shared PNG/JPEG/WebP decode path through jSquash WASM modules.
+- Image analysis reports dimensions, aspect ratio, colors, transparency,
+  grayscale, edge/noise signals, image type, complexity, recommended provider
+  and preset, estimated quality, credits, and processing time.
+- The historically named `PlaceholderProvider` is a real ImageTracer engine
+  with tuned presets for logo, signature, QR, icon, sticker, blueprint,
+  sketch, illustration, and photo-like inputs.
+- `PotraceProvider` is implemented for monochrome logos, signatures, QR
+  codes, stamps, and simple icons.
+- Quick Trace skips image-domain preprocessing but still selects a provider
+  and optimizes SVG.
+- Professional Trace runs noise reduction, background cleanup, contrast
+  normalization, color quantization, edge enhancement, provider selection,
+  and SVG optimization. Its auto-upscale stage is intentionally disabled
+  because real upscaling is not implemented.
+- Provider failures caused by the unimplemented Vision/OpenAI paths fall back
+  to the working ImageTracer engine during normal conversion.
+- Synthetic quality harness, SVG metrics, tuned preset smoke tests, and
+  `backend/QUALITY_REPORT.md` document measured quality work.
 
-```
-src/
-  App.tsx                 ThemeProvider > LanguageProvider > MainLayout > LandingPage
-  main.tsx                React root
-  pages/
-    LandingPage.tsx        Composes all sections, in render order
-  layouts/
-    MainLayout.tsx         Navbar + <main> + Footer
-  components/
-    Navbar.tsx             Nav links, language switcher, theme toggle, mobile menu
-    Hero.tsx                Premium two-column hero + before/after slider
-    BeforeAfterArt.tsx      Shared before/after illustration (see roadmap TODO)
-    CompatibleWith.tsx      "Compatible with" logo-cloud strip
-    WorkspacePreview.tsx    Simulated product UI, explicitly "Preview Mode"
-    Features.tsx / UseCases.tsx / Pricing.tsx / Faq.tsx / Footer.tsx
-    LogoMark.tsx            Brand mark (also mirrored in public/favicon.svg)
-    ThemeToggle.tsx / LanguageSwitcher.tsx
-    ui/Button.tsx / ui/SectionHeading.tsx   Small shared primitives
-  lib/
-    theme.tsx               Dark/light ThemeProvider + useTheme
-    language.tsx            i18n LanguageProvider + useLanguage
-  data/
-    i18n.ts                 Language type, all id unions, full EN/UZ/RU translations
-    nav.ts / features.ts / useCases.ts / pricing.ts / faq.ts / trustBadges.ts /
-    workspace.ts / compatibleApps.ts
-                            Structural metadata only (icons, ids, values) — no display text
-  utils/
-    cn.ts                   Tiny className combiner
-  styles/
-    globals.css             Tailwind v4 import, @theme tokens, light/dark CSS variables
-public/
-  favicon.svg / manifest.webmanifest / robots.txt / sitemap.xml
-```
+### Retrieval, credits, and history
 
-## Rules for future development
+- `GET /api/v1/conversions` provides a paginated caller-scoped list.
+- `GET /api/v1/conversions/:id` provides ownership-checked metadata and a
+  fresh signed download URL.
+- Credit balances and transactions use optimistic locking to avoid lost
+  concurrent updates.
+- Conversions enforce credits, record debits, and support idempotent refunds
+  when completed jobs are superseded.
+- `GET /api/v1/credits` returns the authenticated user's current balance and
+  bounded recent transactions with no-store caching.
+- `GET /api/v1/history` derives a stable, paginated, caller-only job history
+  with associated conversion IDs, using bounded job and conversion queries
+  and no-store caching.
+- A development-only credit grant endpoint exists and returns 404 in
+  production.
+- Orphan detection compares R2 objects against upload/conversion records.
 
-1. Read this file, the README, and the relevant component before making
-   changes — don't assume prior session context carries over.
-2. Never hardcode user-facing copy — add it to `src/data/i18n.ts` for all
-   three languages, typed against an id union so missing translations fail
-   the build.
-3. Never simulate fake backend work (progress bars, fake AI stages) without
-   an explicit, visible disclosure that it's a preview — see WorkspacePreview.
-4. Keep `strict` TypeScript green — fix type errors properly, never
-   suppress with `any`/`ts-ignore`/relaxed compiler flags.
-5. Always run `npm run build` and `npm run lint` after changes and treat
-   both as required, not optional.
-6. Check both light and dark mode, and both mobile (~375px) and desktop
-   (1280px) viewports, before calling a UI change done.
-7. Don't add a new dependency without checking whether `framer-motion`,
-   `lucide-react`, or the existing hand-rolled utilities already cover it.
-8. Don't commit or push unless explicitly asked to in that specific turn —
-   treat each request's git instructions as scoped to that request only.
-9. When replacing a feature (like the fake processing pipeline → Preview
-   Mode), delete the old translations/types/data it leaves behind instead
-   of leaving dead code.
+### Persistence and integrity
 
----
+- Supabase repositories exist for uploads, jobs, conversions, and credits.
+- In-memory equivalents support local smoke tests without credentials.
+- Database schema includes relevant ownership/look-up indexes, duplicate
+  upload protection, optimistic-lock versions, and unique conversion storage
+  keys.
+- Active-job checks, completed-job idempotency, and conflict handling reduce
+  duplicate queue work and double billing.
 
-Always read PROJECT_CONTEXT.md before making any code changes.
+## Partially implemented
+
+### Authentication
+
+The backend's production authentication and authorization checks are real.
+The frontend does not yet provide login, signup, token storage, or bearer-token
+injection. Its only automatic identity is the Vite-development test header,
+which production Workers reject. Therefore a production frontend cannot yet
+use protected API routes without completing the frontend auth/session flow.
+
+### Vectorization providers
+
+ImageTracer and Potrace work. `VisionProvider` and `OpenAIProvider` still
+throw `NotImplementedError`. Photo analysis recommends Vision, but the
+conversion service catches that expected gap and falls back to ImageTracer.
+
+### Export and print-ready model
+
+Types/configuration describe SVG, PNG, PDF, EPS, and DXF and the marketing UI
+shows several formats. The actual conversion engine currently emits SVG only.
+Job records do not yet carry requested output-format count or print-ready
+flags, so credit calculation is invoked as one format/non-print-ready.
+
+### Credits and plans
+
+Backend plan configuration has four tiers:
+
+| Plan | Monthly credits | Max file | Batch limit | Configured formats |
+|---|---:|---:|---:|---|
+| Free | 10 | 5 MB | 1 | SVG, PNG |
+| Starter | 100 | 25 MB | 10 | SVG, PNG, PDF |
+| Pro | 500 | 100 MB | 100 | SVG, PDF, EPS, DXF, PNG |
+| Business | 5,000 | 500 MB | 1,000 | SVG, PDF, EPS, DXF, PNG |
+
+These are configuration limits, not proof that batch/multi-format generation
+exists. The frontend pricing section is still the older Free/Pro/Business
+copy and includes claims that do not match the credit model. Upload callers
+currently submit their plan; it is not derived from an authenticated profile
+or billing subscription. Monthly grants exist as a service method but are not
+wired to a billing cycle.
+
+### Frontend integration
+
+The workspace is connected when `VITE_API_BASE_URL` is present. The Hero
+dropzone, Hero CTA buttons, navbar sign-in/start buttons, pricing CTAs, API
+navigation destination, and footer legal links are not functional product
+flows yet.
+
+### Cleanup and operations
+
+Orphan detection works, but there is no scheduled trigger or deletion pass.
+`StorageService.deleteFile`, `UploadService.getUpload`, and
+`UploadService.deleteUpload` are not implemented. The health endpoint is a
+liveness check only; it does not probe R2, Queue, or Supabase dependencies.
+
+## Not yet implemented
+
+- Production frontend auth/account UI and session integration.
+- Stripe billing, checkout/customer portal, subscription webhooks, monthly
+  credit scheduling, and paid top-ups.
+- Batch upload/processing and archive download.
+- PNG/PDF/EPS/DXF generation and real multi-format billing.
+- Print-ready CMYK validation, cut-line generation, and plan waiver behavior.
+- Upload GET/DELETE API routes and storage deletion.
+- Real Vision/OpenAI tracing and real AI upscaling.
+- User-facing credits/history/account screens; the backend APIs exist, but
+  the landing-page frontend does not consume them.
+- Analytics and production error tracking despite env placeholders.
+- Privacy Policy and Terms pages.
+- CI workflow and an aggregate backend test script.
+- Confirmed production deployment/domain/binding state from repository
+  evidence.
+
+## API inventory
+
+Public:
+
+- `GET /api/v1/health`
+- `GET /api/v1/openapi.json`
+
+Authenticated:
+
+- `POST /api/v1/uploads`
+- `POST /api/v1/jobs`
+- `GET /api/v1/jobs/:id`
+- `GET /api/v1/jobs/:id/conversion`
+- `GET /api/v1/conversions`
+- `GET /api/v1/conversions/:id`
+- `GET /api/v1/download?key=&exp=&sig=`
+- `GET /api/v1/credits`
+- `GET /api/v1/history`
+
+Development only:
+
+- `POST /api/v1/dev/credits/grant`
+
+Not implemented:
+
+- `GET /api/v1/uploads/:id`
+- `DELETE /api/v1/uploads/:id`
+
+See `backend/API.md` and the served OpenAPI document for response contracts.
+
+## Testing status
+
+- Root `npm run build` runs strict TypeScript project builds and Vite.
+- Root `npm run lint` runs oxlint.
+- `cd backend && npm run typecheck` runs backend TypeScript without emit.
+- There are 23 standalone `*.smoke-test.ts` files covering fetch routing,
+  queue behavior, auth, uploads, jobs, conversion retrieval/download,
+  credits, history, repositories/services, providers, analysis, professional
+  tracing, and quality presets.
+- Tests call real handlers/services with fake Cloudflare bindings and
+  in-memory repositories; no real Supabase project is required.
+- There is no conventional unit-test runner configuration or CI workflow.
+
+## Deployment context
+
+- Frontend target: Cloudflare Pages, build `npm run build`, output `dist`.
+- Backend target: Cloudflare Workers through `backend/wrangler.toml`.
+- Required Worker resources: R2 bucket `vectorla-uploads`, queue
+  `vectorla-conversions`, Supabase URL/service-role secret, and download URL
+  signing secret.
+- CORS always allows `https://vectorla.app`; localhost origins are allowed
+  outside production only.
+- Repository files describe intended deployment. Do not claim the domain,
+  Worker, R2 bucket, Queue, or Supabase project is live without external
+  verification.
+- Cloudflare Pages CSP currently uses `connect-src 'self'`; a separately
+  hosted API origin will require the deployed header policy to allow that
+  Worker origin.
+
+## Development rules
+
+1. Read this file, the relevant README/API docs, and the affected code before
+   changes. Live code is the source of truth when comments/docs disagree.
+2. Keep strict TypeScript settings. Fix type issues; do not weaken compiler
+   flags or add `any`/`ts-ignore` escapes.
+3. Put every visible UI string in all three language records in
+   `src/data/i18n.ts`; keep structural data separate in `src/data/`.
+4. Keep the hand-built theme/i18n contexts and `src/utils/cn.ts` unless a task
+   explicitly requests an architectural change.
+5. Preserve honest Preview Mode. Do not simulate backend processing when no
+   backend is configured.
+6. Never expose raw storage keys or weaken ownership/auth checks.
+7. Treat both frontend `npm run build`/`npm run lint` and backend
+   `npm run typecheck` plus relevant smoke tests as required verification.
+8. For UI work, check light/dark themes and approximately 375px/1280px
+   viewports.
+9. Do not add dependencies until the existing stack has been checked.
+10. Do not commit or push unless explicitly asked in that turn.
+
+## Current priorities
+
+1. Complete production frontend authentication and bearer-token API wiring.
+2. Reconcile frontend pricing/copy with the four-tier backend credit model and
+   derive plan limits from trusted user/account data.
+3. Add billing and credit lifecycle automation.
+4. Implement requested formats/print-ready settings end to end, then add real
+   PDF/EPS/DXF/PNG output.
+5. Add batch workflows.
+6. Implement upload retrieval/deletion and scheduled orphan cleanup.
+7. Decide and implement the production photo/AI provider strategy.
+8. Add CI, aggregate test commands, observability, legal pages, and verified
+   production deployment checks.
