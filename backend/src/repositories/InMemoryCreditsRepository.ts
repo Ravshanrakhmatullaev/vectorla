@@ -35,9 +35,10 @@ export class InMemoryCreditsRepository implements CreditsRepository {
     return transaction
   }
 
-  async findTransactionsByUserId(userId: string): Promise<CreditTransaction[]> {
+  async findTransactionsByUserId(userId: string, limit?: number): Promise<CreditTransaction[]> {
     return this.transactions
       .filter((transaction) => transaction.userId === userId)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit)
   }
 }

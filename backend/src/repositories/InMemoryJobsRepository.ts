@@ -37,4 +37,11 @@ export class InMemoryJobsRepository implements JobsRepository {
     }
     return null
   }
+
+  async findPageByUserId(userId: string, limit: number, offset: number): Promise<{ jobs: Job[]; total: number }> {
+    const jobs = Array.from(this.jobsById.values())
+      .filter((job) => job.userId === userId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))
+    return { jobs: jobs.slice(offset, offset + limit), total: jobs.length }
+  }
 }

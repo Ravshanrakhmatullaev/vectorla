@@ -6,12 +6,10 @@ This is a **Cloudflare Worker**, deployed separately from the frontend
 `package.json`, `tsconfig.json`, and `wrangler.toml`, and is a fully
 independent deployable.
 
-**Most of this is still scaffolding.** Every route handler and service method
-throws `new Error('Not implemented')` *except* `POST /api/uploads`, `POST
-/api/jobs`, `GET /api/jobs/:id`, and the queue consumer (see below). This
-exists purely to define the shape of the API, the data model, and the
-integration points so real implementation (including AI vectorization) can
-be dropped in later without re-architecting anything.
+The core upload, job, tracing, conversion retrieval/download, authentication,
+and credit-enforcement paths are implemented. Remaining scaffolding is
+limited to upload retrieval/deletion and the optional Vision/OpenAI providers;
+see the live route/service files and `API.md` for the current contract.
 
 ## Job Queue (implemented)
 
@@ -155,8 +153,8 @@ route; everything else is the same functionality under the new prefix/envelope.
 4. `GET /api/v1/jobs/:id` — client polls for job status.
 5. `GET /api/v1/conversions/:id` (or `/api/v1/conversions` for a paginated
    list) — metadata + a signed R2 download URL.
-6. `GET /api/v1/credits` / `GET /api/v1/history` — still stubbed
-   (`501 INTERNAL_ERROR`), balance and past activity.
+6. `GET /api/v1/credits` — current balance and recent transactions.
+7. `GET /api/v1/history` — paginated past jobs with their conversion IDs.
 
 ## Folder structure
 
@@ -164,12 +162,10 @@ route; everything else is the same functionality under the new prefix/envelope.
 backend/
   src/
     index.ts            Worker entry point — fetch() dispatch + queue() consumer.
-                         The dispatch itself is real; every handler it calls throws.
     env.ts               Env interface — the Worker bindings/secrets contract.
-    routes/              One handler per resource area. All throw "Not implemented".
-    services/            Business-facing layer: UploadService, QueueService,
-                         ConversionService, StorageService, CreditsService.
-                         All methods throw "Not implemented".
+    routes/              Authenticated API handlers.
+    services/            Upload, queue, conversion, storage, analysis, and credits
+                         business logic.
     integrations/        Thin wrappers over raw Cloudflare bindings / Supabase SDK
                          (r2.ts, queue.ts, supabase.ts). Services depend on these,
                          never on the raw binding types directly.

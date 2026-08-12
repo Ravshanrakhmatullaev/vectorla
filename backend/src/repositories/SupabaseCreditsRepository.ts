@@ -111,13 +111,14 @@ export class SupabaseCreditsRepository implements CreditsRepository {
     return mapRowToTransaction(data)
   }
 
-  async findTransactionsByUserId(userId: string): Promise<CreditTransaction[]> {
-    const { data, error } = await this.client
+  async findTransactionsByUserId(userId: string, limit?: number): Promise<CreditTransaction[]> {
+    let query = this.client
       .from('credit_transactions')
       .select()
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
-      .returns<TransactionRow[]>()
+    if (limit !== undefined) query = query.limit(limit)
+    const { data, error } = await query.returns<TransactionRow[]>()
 
     if (error) throw new Error(`Failed to list credit transactions: ${error.message}`)
     return (data ?? []).map(mapRowToTransaction)

@@ -10,5 +10,5 @@ export interface CreditsRepository {
    */
   setBalance(userId: string, balance: number, previous: CreditBalance | null): Promise<CreditBalance>
   createTransaction(transaction: CreditTransaction): Promise<CreditTransaction>
-  findTransactionsByUserId(userId: string): Promise<CreditTransaction[]>
+  findTransactionsByUserId(userId: string, limit?: number): Promise<CreditTransaction[]>
 }

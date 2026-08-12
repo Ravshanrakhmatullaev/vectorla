@@ -127,6 +127,24 @@ Paginated list of the caller's completed conversions. Query params: `limit`
 `data: Conversion` (never includes `storageKey` — see Phase 17 security
 notes) · `200`
 
+### `GET /credits`
+
+Returns the authenticated caller's current credit balance and newest
+balance-affecting transactions. Optional query param: `limit` (default 20,
+max 100). Transaction objects omit `userId` because every entry is already
+scoped to the authenticated caller.
+
+`data: { balance: number, transactions: CreditTransaction[] }` · `200`
+
+### `GET /history`
+
+Returns the authenticated caller's jobs newest first, with any conversion IDs
+produced by each job. Query params: `limit` (default 20, max 100) and `offset`
+(default 0). The response uses the standard paginated envelope and is derived
+from the existing job/conversion records; there is no separate history table.
+
+`data: HistoryEntry[]`, `pagination: { total, limit, offset, hasMore }` · `200`
+
 ### `GET /download?key=&exp=&sig=`
 
 Streams the file directly — **not** JSON-wrapped on success. `key`/`exp`/`sig`
@@ -141,8 +159,3 @@ No auth required. `data: { status: "ok", environment, timestamp }` · `200`
 ### `GET /openapi.json`
 
 No auth required. Returns the OpenAPI 3.0 document, unwrapped.
-
-## Not yet implemented
-
-`GET /credits` and `GET /history` exist as routes but currently return
-`501 INTERNAL_ERROR` (`NotImplementedError`) — see `backend/README.md`.

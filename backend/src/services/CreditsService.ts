@@ -52,6 +52,11 @@ export class CreditsService {
     return existing ?? { userId, balance: 0, version: 0, updatedAt: new Date().toISOString() }
   }
 
+  /** Returns the caller's newest balance-affecting transactions first. */
+  async getRecentTransactions(userId: string, limit: number): Promise<CreditTransaction[]> {
+    return this.repository.findTransactionsByUserId(userId, limit)
+  }
+
   /**
    * Throws InsufficientCreditsError if the user can't cover requiredCredits —
    * callers (e.g. ConversionService) let this fail the job. In local

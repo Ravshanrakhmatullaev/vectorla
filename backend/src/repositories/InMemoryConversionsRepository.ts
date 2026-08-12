@@ -25,6 +25,13 @@ export class InMemoryConversionsRepository implements ConversionsRepository {
     return null
   }
 
+  async findByJobIds(jobIds: string[], userId: string): Promise<Conversion[]> {
+    const requestedIds = new Set(jobIds)
+    return Array.from(this.conversionsById.values()).filter(
+      (conversion) => conversion.userId === userId && requestedIds.has(conversion.jobId),
+    )
+  }
+
   async findByUserId(userId: string): Promise<Conversion[]> {
     return Array.from(this.conversionsById.values())
       .filter((conversion) => conversion.userId === userId)

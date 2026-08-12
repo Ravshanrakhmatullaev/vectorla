@@ -104,4 +104,18 @@ export class SupabaseJobsRepository implements JobsRepository {
     if (error) throw new Error(`Failed to look up active job: ${error.message}`)
     return data ? mapRowToJob(data) : null
   }
+
+  async findPageByUserId(userId: string, limit: number, offset: number): Promise<{ jobs: Job[]; total: number }> {
+    const { data, error, count } = await this.client
+      .from('jobs')
+      .select('*', { count: 'exact' })
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(offset, offset + limit - 1)
+      .returns<JobRow[]>()
+
+    if (error) throw new Error(`Failed to list jobs: ${error.message}`)
+    return { jobs: (data ?? []).map(mapRowToJob), total: count ?? 0 }
+  }
 }

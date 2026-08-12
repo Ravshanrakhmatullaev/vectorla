@@ -97,6 +97,46 @@ export const OPENAPI_DOCUMENT = {
           createdAt: { type: 'string', format: 'date-time' },
         },
       },
+      HistoryEntry: {
+        type: 'object',
+        required: ['id', 'userId', 'jobId', 'uploadId', 'conversionIds', 'createdAt'],
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          userId: { type: 'string', format: 'uuid' },
+          jobId: { type: 'string', format: 'uuid' },
+          uploadId: { type: 'string', format: 'uuid' },
+          conversionIds: {
+            type: 'array',
+            items: { type: 'string', format: 'uuid' },
+            description: 'Conversion results produced by this job; empty while none exists.',
+          },
+          createdAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      CreditTransaction: {
+        type: 'object',
+        required: ['id', 'amount', 'type', 'reason', 'jobId', 'createdAt'],
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          amount: { type: 'integer', minimum: 1 },
+          type: { type: 'string', enum: ['debit', 'credit', 'refund'] },
+          reason: { type: 'string' },
+          jobId: { type: 'string', format: 'uuid', nullable: true },
+          createdAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      CreditsOverview: {
+        type: 'object',
+        required: ['balance', 'transactions'],
+        properties: {
+          balance: { type: 'integer', minimum: 0 },
+          transactions: {
+            type: 'array',
+            description: 'Newest first. The user id is omitted because every entry belongs to the authenticated caller.',
+            items: { $ref: '#/components/schemas/CreditTransaction' },
+          },
+        },
+      },
       ErrorCode: {
         type: 'string',
         enum: [
@@ -235,6 +275,71 @@ export const OPENAPI_DOCUMENT = {
         summary: 'Get one conversion (metadata + a fresh signed download URL)',
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
         responses: { 200: { description: 'OK' }, 401: { $ref: '#/components/responses/Unauthorized' }, 403: { $ref: '#/components/responses/Forbidden' }, 404: { $ref: '#/components/responses/NotFound' } },
+      },
+    },
+    '/history': {
+      get: {
+        summary: "List the authenticated user's job and conversion history",
+        parameters: [
+          { name: 'limit', in: 'query', schema: { type: 'integer', default: 20, minimum: 1, maximum: 100 } },
+          { name: 'offset', in: 'query', schema: { type: 'integer', default: 0, minimum: 0 } },
+        ],
+        responses: {
+          200: {
+            description: 'Newest-first paginated history',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['success', 'data', 'pagination', 'requestId'],
+                  properties: {
+                    success: { type: 'boolean', enum: [true] },
+                    data: { type: 'array', items: { $ref: '#/components/schemas/HistoryEntry' } },
+                    pagination: {
+                      type: 'object',
+                      required: ['total', 'limit', 'offset', 'hasMore'],
+                      properties: {
+                        total: { type: 'integer', minimum: 0 },
+                        limit: { type: 'integer', minimum: 1, maximum: 100 },
+                        offset: { type: 'integer', minimum: 0 },
+                        hasMore: { type: 'boolean' },
+                      },
+                    },
+                    requestId: { type: 'string', format: 'uuid' },
+                  },
+                },
+              },
+            },
+          },
+          401: { $ref: '#/components/responses/Unauthorized' },
+        },
+      },
+    },
+    '/credits': {
+      get: {
+        summary: "Get the authenticated user's current credit balance and recent transactions",
+        parameters: [
+          { name: 'limit', in: 'query', schema: { type: 'integer', default: 20, minimum: 1, maximum: 100 } },
+        ],
+        responses: {
+          200: {
+            description: 'Current balance and recent transactions',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['success', 'data', 'requestId'],
+                  properties: {
+                    success: { type: 'boolean', enum: [true] },
+                    data: { $ref: '#/components/schemas/CreditsOverview' },
+                    requestId: { type: 'string', format: 'uuid' },
+                  },
+                },
+              },
+            },
+          },
+          401: { $ref: '#/components/responses/Unauthorized' },
+        },
       },
     },
     '/download': {

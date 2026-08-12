@@ -13,4 +13,5 @@ export interface JobsRepository {
   update(previous: Job, next: Job): Promise<Job>
   /** An upload's currently in-flight job (queued/processing), if any — used to prevent duplicate active jobs per upload. */
   findActiveByUploadId(uploadId: string): Promise<Job | null>
+  findPageByUserId(userId: string, limit: number, offset: number): Promise<{ jobs: Job[]; total: number }>
 }
