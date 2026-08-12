@@ -35,7 +35,7 @@ function createFakeEnv(): Env {
     PNG_DECODER_WASM: {} as WebAssembly.Module,
     JPEG_DECODER_WASM: {} as WebAssembly.Module,
     WEBP_DECODER_WASM: {} as WebAssembly.Module,
-    ENVIRONMENT: 'staging',
+    ENVIRONMENT: 'development',
   }
 }
 
@@ -111,6 +111,13 @@ async function run() {
   assertEqual(firstPageBody.pagination.hasMore, true, 'first page reports more results')
   assertEqual(firstPageBody.data.every((entry) => entry.userId === 'history-user'), true, 'no other user history is returned')
   console.log('PASS: returns only the authenticated user history, newest first, with conversion ids')
+
+  const otherUserPage = await readHistory(await handleHistoryRoute(makeRequest('other-user'), env, TEST_REQUEST_ID))
+  assertEqual(otherUserPage.data.length, 1, 'other user sees exactly their own job')
+  assertEqual(otherUserPage.data[0]?.jobId, otherJob.id, 'other user receives their own job')
+  assertEqual(otherUserPage.data[0]?.conversionIds[0], 'conversion-other', 'other user receives their own conversion')
+  assertEqual(otherUserPage.data.some((entry) => entry.userId === 'history-user'), false, 'other user cannot see caller history')
+  console.log('PASS: cross-user history and conversion data stay isolated in both directions')
 
   const secondPage = await handleHistoryRoute(makeRequest('history-user', '?limit=2&offset=2'), env, TEST_REQUEST_ID)
   const secondPageBody = await readHistory(secondPage)

@@ -1,6 +1,8 @@
 // Thin fetch wrapper for the Vectorla backend (see backend/API.md). Kept
 // deliberately small — one shared envelope parser, no request library.
 
+import { getAccessToken, isSupabaseConfigured } from '@/lib/supabase'
+
 export type ApiErrorCode =
   | 'VALIDATION_ERROR'
   | 'UNAUTHORIZED'
@@ -34,13 +36,7 @@ export class ApiError extends Error {
 
 const DEV_USER_ID_KEY = 'vectorla-dev-user-id'
 
-/**
- * No login UI exists yet (out of scope for Phase 22 — see PROJECT_CONTEXT.md
- * roadmap item 2). Locally this authenticates via the backend's dev-only
- * X-Test-User-Id bypass (backend/src/middleware/requireAuth.ts), which the
- * backend itself refuses to honor outside non-production environments — so
- * this never grants access in a real deployment.
- */
+/** Local fallback used only when Vite dev runs without configured Supabase Auth. */
 function getDevTestUserId(): string {
   const existing = window.localStorage.getItem(DEV_USER_ID_KEY)
   if (existing) return existing
@@ -58,9 +54,12 @@ export function isBackendConfigured(): boolean {
   return getApiBaseUrl().length > 0
 }
 
-function buildHeaders(extra?: HeadersInit): Headers {
+async function buildHeaders(extra?: HeadersInit): Promise<Headers> {
   const headers = new Headers(extra)
-  if (import.meta.env.DEV) {
+  const accessToken = await getAccessToken()
+  if (accessToken) {
+    headers.set('Authorization', `Bearer ${accessToken}`)
+  } else if (import.meta.env.DEV && !isSupabaseConfigured) {
     headers.set('X-Test-User-Id', getDevTestUserId())
   }
   return headers
@@ -142,7 +141,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     // Cache-Control on its JSON responses, and this was observed to get
     // served stale from the browser's HTTP cache under default caching,
     // which would freeze the UI on an old status forever.
-    response = await devFetch(`${baseUrl}${path}`, { ...init, headers: buildHeaders(init?.headers), cache: 'no-store' })
+    response = await devFetch(`${baseUrl}${path}`, { ...init, headers: await buildHeaders(init?.headers), cache: 'no-store' })
   } catch {
     throw new ApiError(describeUnreachable(baseUrl), 'NETWORK_ERROR', 0, null)
   }
@@ -171,7 +170,7 @@ export function apiPostJson<T>(path: string, body: unknown): Promise<T> {
 export async function apiFetchRaw(path: string, init?: RequestInit): Promise<Response> {
   const baseUrl = requireBaseUrl()
   try {
-    return await devFetch(`${baseUrl}${path}`, { ...init, headers: buildHeaders(init?.headers) })
+    return await devFetch(`${baseUrl}${path}`, { ...init, headers: await buildHeaders(init?.headers) })
   } catch {
     throw new ApiError(describeUnreachable(baseUrl), 'NETWORK_ERROR', 0, null)
   }

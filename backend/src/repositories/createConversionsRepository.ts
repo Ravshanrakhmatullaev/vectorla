@@ -1,4 +1,5 @@
 import type { Env } from '../env'
+import { shouldUseInMemoryRepositories } from '../env'
 import { createSupabaseClient } from '../integrations/supabase'
 import { SupabaseConversionsRepository } from './SupabaseConversionsRepository'
 import { InMemoryConversionsRepository } from './InMemoryConversionsRepository'
@@ -12,7 +13,7 @@ const inMemoryRepositoryByEnv = new WeakMap<Env, InMemoryConversionsRepository>(
 
 /** Same fallback pattern as createUploadsRepository — see that file for the rationale. */
 export function createConversionsRepository(env: Env): ConversionsRepository {
-  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+  if (shouldUseInMemoryRepositories(env)) {
     let repository = inMemoryRepositoryByEnv.get(env)
     if (!repository) {
       repository = new InMemoryConversionsRepository()

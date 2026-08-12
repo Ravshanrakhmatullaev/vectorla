@@ -1,5 +1,6 @@
 import type { ExportedHandler, MessageBatch } from '@cloudflare/workers-types'
 import type { Env } from './env'
+import { assertRequiredBackendSecrets } from './env'
 import type { ConversionQueueMessage } from './integrations/queue'
 import { createJobService } from './services/JobService'
 import { createConversionService } from './services/ConversionService'
@@ -104,6 +105,7 @@ export default {
 
     let response: Response
     try {
+      assertRequiredBackendSecrets(env)
       response = await routeRequest(url, request, env, requestId)
     } catch (error) {
       response = mapErrorToResponse(error, requestId)
@@ -127,6 +129,7 @@ export default {
   // processing -> stored -> completed) can be exercised end-to-end.
   async queue(batch: MessageBatch<ConversionQueueMessage>, rawEnv: Env): Promise<void> {
     const env = await withWasmModules(rawEnv)
+    assertRequiredBackendSecrets(env)
     const jobService = createJobService(env)
     const conversionService = createConversionService(env)
 

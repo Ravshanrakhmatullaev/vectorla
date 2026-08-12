@@ -5,18 +5,21 @@ import { MainLayout } from '@/layouts/MainLayout'
 import { LandingPage } from '@/pages/LandingPage'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { ErrorFallback } from '@/components/ErrorFallback'
+import { AuthProvider } from '@/lib/auth'
 
 function App() {
   return (
     <ThemeProvider>
       <LanguageProvider>
-        <MainLayout>
-          <ErrorBoundary fallback={<ErrorFallback />}>
-            <DemoAssetProvider>
-              <LandingPage />
-            </DemoAssetProvider>
-          </ErrorBoundary>
-        </MainLayout>
+        <AuthProvider>
+          <MainLayout>
+            <ErrorBoundary fallback={<ErrorFallback />}>
+              <DemoAssetProvider>
+                <LandingPage />
+              </DemoAssetProvider>
+            </ErrorBoundary>
+          </MainLayout>
+        </AuthProvider>
       </LanguageProvider>
     </ThemeProvider>
   )

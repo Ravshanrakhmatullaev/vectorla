@@ -34,7 +34,7 @@ async function createFakeEnv(): Promise<Env> {
     PNG_DECODER_WASM: png,
     JPEG_DECODER_WASM: jpeg,
     WEBP_DECODER_WASM: webp,
-    ENVIRONMENT: 'staging',
+    ENVIRONMENT: 'development',
   }
 }
 

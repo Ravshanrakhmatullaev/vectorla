@@ -20,14 +20,17 @@ function assertTrue(condition: boolean, message: string): void {
   if (!condition) throw new Error(message)
 }
 
-async function createFakeEnv(environment: Env['ENVIRONMENT'] = 'development'): Promise<Env> {
+async function createFakeEnv(
+  environment: Env['ENVIRONMENT'] = 'development',
+  configured = false,
+): Promise<Env> {
   const { png, jpeg, webp } = await loadDecoderWasmModules()
   return {
     UPLOADS_BUCKET: {} as R2Bucket,
     CONVERSION_QUEUE: {} as Queue<ConversionQueueMessage>,
-    SUPABASE_URL: '',
-    SUPABASE_SERVICE_ROLE_KEY: '',
-    DOWNLOAD_URL_SECRET: 'test-secret',
+    SUPABASE_URL: configured ? 'https://test.supabase.co' : '',
+    SUPABASE_SERVICE_ROLE_KEY: configured ? 'test-service-role-key' : '',
+    DOWNLOAD_URL_SECRET: configured || environment === 'development' ? 'test-secret' : '',
     VECTORIZATION_PROVIDER: 'placeholder',
     PNG_DECODER_WASM: png,
     JPEG_DECODER_WASM: jpeg,
@@ -85,17 +88,32 @@ async function run() {
   assertEqual(preflightRes.status, 204, 'preflight response status')
   assertEqual(preflightRes.headers.get('Access-Control-Allow-Origin'), 'http://localhost:5173', 'preflight echoes the allowed dev origin')
   assertTrue((preflightRes.headers.get('Access-Control-Allow-Methods') ?? '').includes('GET'), 'preflight allows GET')
+  assertTrue((preflightRes.headers.get('Access-Control-Allow-Headers') ?? '').includes('X-Test-User-Id'), 'development preflight allows the test identity header')
   console.log('PASS: CORS preflight succeeds for an allowed dev origin')
 
-  // 6. CORS preflight from a disallowed production origin gets no CORS headers
-  // (still 204 — the browser itself blocks the actual request without the header).
-  const prodEnv = await createFakeEnv('production')
-  const disallowedPreflightRes = await worker.fetch(
-    new Request('http://localhost/api/v1/health', { method: 'OPTIONS', headers: { Origin: 'http://localhost:5173' } }),
-    prodEnv,
-  )
-  assertEqual(disallowedPreflightRes.headers.get('Access-Control-Allow-Origin'), null, 'dev origins are not allowed in production')
-  console.log('PASS: CORS does not allow a dev origin in production')
+  // 6. Localhost CORS is denied in both staging and production.
+  for (const environment of ['staging', 'production'] as const) {
+    const lockedEnv = await createFakeEnv(environment, true)
+    const disallowedPreflightRes = await worker.fetch(
+      new Request('http://localhost/api/v1/health', { method: 'OPTIONS', headers: { Origin: 'http://localhost:5173' } }),
+      lockedEnv,
+    )
+    assertEqual(
+      disallowedPreflightRes.headers.get('Access-Control-Allow-Origin'),
+      null,
+      `dev origins are not allowed in ${environment}`,
+    )
+    const productionOriginPreflight = await worker.fetch(
+      new Request('http://localhost/api/v1/health', { method: 'OPTIONS', headers: { Origin: 'https://vectorla.app' } }),
+      lockedEnv,
+    )
+    assertEqual(
+      (productionOriginPreflight.headers.get('Access-Control-Allow-Headers') ?? '').includes('X-Test-User-Id'),
+      false,
+      `test identity header is not allowed in ${environment}`,
+    )
+  }
+  console.log('PASS: CORS does not allow a localhost origin in staging or production')
 
   // 7. An actual (non-preflight) request from an allowed origin gets the CORS header too.
   const corsRes = await worker.fetch(
@@ -110,6 +128,18 @@ async function run() {
   assertEqual(noOriginRes.status, 200, 'a request with no Origin header still succeeds')
   assertEqual(noOriginRes.headers.get('Access-Control-Allow-Origin'), null, 'no CORS header is added when there is no Origin')
   console.log('PASS: a request with no Origin header is unaffected by CORS logic')
+
+  // 9. Staging/production fail closed before serving even public routes when
+  // required Supabase or download-signing secrets are absent.
+  for (const environment of ['staging', 'production'] as const) {
+    const missingSecretsEnv = await createFakeEnv(environment)
+    const response = await worker.fetch(new Request('http://localhost/api/v1/health'), missingSecretsEnv)
+    assertEqual(response.status, 500, `missing secrets fail closed in ${environment}`)
+    const body = (await response.json()) as { success: boolean; error: { code: string } }
+    assertEqual(body.success, false, `missing-secret response is an error in ${environment}`)
+    assertEqual(body.error.code, 'INTERNAL_ERROR', `missing-secret error code in ${environment}`)
+  }
+  console.log('PASS: staging and production fail closed when required backend secrets are missing')
 
   console.log('\nAll index.fetch() wrapper smoke tests passed.')
 }

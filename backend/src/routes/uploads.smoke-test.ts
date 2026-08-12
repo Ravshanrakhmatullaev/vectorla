@@ -139,24 +139,6 @@ async function run() {
   assertTrue(body3.upload.originalFileName.startsWith('route-test.png ('), 'the disambiguated name still starts with the original name')
   console.log('PASS: a duplicate filename in development is accepted with a disambiguated name, not rejected as a conflict')
 
-  // Staging (a stand-in for "not development" that this test can still
-  // reach with the X-Test-User-Id auth bypass — see requireAuth.ts, which
-  // only honors it outside production; real production auth needs a genuine
-  // Supabase JWT, out of scope for this smoke test): the same scenario must
-  // still behave exactly as before — duplicate filenames are rejected with
-  // 409 Conflict. isLocalDevelopment(env) only ever returns true for
-  // ENVIRONMENT === 'development', so staging and production are identical
-  // here in practice.
-  const stagingEnv = await createFakeEnv(false, 'staging')
-  const stagingFile1 = new File([pngBytes()], 'staging-test.png', { type: 'image/png' })
-  const stagingRes1 = await handleUploadsRoute(makeUploadRequest('staging-user', { file: stagingFile1 }), stagingEnv, TEST_REQUEST_ID)
-  assertEqual(stagingRes1.status, 201, 'status for the first upload in staging')
-  const stagingFile2 = new File([pngBytes()], 'staging-test.png', { type: 'image/png' })
-  const stagingRes2 = await handleUploadsRoute(makeUploadRequest('staging-user', { file: stagingFile2 }), stagingEnv, TEST_REQUEST_ID)
-  assertEqual(stagingRes2.status, 409, 'status for a duplicate filename from the same user outside development')
-  assertEqual((await readErrorBody(stagingRes2)).code, 'CONFLICT', 'error code for duplicate filename outside development')
-  console.log('PASS: staging/production still reject a duplicate filename with 409 Conflict — dev-only behavior unchanged there')
-
   // 415 — unsupported mime type
   const badFile = new File([toArrayBuffer('x')], 'doc.pdf', { type: 'application/pdf' })
   const res4 = await handleUploadsRoute(makeUploadRequest('route-user-2', { file: badFile }), env, TEST_REQUEST_ID)
@@ -166,10 +148,10 @@ async function run() {
 
   // 413 — oversized file (free plan default, 5MB limit)
   const bigFile = new File([pngBytes(6 * 1024 * 1024)], 'big.png', { type: 'image/png' })
-  const res5 = await handleUploadsRoute(makeUploadRequest('route-user-3', { file: bigFile, plan: 'free' }), env, TEST_REQUEST_ID)
+  const res5 = await handleUploadsRoute(makeUploadRequest('route-user-3', { file: bigFile, plan: 'business' }), env, TEST_REQUEST_ID)
   assertEqual(res5.status, 413, 'status for oversized file')
   assertEqual((await readErrorBody(res5)).code, 'VALIDATION_ERROR', 'error code for oversized file')
-  console.log('PASS: 413 Payload Too Large for oversized file')
+  console.log('PASS: multipart plan spoof is ignored; the authenticated profile free-plan limit returns 413')
 
   // 405 — wrong HTTP method
   const res6 = await handleUploadsRoute(new Request('http://localhost/api/v1/uploads', { method: 'GET' }), env, TEST_REQUEST_ID)

@@ -93,3 +93,55 @@ create table if not exists credit_transactions (
 
 create index if not exists credit_transactions_user_id_idx on credit_transactions (user_id);
 create index if not exists credit_transactions_job_id_idx on credit_transactions (job_id);
+
+-- Every Supabase Auth identity receives the application profile required by
+-- the foreign keys above. SECURITY DEFINER is required because signup runs as
+-- the Auth service; the empty search_path prevents object-shadowing attacks.
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer set search_path = ''
+as $$
+begin
+  insert into public.profiles (id, display_name, avatar_url)
+  values (
+    new.id,
+    nullif(new.raw_user_meta_data ->> 'display_name', ''),
+    nullif(new.raw_user_meta_data ->> 'avatar_url', '')
+  )
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute procedure public.handle_new_user();
+
+-- Applying this schema to an existing project also provisions any Auth users
+-- created before the trigger existed.
+insert into public.profiles (id, display_name, avatar_url)
+select
+  id,
+  nullif(raw_user_meta_data ->> 'display_name', ''),
+  nullif(raw_user_meta_data ->> 'avatar_url', '')
+from auth.users
+on conflict (id) do nothing;
+
+-- Browser clients use Supabase only for Auth. Application data remains behind
+-- the Worker, whose service-role client bypasses RLS after route ownership
+-- checks. No anon/authenticated table policies are intentionally created.
+alter table public.profiles enable row level security;
+alter table public.uploads enable row level security;
+alter table public.jobs enable row level security;
+alter table public.conversions enable row level security;
+alter table public.credit_balances enable row level security;
+alter table public.credit_transactions enable row level security;
+
+revoke all privileges on table public.profiles from anon, authenticated;
+revoke all privileges on table public.uploads from anon, authenticated;
+revoke all privileges on table public.jobs from anon, authenticated;
+revoke all privileges on table public.conversions from anon, authenticated;
+revoke all privileges on table public.credit_balances from anon, authenticated;
+revoke all privileges on table public.credit_transactions from anon, authenticated;

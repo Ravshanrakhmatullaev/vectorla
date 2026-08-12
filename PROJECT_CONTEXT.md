@@ -19,9 +19,9 @@ This repository is now full-stack:
 - With no backend URL, the workspace deliberately falls back to visibly
   disclosed Preview Mode and does not read or upload the selected file.
 
-The product is pre-production. Core tracing and API foundations work, while
-production auth UX, billing, multi-format export, batch workflows, and launch
-operations remain incomplete.
+The product is pre-production. Core tracing, API foundations, and the
+production email/password authentication path work, while billing,
+multi-format export, batch workflows, and launch operations remain incomplete.
 
 ## Tech stack
 
@@ -88,8 +88,8 @@ operations remain incomplete.
   and centralized CORS.
 - Public `GET /api/v1/health` and `GET /api/v1/openapi.json`.
 - Protected routes authenticate through Supabase `auth.getUser(token)`.
-- Non-production-only `X-Test-User-Id` bypass for smoke tests/local Vite; it
-  is ignored in production and never overrides a real bearer token.
+- Development-only `X-Test-User-Id` bypass for smoke tests/local Vite; it is
+  ignored in staging/production and never overrides a real bearer token.
 
 ### Uploads, jobs, and storage
 
@@ -144,13 +144,14 @@ operations remain incomplete.
 - `GET /api/v1/history` derives a stable, paginated, caller-only job history
   with associated conversion IDs, using bounded job and conversion queries
   and no-store caching.
-- A development-only credit grant endpoint exists and returns 404 in
-  production.
+- A development-only credit grant endpoint exists and returns 404 in staging
+  and production.
 - Orphan detection compares R2 objects against upload/conversion records.
 
 ### Persistence and integrity
 
-- Supabase repositories exist for uploads, jobs, conversions, and credits.
+- Supabase repositories exist for profiles, uploads, jobs, conversions, and
+  credits.
 - In-memory equivalents support local smoke tests without credentials.
 - Database schema includes relevant ownership/look-up indexes, duplicate
   upload protection, optimistic-lock versions, and unique conversion storage
@@ -158,15 +159,21 @@ operations remain incomplete.
 - Active-job checks, completed-job idempotency, and conflict handling reduce
   duplicate queue work and double billing.
 
-## Partially implemented
-
 ### Authentication
 
-The backend's production authentication and authorization checks are real.
-The frontend does not yet provide login, signup, token storage, or bearer-token
-injection. Its only automatic identity is the Vite-development test header,
-which production Workers reject. Therefore a production frontend cannot yet
-use protected API routes without completing the frontend auth/session flow.
+- Supabase email/password signup, login, logout, email-confirmation handling,
+  password recovery, persistent sessions, automatic refresh, and initial
+  auth-state restoration are implemented in the frontend.
+- The shared API client attaches the active Supabase access token to JSON,
+  multipart, polling, and raw download requests.
+- Supabase `auth.users` entries are provisioned into `profiles`; upload limits
+  come from the authenticated profile rather than multipart input.
+- RLS plus revoked anon/authenticated grants keep application data behind the
+  service-role Worker.
+- Staging/production reject development identity/credit mechanisms and fail
+  closed when required backend secrets are absent.
+
+## Partially implemented
 
 ### Vectorization providers
 
@@ -195,16 +202,16 @@ Backend plan configuration has four tiers:
 These are configuration limits, not proof that batch/multi-format generation
 exists. The frontend pricing section is still the older Free/Pro/Business
 copy and includes claims that do not match the credit model. Upload callers
-currently submit their plan; it is not derived from an authenticated profile
-or billing subscription. Monthly grants exist as a service method but are not
-wired to a billing cycle.
+use the authenticated profile plan, but that plan is not connected to a billing
+subscription. Monthly grants exist as a service method but are not wired to a
+billing cycle.
 
 ### Frontend integration
 
 The workspace is connected when `VITE_API_BASE_URL` is present. The Hero
-dropzone, Hero CTA buttons, navbar sign-in/start buttons, pricing CTAs, API
-navigation destination, and footer legal links are not functional product
-flows yet.
+dropzone, Hero CTA buttons, pricing CTAs, API navigation destination, and
+footer legal links are not functional product flows yet. Navbar sign-in/start
+buttons provide the minimal account flow.
 
 ### Cleanup and operations
 
@@ -215,7 +222,6 @@ liveness check only; it does not probe R2, Queue, or Supabase dependencies.
 
 ## Not yet implemented
 
-- Production frontend auth/account UI and session integration.
 - Stripe billing, checkout/customer portal, subscription webhooks, monthly
   credit scheduling, and paid top-ups.
 - Batch upload/processing and archive download.
@@ -281,14 +287,14 @@ See `backend/API.md` and the served OpenAPI document for response contracts.
 - Required Worker resources: R2 bucket `vectorla-uploads`, queue
   `vectorla-conversions`, Supabase URL/service-role secret, and download URL
   signing secret.
-- CORS always allows `https://vectorla.app`; localhost origins are allowed
-  outside production only.
+- CORS always allows `https://vectorla.app`; localhost origins and the
+  `X-Test-User-Id` header are allowed only in development.
 - Repository files describe intended deployment. Do not claim the domain,
   Worker, R2 bucket, Queue, or Supabase project is live without external
   verification.
-- Cloudflare Pages CSP currently uses `connect-src 'self'`; a separately
-  hosted API origin will require the deployed header policy to allow that
-  Worker origin.
+- Cloudflare Pages CSP permits the intended API host, Workers deployments, and
+  Supabase HTTPS endpoints. Narrow wildcard hosts once final production origins
+  are confirmed.
 
 ## Development rules
 
@@ -312,9 +318,9 @@ See `backend/API.md` and the served OpenAPI document for response contracts.
 
 ## Current priorities
 
-1. Complete production frontend authentication and bearer-token API wiring.
-2. Reconcile frontend pricing/copy with the four-tier backend credit model and
-   derive plan limits from trusted user/account data.
+1. Verify the Supabase/Worker/Pages production deployment, redirect allowlist,
+   email delivery, password policy, and abuse controls.
+2. Reconcile frontend pricing/copy with the four-tier backend credit model.
 3. Add billing and credit lifecycle automation.
 4. Implement requested formats/print-ready settings end to end, then add real
    PDF/EPS/DXF/PNG output.

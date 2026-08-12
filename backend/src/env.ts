@@ -34,3 +34,30 @@ export interface Env {
 export function isLocalDevelopment(env: Env): boolean {
   return env.ENVIRONMENT === 'development'
 }
+
+const REQUIRED_BACKEND_SECRETS = [
+  'SUPABASE_URL',
+  'SUPABASE_SERVICE_ROLE_KEY',
+  'DOWNLOAD_URL_SECRET',
+] as const satisfies readonly (keyof Env)[]
+
+/** Staging and production fail closed instead of using local-only fallbacks. */
+export function assertRequiredBackendSecrets(env: Env): void {
+  if (isLocalDevelopment(env)) return
+
+  const missing = REQUIRED_BACKEND_SECRETS.filter((key) => {
+    const value = env[key]
+    return typeof value !== 'string' || value.trim().length === 0
+  })
+  if (missing.length > 0) {
+    throw new Error(`Missing required backend secrets for ${env.ENVIRONMENT}: ${missing.join(', ')}`)
+  }
+}
+
+/** Returns true only when an explicit development environment may use local persistence. */
+export function shouldUseInMemoryRepositories(env: Env): boolean {
+  const hasSupabase = Boolean(env.SUPABASE_URL?.trim() && env.SUPABASE_SERVICE_ROLE_KEY?.trim())
+  if (hasSupabase) return false
+  if (isLocalDevelopment(env)) return true
+  throw new Error(`Supabase credentials are required in ${env.ENVIRONMENT}`)
+}

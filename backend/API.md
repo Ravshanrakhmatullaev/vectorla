@@ -57,14 +57,16 @@ detail (e.g. both 413 and 415 are `VALIDATION_ERROR`).
 - `X-Request-Id` — same value as the body's `requestId`.
 - `Access-Control-Allow-Origin` — present when the request's `Origin` is on
   the allowlist (`https://vectorla.app` always; `http://localhost:<port>`
-  outside production only — see `src/api/cors.ts`).
+  in development only — see `src/api/cors.ts`).
 
 ## Endpoints
 
 ### `POST /uploads`
 
-`multipart/form-data` with a `file` field (PNG/JPEG/WEBP) and optional `plan`
-field. Also auto-creates and enqueues a conversion `Job`, and runs
+`multipart/form-data` with a `file` field (PNG/JPEG/WEBP). The file-size limit
+comes from the authenticated user's server-side profile; caller-supplied plan
+fields are ignored. The route also auto-creates and enqueues a conversion
+`Job`, and runs
 `ImageAnalysisService` (Phase 21) on the uploaded image — dimensions, color/
 transparency/grayscale stats, a `photo`/`illustration`/`logo` classification,
 the provider `ConversionService` will actually attempt (`recommendedProvider`),

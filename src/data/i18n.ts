@@ -105,6 +105,30 @@ export interface Translation {
     openMenu: string
     closeMenu: string
   }
+  auth: {
+    signInTitle: string
+    signUpTitle: string
+    recoveryTitle: string
+    updatePasswordTitle: string
+    email: string
+    password: string
+    newPassword: string
+    signIn: string
+    signUp: string
+    signOut: string
+    sendReset: string
+    updatePassword: string
+    forgotPassword: string
+    createAccount: string
+    haveAccount: string
+    backToSignIn: string
+    confirmationSent: string
+    recoverySent: string
+    passwordUpdated: string
+    close: string
+    notConfigured: string
+    requestFailed: string
+  }
   common: {
     switchToLightMode: string
     switchToDarkMode: string
@@ -241,6 +265,30 @@ export const translations: Record<Language, Translation> = {
       startFree: 'Start free',
       openMenu: 'Open menu',
       closeMenu: 'Close menu',
+    },
+    auth: {
+      signInTitle: 'Sign in to Vectorla',
+      signUpTitle: 'Create your account',
+      recoveryTitle: 'Reset your password',
+      updatePasswordTitle: 'Choose a new password',
+      email: 'Email',
+      password: 'Password',
+      newPassword: 'New password',
+      signIn: 'Sign in',
+      signUp: 'Create account',
+      signOut: 'Sign out',
+      sendReset: 'Send reset link',
+      updatePassword: 'Update password',
+      forgotPassword: 'Forgot password?',
+      createAccount: 'Create an account',
+      haveAccount: 'Already have an account?',
+      backToSignIn: 'Back to sign in',
+      confirmationSent: 'Check your email to confirm your account.',
+      recoverySent: 'If an account exists for that email, a reset link has been sent.',
+      passwordUpdated: 'Your password has been updated.',
+      close: 'Close',
+      notConfigured: 'Authentication is not configured for this deployment.',
+      requestFailed: 'Authentication request failed. Please try again.',
     },
     common: {
       switchToLightMode: 'Switch to light mode',
@@ -586,6 +634,30 @@ export const translations: Record<Language, Translation> = {
       startFree: 'Bepul boshlash',
       openMenu: 'Menyuni ochish',
       closeMenu: 'Menyuni yopish',
+    },
+    auth: {
+      signInTitle: 'Vectorla hisobiga kirish',
+      signUpTitle: 'Hisob yaratish',
+      recoveryTitle: 'Parolni tiklash',
+      updatePasswordTitle: 'Yangi parol tanlang',
+      email: 'Email',
+      password: 'Parol',
+      newPassword: 'Yangi parol',
+      signIn: 'Kirish',
+      signUp: 'Hisob yaratish',
+      signOut: 'Chiqish',
+      sendReset: 'Tiklash havolasini yuborish',
+      updatePassword: 'Parolni yangilash',
+      forgotPassword: 'Parolni unutdingizmi?',
+      createAccount: 'Hisob yarating',
+      haveAccount: 'Hisobingiz bormi?',
+      backToSignIn: 'Kirishga qaytish',
+      confirmationSent: 'Hisobingizni tasdiqlash uchun emailingizni tekshiring.',
+      recoverySent: 'Agar bu emailga hisob bog‘langan bo‘lsa, tiklash havolasi yuborildi.',
+      passwordUpdated: 'Parolingiz yangilandi.',
+      close: 'Yopish',
+      notConfigured: 'Bu joylashtirish uchun autentifikatsiya sozlanmagan.',
+      requestFailed: 'Autentifikatsiya so‘rovi bajarilmadi. Qayta urinib ko‘ring.',
     },
     common: {
       switchToLightMode: "Yorug' rejimga o'tish",
@@ -941,6 +1013,30 @@ export const translations: Record<Language, Translation> = {
       startFree: 'Начать бесплатно',
       openMenu: 'Открыть меню',
       closeMenu: 'Закрыть меню',
+    },
+    auth: {
+      signInTitle: 'Войти в Vectorla',
+      signUpTitle: 'Создать аккаунт',
+      recoveryTitle: 'Сбросить пароль',
+      updatePasswordTitle: 'Выберите новый пароль',
+      email: 'Email',
+      password: 'Пароль',
+      newPassword: 'Новый пароль',
+      signIn: 'Войти',
+      signUp: 'Создать аккаунт',
+      signOut: 'Выйти',
+      sendReset: 'Отправить ссылку',
+      updatePassword: 'Обновить пароль',
+      forgotPassword: 'Забыли пароль?',
+      createAccount: 'Создать аккаунт',
+      haveAccount: 'Уже есть аккаунт?',
+      backToSignIn: 'Вернуться ко входу',
+      confirmationSent: 'Проверьте почту, чтобы подтвердить аккаунт.',
+      recoverySent: 'Если аккаунт с таким email существует, ссылка для сброса отправлена.',
+      passwordUpdated: 'Пароль обновлён.',
+      close: 'Закрыть',
+      notConfigured: 'Аутентификация не настроена для этого развёртывания.',
+      requestFailed: 'Не удалось выполнить запрос. Попробуйте ещё раз.',
     },
     common: {
       switchToLightMode: 'Переключить на светлую тему',

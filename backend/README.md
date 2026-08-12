@@ -52,9 +52,9 @@ for a subtlety that pattern surfaced.
 ## Upload API (implemented)
 
 `POST /api/uploads` (`src/routes/uploads.ts`) is the first real feature.
-Send `multipart/form-data` with a `file` field, a `userId` field, and an
-optional `plan` field (defaults to `free` — see the TODO in
-`UploadService.CreateUploadInput` about this being a stand-in for real auth).
+Send `multipart/form-data` with a `file` field and a Supabase bearer token.
+The route derives `userId` from that token and the upload-size limit from the
+matching server-side `profiles.plan`; request fields cannot override either.
 
 Validates, in order: file name present → MIME type allowed → extension
 matches the declared MIME type → not empty → within the caller's plan's
@@ -65,7 +65,9 @@ and writes an `Upload` row, returning it as JSON with `201`.
 | Status | Cause |
 |---|---|
 | 201 | Created — file stored, metadata saved |
-| 400 | Missing `file`/`userId` field, empty file, or duplicate filename |
+| 400 | Missing `file` field, empty file, or duplicate filename |
+| 401 | Missing, invalid, or expired Supabase bearer token |
+| 403 | The authenticated user has no provisioned profile |
 | 413 | File exceeds the caller's plan's max size |
 | 415 | Unsupported MIME type, or extension doesn't match the declared type |
 | 405 | Method other than POST |
@@ -75,8 +77,9 @@ and writes an `Upload` row, returning it as JSON with `201`.
 (in `src/repositories/`) use the real `Supabase*Repository` when
 `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` are configured, and an
 `InMemory*Repository` otherwise — this is what makes the upload/job flow
-testable locally with no real Supabase project. Production always sets both
-secrets, so it always gets the real ones.
+testable locally with no real Supabase project. The fallback is permitted only
+in explicit development; staging/production fail closed when credentials are
+missing.
 
 A subtlety this surfaced: `UploadService` and `JobService` each call their
 own repository factory independently. In production that's fine — every
@@ -92,8 +95,6 @@ constructed within the same request/test share state.
 **Known limitations:**
 - No rollback if the R2 write succeeds but the Supabase write fails — would
   orphan an R2 object. Fine for a first pass; needs a cleanup job later.
-- `plan` is caller-supplied, not derived from an authenticated session, since
-  auth doesn't exist yet — not secure, documented as a TODO in the code.
 - `GET /api/uploads/:id` and `DELETE /api/uploads/:id` are still stubs
   (`UploadService.getUpload` / `deleteUpload` still throw).
 - `POST /api/uploads`'s response shape changed in Phase 10, from a bare
@@ -125,8 +126,8 @@ Every route now lives under `/api/v1/` and returns a standard envelope
 `src/api/response.ts`) with a `requestId` (also echoed as `X-Request-Id`),
 plus an `X-Response-Time` header and a structured JSON log line per request
 (`src/api/logging.ts`). CORS is handled centrally (`src/api/cors.ts`) —
-`vectorla.app` always, `localhost:*` outside production only. Errors use a
-fixed 7-code vocabulary (`VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`,
+`vectorla.app` always, `localhost:*` in development only. Errors use a fixed
+7-code vocabulary (`VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`,
 `NOT_FOUND`, `CONFLICT`, `INSUFFICIENT_CREDITS`, `INTERNAL_ERROR`) — see
 `mapErrorToResponse()`, the single place that maps a thrown error class to
 (code, HTTP status).
@@ -206,7 +207,7 @@ npm run dev                       # local Worker dev server
 ```
 
 Then run `supabase/schema.sql` against your Supabase project (SQL editor or
-`supabase db push`), and set the same two secrets in production with
+`supabase db push`), and set the three listed secrets in production with
 `wrangler secret put`.
 
 ## Pricing & Credits

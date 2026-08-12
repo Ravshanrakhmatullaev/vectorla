@@ -20,9 +20,7 @@ export interface CreateUploadInput {
   // Derived from the authenticated session by routes/uploads.ts (see
   // middleware/requireAuth.ts) — this service itself doesn't verify identity.
   userId: string
-  // TODO(backend): derive from the user's billing plan once billing exists —
-  // callers currently declare their own plan, which is not secure and is only
-  // acceptable because there's no real billing yet to spoof value from.
+  // Resolved from the authenticated user's server-side profile by the route.
   plan: UserPlan
   file: ArrayBuffer
   originalFileName: string

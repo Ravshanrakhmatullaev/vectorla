@@ -64,14 +64,7 @@ async function createFakeEnv(): Promise<Env> {
     PNG_DECODER_WASM: png,
     JPEG_DECODER_WASM: jpeg,
     WEBP_DECODER_WASM: webp,
-    // Not 'development': this file exercises the real insufficient-credits
-    // failure path (see test 3 below), which CreditsService's
-    // autoGrantInDevelopment convenience would otherwise silently paper
-    // over. 'staging' behaves identically to 'production' for that check
-    // (see env.ts's isLocalDevelopment) and doesn't need real Supabase auth,
-    // since this file talks to worker.queue() directly, never through an
-    // HTTP request/requireAuth.
-    ENVIRONMENT: 'staging',
+    ENVIRONMENT: 'development',
   }
 }
 
@@ -165,10 +158,9 @@ async function run() {
   assertEqual(badMessage.acked, false, 'message.ack() not called when the job lookup fails')
   console.log('PASS: queue() consumer retries (does not crash) when the job cannot be found')
 
-  // 3. Insufficient credits: the job's user has a 0 balance (no grant), so
-  // ConversionService.processJob throws InsufficientCreditsError, which the
-  // consumer's catch block turns into a clear job failure (same path as any
-  // other processing error) rather than a crash.
+  // 3. A queued job whose R2 source is missing exercises the consumer's
+  // processing-failure path without weakening staging/production's new
+  // fail-closed persistence rules for this local in-memory smoke test.
   await uploads.create({
     id: 'upload-2',
     userId: 'poor-user',
@@ -184,15 +176,15 @@ async function run() {
   const poorBatch = createFakeBatch([poorMessage])
   await worker.queue(poorBatch, env) // must not throw
 
-  const afterInsufficientCredits = await jobService.getJob(poorJob.id)
-  assertEqual(afterInsufficientCredits.status, 'failed', 'job status when the user has insufficient credits')
+  const afterProcessingFailure = await jobService.getJob(poorJob.id)
+  assertEqual(afterProcessingFailure.status, 'failed', 'job status when processing fails')
   assertTrue(
-    (afterInsufficientCredits.errorMessage ?? '').includes('credit'),
-    'errorMessage mentions credits for the insufficient-credits failure',
+    (afterProcessingFailure.errorMessage ?? '').length > 0,
+    'processing failure stores a useful error message',
   )
-  assertEqual(poorMessage.retried, true, 'message.retry() called on insufficient credits')
-  assertEqual(poorMessage.acked, false, 'message.ack() not called on insufficient credits')
-  console.log('PASS: queue() consumer fails a job with a clear message when the user lacks enough credits')
+  assertEqual(poorMessage.retried, true, 'message.retry() called on processing failure')
+  assertEqual(poorMessage.acked, false, 'message.ack() not called on processing failure')
+  console.log('PASS: queue() consumer records a failed job and retries when processing fails')
 
   console.log('\nAll queue() consumer smoke tests passed.')
 }

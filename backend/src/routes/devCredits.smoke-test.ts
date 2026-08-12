@@ -63,14 +63,18 @@ async function run() {
   assertEqual(balance.balance, 25, 'balance actually increased by the granted amount')
   console.log('PASS: grants credits in development and the balance actually increases')
 
-  // 2. Blocked in production — 404, as if the route doesn't exist, and no balance change.
-  const prodEnv = await createFakeEnv('production')
-  const res2 = await handleDevCreditsGrantRoute(makeGrantRequest({ userId: 'prod-user-1', amount: 25 }), prodEnv, TEST_REQUEST_ID)
-  assertEqual(res2.status, 404, 'status in production')
-  assertEqual((await readErrorBody(res2)).code, 'NOT_FOUND', 'error code in production')
-  const prodBalance = await createCreditsService(prodEnv).getBalance('prod-user-1')
-  assertEqual(prodBalance.balance, 0, 'no balance change for a request blocked in production')
-  console.log('PASS: blocked with 404 in production, no balance change')
+  // 2. Blocked before persistence in staging and production.
+  for (const environment of ['staging', 'production'] as const) {
+    const lockedEnv = await createFakeEnv(environment)
+    const response = await handleDevCreditsGrantRoute(
+      makeGrantRequest({ userId: `${environment}-user`, amount: 25 }),
+      lockedEnv,
+      TEST_REQUEST_ID,
+    )
+    assertEqual(response.status, 404, `status in ${environment}`)
+    assertEqual((await readErrorBody(response)).code, 'NOT_FOUND', `error code in ${environment}`)
+  }
+  console.log('PASS: blocked with 404 in staging and production before persistence is touched')
 
   // 3. Invalid amount rejected — zero, negative, non-integer, and non-numeric all 400, no balance change.
   for (const amount of [0, -5, 1.5, 'ten', undefined]) {

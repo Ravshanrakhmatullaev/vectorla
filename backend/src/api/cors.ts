@@ -1,22 +1,24 @@
 import type { Env } from '../env'
+import { isLocalDevelopment } from '../env'
 
 // Production origins this API serves — see PROJECT_CONTEXT.md for the
 // vectorla.app domain. Update this list (not the whole CORS mechanism) as
 // real frontend origins are added.
 const ALLOWED_ORIGINS = new Set(['https://vectorla.app', 'https://www.vectorla.app'])
 
-// Local frontend dev servers (Vite defaults to 5173) — only honored outside
-// production, so this can never widen CORS on a live deploy.
+// Local frontend dev servers (Vite defaults to 5173) are honored only in an
+// explicitly configured development environment.
 const DEV_ORIGIN_PATTERN = /^http:\/\/localhost:\d+$/
 
 const ALLOWED_METHODS = 'GET, POST, OPTIONS'
-const ALLOWED_HEADERS = 'Content-Type, Authorization, X-Test-User-Id'
+const PRODUCTION_ALLOWED_HEADERS = 'Content-Type, Authorization'
+const DEVELOPMENT_ALLOWED_HEADERS = `${PRODUCTION_ALLOWED_HEADERS}, X-Test-User-Id`
 
 function resolveAllowedOrigin(request: Request, env: Env): string | null {
   const origin = request.headers.get('Origin')
   if (!origin) return null
   if (ALLOWED_ORIGINS.has(origin)) return origin
-  if (env.ENVIRONMENT !== 'production' && DEV_ORIGIN_PATTERN.test(origin)) return origin
+  if (isLocalDevelopment(env) && DEV_ORIGIN_PATTERN.test(origin)) return origin
   return null
 }
 
@@ -29,7 +31,10 @@ export function handlePreflight(request: Request, env: Env): Response | null {
   if (allowedOrigin) {
     headers.set('Access-Control-Allow-Origin', allowedOrigin)
     headers.set('Access-Control-Allow-Methods', ALLOWED_METHODS)
-    headers.set('Access-Control-Allow-Headers', ALLOWED_HEADERS)
+    headers.set(
+      'Access-Control-Allow-Headers',
+      isLocalDevelopment(env) ? DEVELOPMENT_ALLOWED_HEADERS : PRODUCTION_ALLOWED_HEADERS,
+    )
     headers.set('Access-Control-Max-Age', '86400')
   }
   return new Response(null, { status: 204, headers })

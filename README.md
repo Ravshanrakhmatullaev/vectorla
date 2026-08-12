@@ -10,7 +10,7 @@ queue tracing jobs, generate SVG results with ImageTracer or Potrace, poll job
 status, preview/download completed results, enforce credits, and expose
 authenticated conversion, credit, and history APIs. It is an active
 pre-production implementation, not a finished commercial service: production
-login, billing, non-SVG generation, and several product workflows remain.
+billing, non-SVG generation, and several product workflows remain.
 
 ## Current status
 
@@ -36,6 +36,10 @@ login, billing, non-SVG generation, and several product workflows remain.
 - Supabase JWT verification on protected backend routes, ownership checks,
   signed download URLs, upload signature validation, randomized storage keys,
   duplicate-job protection, queue idempotency, and optimistic locking.
+- Supabase email/password signup, login, logout, persistent/refreshing browser
+  sessions, password recovery, and bearer-token API requests.
+- Auth-user profile provisioning, deny-by-default RLS, profile-derived upload
+  limits, and development-only test identity/credit escape hatches.
 - Credit calculation, enforcement, debits/refunds, current-balance/recent-
   transaction API, and paginated user history API.
 - Twenty-three standalone backend smoke-test files plus a synthetic vector
@@ -43,9 +47,6 @@ login, billing, non-SVG generation, and several product workflows remain.
 
 ### Partial
 
-- The backend accepts real Supabase bearer tokens, but the frontend has no
-  production sign-in/session flow. Vite development uses the backend's
-  non-production-only `X-Test-User-Id` bypass.
 - The workspace is connected to the API; the Hero upload card and primary
   marketing CTAs are still illustrative.
 - ImageTracer and Potrace are implemented. Photo analysis may recommend the
@@ -53,8 +54,8 @@ login, billing, non-SVG generation, and several product workflows remain.
   to ImageTracer. The OpenAI provider is also a stub.
 - The domain model lists SVG, PNG, PDF, EPS, and DXF, but the current tracing
   pipeline produces SVG only.
-- Credits are enforced, but the upload plan is still caller-supplied and
-  monthly grants/top-ups are not connected to accounts or billing.
+- Credits and profile-derived plan limits are enforced, but monthly grants/
+  top-ups are not connected to accounts or billing.
 - The frontend pricing section still shows the older three-plan model; backend
   limits use Free, Starter, Pro, and Business credit tiers.
 - Orphan detection exists, but cleanup is not scheduled and storage deletion
@@ -62,7 +63,6 @@ login, billing, non-SVG generation, and several product workflows remain.
 
 ### Not implemented
 
-- Production frontend authentication/account management.
 - Stripe checkout, subscriptions, billing-cycle credit grants, and paid
   top-ups.
 - Batch uploads/conversions and archive downloads.
@@ -118,7 +118,9 @@ npm run dev
 ```
 
 Set `VITE_API_BASE_URL` to the Worker origin to enable the real workspace
-flow. Leave it empty to use Preview Mode.
+flow, and set `VITE_SUPABASE_URL` plus `VITE_SUPABASE_PUBLISHABLE_KEY` to
+enable signup/login and authenticated API calls. Leave the API URL empty to
+use Preview Mode.
 
 ### Backend
 
@@ -132,9 +134,9 @@ npm run dev
 For a real Supabase-backed environment, apply `backend/supabase/schema.sql`
 and fill `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and
 `DOWNLOAD_URL_SECRET`. Without Supabase credentials, repositories fall back
-to process-local in-memory storage. Local development also auto-funds credit
-shortfalls and relaxes duplicate-filename friction; staging and production do
-not.
+to process-local in-memory storage only in development. Staging and production
+fail closed when required secrets are missing. Local development also
+auto-funds credit shortfalls and relaxes duplicate-filename friction.
 
 ## Verification
 

@@ -2,10 +2,10 @@ import type { Env } from '../env'
 import { createUploadService } from '../services/UploadService'
 import { createJobService } from '../services/JobService'
 import { createImageAnalysisService } from '../services/ImageAnalysisService'
+import { createProfileService } from '../services/ProfileService'
 import { requireAuth } from '../middleware/requireAuth'
 import { jsonSuccess, jsonError, mapErrorToResponse } from '../api/response'
 import { UnauthorizedError } from '../errors'
-import { isUserPlan } from '../types'
 
 /** POST /api/v1/uploads is implemented. GET/DELETE /api/v1/uploads/:id are not yet (see UploadService). */
 export async function handleUploadsRoute(request: Request, env: Env, requestId: string): Promise<Response> {
@@ -32,15 +32,13 @@ export async function handleUploadsRoute(request: Request, env: Env, requestId: 
   // but the real Workers runtime does return File entries for multipart
   // form-data — this cast documents that known typing gap.
   const file = formData.get('file') as unknown as File | string | null
-  const planField = formData.get('plan')
 
   if (!(file instanceof File)) {
     return jsonError('VALIDATION_ERROR', 'Missing "file" field', 400, requestId)
   }
 
-  const plan = typeof planField === 'string' && isUserPlan(planField) ? planField : 'free'
-
   try {
+    const plan = await createProfileService(env).getRequiredPlan(userId)
     const buffer = await file.arrayBuffer()
     const uploadService = createUploadService(env)
     const upload = await uploadService.createUpload({

@@ -181,7 +181,7 @@ export const OPENAPI_DOCUMENT = {
               schema: {
                 type: 'object',
                 required: ['file'],
-                properties: { file: { type: 'string', format: 'binary' }, plan: { type: 'string' } },
+                properties: { file: { type: 'string', format: 'binary' } },
               },
             },
           },

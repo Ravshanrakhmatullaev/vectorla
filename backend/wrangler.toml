@@ -21,7 +21,9 @@ max_batch_size = 10
 max_batch_timeout = 30
 
 [vars]
-ENVIRONMENT = "development"
+# Safe deployment default. `npm run dev` overrides this value explicitly;
+# staging should be deployed with `--var ENVIRONMENT:staging`.
+ENVIRONMENT = "production"
 # Selects the vectorization backend (see src/providers/ProviderFactory.ts).
 # "placeholder" is the real ImageTracer.js-based engine as of Phase 19 (the
 # name is kept as-is — see PlaceholderProvider.ts — to avoid any config/API

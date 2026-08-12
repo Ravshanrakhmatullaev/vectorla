@@ -2,6 +2,7 @@ import type { Env } from '../env'
 import type { AuthenticatedUser } from '../services/AuthService'
 import { createAuthService } from '../services/AuthService'
 import { UnauthorizedError } from '../errors'
+import { isLocalDevelopment } from '../env'
 
 const BEARER_PATTERN = /^Bearer\s+(.+)$/i
 
@@ -11,12 +12,12 @@ const BEARER_PATTERN = /^Bearer\s+(.+)$/i
  * UnauthorizedError (routes map this to 401) when the header is missing or
  * malformed, or the token doesn't verify.
  *
- * Test/dev-only bypass: outside production, a request with no Authorization
+ * Test/dev-only bypass: in development, a request with no Authorization
  * header but an `X-Test-User-Id` header is trusted as-is. This exists purely
  * so this repo's smoke tests (see routes/*.smoke-test.ts) can exercise
- * protected routes without a real Supabase project or real JWTs — it never
- * activates in production, and a real Authorization header always takes
- * precedence when present.
+ * protected routes without a real Supabase project or real JWTs. It never
+ * activates in staging/production, and a real Authorization header always
+ * takes precedence when present.
  */
 export async function requireAuth(request: Request, env: Env): Promise<AuthenticatedUser> {
   const authHeader = request.headers.get('Authorization')
@@ -28,7 +29,7 @@ export async function requireAuth(request: Request, env: Env): Promise<Authentic
     return authService.verifyToken(match[1] ?? '')
   }
 
-  if (env.ENVIRONMENT !== 'production') {
+  if (isLocalDevelopment(env)) {
     const testUserId = request.headers.get('X-Test-User-Id')
     if (testUserId) return { userId: testUserId }
   }

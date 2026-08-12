@@ -1,4 +1,5 @@
 import type { Env } from '../env'
+import { shouldUseInMemoryRepositories } from '../env'
 import { createSupabaseClient } from '../integrations/supabase'
 import { SupabaseCreditsRepository } from './SupabaseCreditsRepository'
 import { InMemoryCreditsRepository } from './InMemoryCreditsRepository'
@@ -12,7 +13,7 @@ const inMemoryRepositoryByEnv = new WeakMap<Env, InMemoryCreditsRepository>()
 
 /** Same fallback pattern as createUploadsRepository — see that file for the rationale. */
 export function createCreditsRepository(env: Env): CreditsRepository {
-  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+  if (shouldUseInMemoryRepositories(env)) {
     let repository = inMemoryRepositoryByEnv.get(env)
     if (!repository) {
       repository = new InMemoryCreditsRepository()

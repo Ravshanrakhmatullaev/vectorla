@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
+    "dev": "wrangler dev --var ENVIRONMENT:development --var VECTORIZATION_PROVIDER:placeholder",
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit"
   },
@@ -13,7 +13,7 @@
     "@jsquash/jpeg": "^1.6.0",
     "@jsquash/png": "^3.1.1",
     "@jsquash/webp": "^1.5.0",
-    "@supabase/supabase-js": "^2.45.4",
+    "@supabase/supabase-js": "^2.112.3",
     "imagetracerjs": "^1.2.6"
   },
   "devDependencies": {

@@ -89,22 +89,24 @@ async function run() {
   )
   console.log('PASS: requireAuth rejects a malformed Authorization header (401 case)')
 
-  // 5. requireAuth — dev-only X-Test-User-Id bypass works outside production
+  // 5. requireAuth — dev-only X-Test-User-Id bypass works in development
   const bypassed = await requireAuth(
     new Request('http://localhost/api/jobs', { headers: { 'X-Test-User-Id': 'dev-user' } }),
     devEnv,
   )
   assertEqual(bypassed.userId, 'dev-user', 'the X-Test-User-Id bypass returns that id')
-  console.log('PASS: requireAuth honors the X-Test-User-Id bypass outside production')
+  console.log('PASS: requireAuth honors the X-Test-User-Id bypass in development')
 
-  // 6. requireAuth — the bypass never activates in production
-  const prodEnv = createFakeEnv('production')
-  await assertRejects(
-    () => requireAuth(new Request('http://localhost/api/jobs', { headers: { 'X-Test-User-Id': 'dev-user' } }), prodEnv),
-    /Missing Authorization header/,
-    'bypass attempted in production',
-  )
-  console.log('PASS: requireAuth ignores X-Test-User-Id in production (must use a real token)')
+  // 6. requireAuth — the bypass never activates in staging or production
+  for (const environment of ['staging', 'production'] as const) {
+    const lockedEnv = createFakeEnv(environment)
+    await assertRejects(
+      () => requireAuth(new Request('http://localhost/api/jobs', { headers: { 'X-Test-User-Id': 'dev-user' } }), lockedEnv),
+      /Missing Authorization header/,
+      `bypass attempted in ${environment}`,
+    )
+  }
+  console.log('PASS: requireAuth ignores X-Test-User-Id in staging and production')
 
   console.log('\nAll requireAuth/AuthService smoke tests passed.')
 }
