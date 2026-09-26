@@ -4,9 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev --var ENVIRONMENT:development --var VECTORIZATION_PROVIDER:placeholder",
+    "dev": "wrangler dev --var ENVIRONMENT:development --var VECTORIZATION_PROVIDER:vectorla",
     "deploy": "wrangler deploy",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/run-smoke-tests.mjs",
+    "bench": "tsx src/benchmark/runBenchmark.ts"
   },
   "dependencies": {
     "@cadit-app/potrace-ts": "^1.3.0",
@@ -18,6 +20,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250101.0",
+    "@resvg/resvg-js": "^2.6.2",
     "tsx": "^4.23.0",
     "typescript": "~6.0.2",
     "wrangler": "^4.0.0"
