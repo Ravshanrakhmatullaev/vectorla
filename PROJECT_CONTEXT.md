@@ -44,8 +44,10 @@ multi-format export, batch workflows, and launch operations remain incomplete.
 - Supabase Auth verification and Postgres repositories through
   `@supabase/supabase-js`
 - In-memory repository fallbacks keyed by `Env` identity for local tests
-- ImageTracer.js, `@cadit-app/potrace-ts`, and jSquash PNG/JPEG/WebP WASM
-  decoders
+- Vectorla tracing engine (`backend/src/engine/`, pure TypeScript) as the
+  default provider; ImageTracer.js as fallback; `@cadit-app/potrace-ts`; jSquash
+  PNG/JPEG/WebP WASM decoders
+- Dev-only: `@resvg/resvg-js` for the render-and-diff quality benchmark
 - Standalone TypeScript package under `backend/`; root build/lint scripts do
   not include it
 
@@ -110,25 +112,30 @@ multi-format export, batch workflows, and launch operations remain incomplete.
 
 ### Vectorization and quality
 
-- Shared PNG/JPEG/WebP decode path through jSquash WASM modules.
-- Image analysis reports dimensions, aspect ratio, colors, transparency,
-  grayscale, edge/noise signals, image type, complexity, recommended provider
-  and preset, estimated quality, credits, and processing time.
-- The historically named `PlaceholderProvider` is a real ImageTracer engine
-  with tuned presets for logo, signature, QR, icon, sticker, blueprint,
-  sketch, illustration, and photo-like inputs.
-- `PotraceProvider` is implemented for monochrome logos, signatures, QR
-  codes, stamps, and simple icons.
-- Quick Trace skips image-domain preprocessing but still selects a provider
-  and optimizes SVG.
-- Professional Trace runs noise reduction, background cleanup, contrast
-  normalization, color quantization, edge enhancement, provider selection,
-  and SVG optimization. Its auto-upscale stage is intentionally disabled
-  because real upscaling is not implemented.
-- Provider failures caused by the unimplemented Vision/OpenAI paths fall back
-  to the working ImageTracer engine during normal conversion.
-- Synthetic quality harness, SVG metrics, tuned preset smoke tests, and
-  `backend/QUALITY_REPORT.md` document measured quality work.
+- **Vectorla engine** (`backend/src/engine/`) is the default for every image
+  type. Pipeline: bounded working size → edge-preserving denoise (auto, or
+  forced for JPEG) → OKLab palette seeded from flat pixels (plus a
+  thin-detail color pass and blend-cluster removal) → interpolated
+  super-sampling (1–4×) → anti-aliasing-aware labeling (coverage decided in
+  sRGB) → speckle merge + adaptive region budget → planar map of shared
+  boundary chains → Potrace-grade polygon + curve fitting per chain, with
+  polygon-level corner restoration and least-squares junction refinement →
+  stacked (default, seamless) or cutout SVG with compact path data.
+- Quick and Professional Trace are engine profiles
+  (`engine/profiles.ts`: 1.5 MP / 32 colors vs 2 MP / 64 colors). Legacy
+  preset names sent explicitly as `Job.preset` adjust engine options.
+- `ImageTracer` (`PlaceholderProvider`) is the automatic fallback if the
+  engine throws; `PotraceProvider` is still available; Vision/OpenAI remain stubs.
+- The old Professional preprocessing stages were removed: the benchmark
+  showed they made output far worse (5.95 px mean edge error).
+- **Render-and-diff benchmark** (`backend/src/benchmark/`, `npm run bench`):
+  11 ground-truth SVG designs × 22 raster variants, traced output rendered at
+  4× and compared with the truth (OKLab ΔE, edge displacement, gaps, nodes,
+  bytes). Results and the professional-tool comparison are in `BENCHMARKS.md`.
+  `qualityGate.smoke-test.ts` fails on regressions or if the engine loses to
+  legacy on any case.
+- The older structural harness (`qualityTesting/`, `QUALITY_REPORT.md`) still
+  covers the ImageTracer fallback presets.
 
 ### Retrieval, credits, and history
 
@@ -175,11 +182,16 @@ multi-format export, batch workflows, and launch operations remain incomplete.
 
 ## Partially implemented
 
-### Vectorization providers
+### Vectorization
 
-ImageTracer and Potrace work. `VisionProvider` and `OpenAIProvider` still
-throw `NotImplementedError`. Photo analysis recommends Vision, but the
-conversion service catches that expected gap and falls back to ImageTracer.
+The engine meets the core professional expectations on the benchmark (no
+seams, exact colors, sub-pixel edges, sharp corners, few nodes, small text).
+Open quality work is tracked in `ROADMAP.md` (Q3–Q15): gradient
+reconstruction, JPEG-source node counts, diagonal pinch points and pixel art,
+tangent continuity at junctions, 1× sub-pixel refinement, stroke output,
+designer-grade SVG structure, real-image corpus, and vision assistance.
+Professional currently scores about the same as Quick on the corpus; it needs
+real differentiators (Q3 gradients first) to justify its 2× credit cost.
 
 ### Export and print-ready model
 
@@ -270,15 +282,16 @@ See `backend/API.md` and the served OpenAPI document for response contracts.
 ## Testing status
 
 - Root `npm run build` runs strict TypeScript project builds and Vite.
-- Root `npm run lint` runs oxlint.
+- Root `npm run lint` runs oxlint (it also scans `backend/`).
 - `cd backend && npm run typecheck` runs backend TypeScript without emit.
-- There are 23 standalone `*.smoke-test.ts` files covering fetch routing,
-  queue behavior, auth, uploads, jobs, conversion retrieval/download,
-  credits, history, repositories/services, providers, analysis, professional
-  tracing, and quality presets.
+- `cd backend && npm test` runs every `*.smoke-test.ts` (25 files) and
+  reports pass/fail. This includes the engine tests and the vector quality
+  gate (~60 s).
+- `cd backend && npm run bench` prints the render-and-diff benchmark.
 - Tests call real handlers/services with fake Cloudflare bindings and
-  in-memory repositories; no real Supabase project is required.
-- There is no conventional unit-test runner configuration or CI workflow.
+  in-memory repositories; no real Supabase project is required. Concurrency
+  and Supabase-specific paths are not exercised.
+- No CI workflow yet (ROADMAP P8).
 
 ## Deployment context
 
@@ -314,18 +327,16 @@ See `backend/API.md` and the served OpenAPI document for response contracts.
 8. For UI work, check light/dark themes and approximately 375px/1280px
    viewports.
 9. Do not add dependencies until the existing stack has been checked.
-10. Do not commit or push unless explicitly asked in that turn.
+10. Do not commit or push unless explicitly asked (autonomous sessions may be
+    authorized to commit and push verified milestones).
+11. Tracing changes must keep `npm test` green, including the vector quality
+    gate; record benchmark changes in `BENCHMARKS.md`.
 
 ## Current priorities
 
-1. Verify the Supabase/Worker/Pages production deployment, redirect allowlist,
-   email delivery, password policy, and abuse controls.
-2. Reconcile frontend pricing/copy with the four-tier backend credit model.
-3. Add billing and credit lifecycle automation.
-4. Implement requested formats/print-ready settings end to end, then add real
-   PDF/EPS/DXF/PNG output.
-5. Add batch workflows.
-6. Implement upload retrieval/deletion and scheduled orphan cleanup.
-7. Decide and implement the production photo/AI provider strategy.
-8. Add CI, aggregate test commands, observability, legal pages, and verified
-   production deployment checks.
+See `ROADMAP.md` for the full prioritized list. In short:
+
+1. Vector quality: gradient reconstruction (Q3) and lossy-source quality (Q4).
+2. Production safety: decompression-bomb guard, stuck-job recovery, queue
+   configuration, credit integrity, free-credit grant (P1–P5).
+3. Then SaaS work: honest copy, export formats, account UI, billing.

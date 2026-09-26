@@ -1,5 +1,10 @@
 # Phase 23 — Real-World Quality Testing Report
 
+> **Superseded for the production engine.** Production tracing now runs on
+> the Vectorla engine (`src/engine/`), measured by the render-and-diff
+> benchmark in `/BENCHMARKS.md`. This report and its structural harness still
+> describe the ImageTracer fallback provider and its presets.
+
 ## Method and an important caveat
 
 No real user-submitted images are available in this environment. Instead,
