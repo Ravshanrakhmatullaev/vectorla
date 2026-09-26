@@ -8,10 +8,11 @@
 // Run with: npx tsx src/providers/ProviderFactory.smoke-test.ts (from inside backend/)
 import { createVectorizationProvider } from './ProviderFactory'
 import { PlaceholderProvider } from './PlaceholderProvider'
+import { VectorlaProvider } from './VectorlaProvider'
 import { PotraceProvider } from './PotraceProvider'
 import { VisionProvider } from './VisionProvider'
 import { OpenAIProvider } from './OpenAIProvider'
-import { loadDecoderWasmModules, createTestPng } from '../testSupport/wasmTestFixtures'
+import { loadDecoderWasmModules, createTestPng, createTestJpeg, createTestWebp } from '../testSupport/wasmTestFixtures'
 import type { Env } from '../env'
 import type { Upload } from '../types'
 import type { R2Bucket, Queue } from '@cloudflare/workers-types'
@@ -78,6 +79,25 @@ async function run() {
   assertTrue(result.data.byteLength > 0, 'PlaceholderProvider produces non-empty output')
   console.log('PASS: PlaceholderProvider.vectorize produces real traced SVG output')
 
+  // 1b. VectorlaProvider — the default engine — traces PNG, JPEG and WebP.
+  const vectorla = new VectorlaProvider(wasm)
+  for (const [mimeType, bytes] of [
+    ['image/png', await createTestPng()],
+    ['image/jpeg', await createTestJpeg()],
+    ['image/webp', await createTestWebp()],
+  ] as const) {
+    const traced = await vectorla.vectorize({ ...fakeUpload, mimeType }, bytes)
+    const svg = new TextDecoder().decode(traced.data)
+    assertEqual(traced.format, 'svg', `VectorlaProvider produces an svg for ${mimeType}`)
+    assertTrue(svg.startsWith('<svg') && svg.includes('width="8" height="8"'), `VectorlaProvider output for ${mimeType} is an 8x8 SVG`)
+  }
+  await assertRejects(
+    () => vectorla.vectorize({ ...fakeUpload, mimeType: 'image/png' }, new Uint8Array([1, 2, 3]).buffer),
+    /Failed to decode/,
+    'VectorlaProvider rejects corrupted bytes',
+  )
+  console.log('PASS: VectorlaProvider.vectorize traces PNG/JPEG/WebP and rejects corrupted input')
+
   // 2. PotraceProvider (Phase 24) also actually works now.
   const potrace = new PotraceProvider(wasm)
   const potraceResult = await potrace.vectorize(pngUpload, await createTestPng())
@@ -101,6 +121,10 @@ async function run() {
   console.log('PASS: OpenAIProvider.vectorize throws "Not implemented"')
 
   // 3. ProviderFactory selects the right concrete class per env.VECTORIZATION_PROVIDER
+  assertTrue(
+    createVectorizationProvider(await createFakeEnv('vectorla')) instanceof VectorlaProvider,
+    'factory selects VectorlaProvider',
+  )
   assertTrue(
     createVectorizationProvider(await createFakeEnv('placeholder')) instanceof PlaceholderProvider,
     'factory selects PlaceholderProvider',

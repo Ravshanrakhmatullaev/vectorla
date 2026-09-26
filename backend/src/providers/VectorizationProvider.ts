@@ -26,8 +26,8 @@ export interface VectorizationProvider {
   vectorize(upload: Upload, fileBytes: ArrayBuffer, requestedPreset?: string | null): Promise<VectorizationResult>
 }
 
-export type VectorizationProviderName = 'placeholder' | 'potrace' | 'vision' | 'openai'
+export type VectorizationProviderName = 'vectorla' | 'placeholder' | 'potrace' | 'vision' | 'openai'
 
 export function isVectorizationProviderName(value: string): value is VectorizationProviderName {
-  return value === 'placeholder' || value === 'potrace' || value === 'vision' || value === 'openai'
+  return value === 'vectorla' || value === 'placeholder' || value === 'potrace' || value === 'vision' || value === 'openai'
 }

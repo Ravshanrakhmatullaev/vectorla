@@ -1,4 +1,4 @@
-import type { Conversion, JobStatus } from '../types'
+import type { Conversion, JobStatus, Upload } from '../types'
 import type { Env } from '../env'
 import { JobService, createJobService } from './JobService'
 import { StorageService } from './StorageService'
@@ -17,6 +17,7 @@ import {
   PROFESSIONAL_TRACE_CREDIT_MULTIPLIER,
 } from '../pipeline/ProfessionalTracePipeline'
 import { CreditsService, createCreditsService, calculateRequiredCredits } from './CreditsService'
+import { sourceFormatFromMime } from '../engine/profiles'
 import { NotFoundError, ConflictError, NotImplementedError } from '../errors'
 
 /** Result of looking up a job's conversion — see ConversionService.getConversionByJob. */
@@ -50,18 +51,15 @@ export class ConversionService {
    * vectorize, store the result in R2, save the Conversion row, debit the
    * credits, then mark the job completed.
    *
-   * ProviderSelector can pick a provider that isn't built yet (Potrace/
-   * Vision — see ProviderSelector.ts's doc comment); if that provider throws
-   * NotImplementedError, this transparently falls back to the working
-   * ImageTracer engine ('placeholder') instead of failing the job — real
-   * uploads keep converting successfully today, while the selection logic
-   * is already real and needs no further changes once those providers land.
+   * ProviderSelector routes every image to the Vectorla engine. If it (or a
+   * not-yet-implemented provider such as Vision) throws, this transparently
+   * falls back to the ImageTracer engine ('placeholder') instead of failing
+   * the job — a tracing bug degrades quality rather than availability.
    *
-   * Phase 25: a job whose preset is exactly PROFESSIONAL_TRACE_JOB_PRESET
-   * runs the full preprocessing pipeline (pipeline/ProfessionalTracePipeline.ts)
-   * instead of the flow described above — see that constant's doc comment.
+   * A job whose preset is exactly PROFESSIONAL_TRACE_JOB_PRESET runs the
+   * engine's Professional profile (pipeline/ProfessionalTracePipeline.ts),
+   * with the same fallback.
    *
-
    * Idempotent against queue redelivery: a message for an already-completed
    * job returns the existing conversion(s) as a no-op (no re-vectorizing, no
    * double debit); a message for a job that's already 'processing' throws
@@ -100,42 +98,9 @@ export class ConversionService {
     const fileStream = await this.storage.getFile(upload.storageKey)
     const fileBytes = await new Response(fileStream).arrayBuffer()
 
-    let result: VectorizationResult
-    if (isProfessionalTrace) {
-      // Phase 25: Professional Trace runs the full preprocessing pipeline
-      // (pipeline/ProfessionalTracePipeline.ts) instead of the normal Quick
-      // Trace flow below. Every other preset value (including unset) falls
-      // through to that unchanged flow — see PROFESSIONAL_TRACE_JOB_PRESET's
-      // doc comment for why this needs no route/schema changes to be safe.
-      const imageData = await decodeImage(upload.mimeType, fileBytes, this.decoderWasm)
-      const pipelineResult = await runProfessionalTrace(imageData)
-      console.log(
-        `[professional-trace] job "${job.id}": provider=${pipelineResult.provider} preset=${pipelineResult.tracePreset} ` +
-          `totalTimeMs=${pipelineResult.totalTimeMs.toFixed(1)} stages=[${pipelineResult.stageTimings
-            .map((t) => `${t.name}:${t.enabled ? `${t.durationMs.toFixed(1)}ms` : 'skipped'}`)
-            .join(', ')}]`,
-      )
-      result = { data: new TextEncoder().encode(pipelineResult.svg).buffer as ArrayBuffer, format: 'svg' }
-    } else {
-      const analysis = await this.imageAnalysis.analyze(upload, fileBytes)
-      // Phase 23: an explicit Job.preset (from a caller re-processing with a
-      // specific choice) always wins; otherwise the job gets the trace profile
-      // tracePresetSelector.ts actually recommends for this image, not just
-      // "whatever the provider decides on its own" (see PlaceholderProvider's
-      // own narrower fallback, only reached when requestedPreset is unset).
-      const preset = job.preset ?? analysis.recommendedTracePreset
-      try {
-        const provider = createProviderByName(analysis.recommendedProvider, this.decoderWasm)
-        result = await provider.vectorize(upload, fileBytes, preset)
-      } catch (error) {
-        if (!(error instanceof NotImplementedError)) throw error
-        console.error(
-          `Provider "${analysis.recommendedProvider}" recommended for job "${job.id}" is not implemented yet — falling back to the ImageTracer engine`,
-        )
-        const fallbackProvider = createProviderByName('placeholder', this.decoderWasm)
-        result = await fallbackProvider.vectorize(upload, fileBytes, preset)
-      }
-    }
+    const result = isProfessionalTrace
+      ? await this.traceProfessional(job.id, upload, fileBytes)
+      : await this.traceQuick(job.id, job.preset, upload, fileBytes)
     const storageKey = `conversions/${job.userId}/${job.id}/output.${result.format}`
     await this.storage.storeFile(storageKey, result.data)
 
@@ -160,6 +125,53 @@ export class ConversionService {
     await this.jobs.markCompleted(job.id)
 
     return [created]
+  }
+
+  /** Professional Trace: the engine's Professional profile, ImageTracer fallback on failure. */
+  private async traceProfessional(jobId: string, upload: Upload, fileBytes: ArrayBuffer): Promise<VectorizationResult> {
+    const imageData = await decodeImage(upload.mimeType, fileBytes, this.decoderWasm)
+    try {
+      const pipelineResult = runProfessionalTrace(imageData, sourceFormatFromMime(upload.mimeType))
+      console.log(
+        `[professional-trace] job "${jobId}": provider=${pipelineResult.provider} profile=${pipelineResult.tracePreset} ` +
+          `colors=${pipelineResult.engine.paletteSize} paths=${pipelineResult.engine.pathCount} ` +
+          `totalTimeMs=${pipelineResult.totalTimeMs.toFixed(1)} stages=[${pipelineResult.stageTimings
+            .map((t) => `${t.name}:${t.durationMs.toFixed(1)}ms`)
+            .join(', ')}]`,
+      )
+      return { data: new TextEncoder().encode(pipelineResult.svg).buffer as ArrayBuffer, format: 'svg' }
+    } catch (error) {
+      console.error(
+        `[professional-trace] engine failed for job "${jobId}" — falling back to the ImageTracer engine:`,
+        error instanceof Error ? error.message : error,
+      )
+      return createProviderByName('placeholder', this.decoderWasm).vectorize(upload, fileBytes, null)
+    }
+  }
+
+  /**
+   * Quick Trace: the provider ImageAnalysisService recommends (the Vectorla
+   * engine). The engine picks its own palette and settings, so only an
+   * explicit caller preset adjusts it; the auto-recommended legacy preset
+   * is only used by the ImageTracer fallback.
+   */
+  private async traceQuick(jobId: string, jobPreset: string | null, upload: Upload, fileBytes: ArrayBuffer): Promise<VectorizationResult> {
+    const analysis = await this.imageAnalysis.analyze(upload, fileBytes)
+    const legacyPreset = jobPreset ?? analysis.recommendedTracePreset
+    try {
+      const provider = createProviderByName(analysis.recommendedProvider, this.decoderWasm)
+      return await provider.vectorize(upload, fileBytes, analysis.recommendedProvider === 'vectorla' ? jobPreset : legacyPreset)
+    } catch (error) {
+      // Unimplemented providers (vision/openai) and any unexpected failure
+      // of the Vectorla engine fall back to the ImageTracer engine, so a
+      // tracing bug degrades output quality instead of failing the job.
+      if (!(error instanceof NotImplementedError) && analysis.recommendedProvider !== 'vectorla') throw error
+      console.error(
+        `Provider "${analysis.recommendedProvider}" failed for job "${jobId}" — falling back to the ImageTracer engine:`,
+        error instanceof Error ? error.message : error,
+      )
+      return createProviderByName('placeholder', this.decoderWasm).vectorize(upload, fileBytes, legacyPreset)
+    }
   }
 
   /** GET /api/conversions/:id — a Conversion row only ever exists for a completed job, so a download URL is always attached. */

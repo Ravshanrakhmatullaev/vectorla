@@ -74,7 +74,7 @@ export const OPENAPI_DOCUMENT = {
           isGrayscale: { type: 'boolean' },
           imageType: { type: 'string', enum: ['photo', 'illustration', 'logo'] },
           complexityScore: { type: 'number' },
-          recommendedProvider: { type: 'string', enum: ['placeholder', 'potrace', 'vision', 'openai'] },
+          recommendedProvider: { type: 'string', enum: ['vectorla', 'placeholder', 'potrace', 'vision', 'openai'] },
           recommendedTracePreset: {
             type: 'string',
             enum: ['logo', 'signature', 'qrCode', 'icon', 'sticker', 'blueprint', 'sketch', 'illustration', 'photo'],

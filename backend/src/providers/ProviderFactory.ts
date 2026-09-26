@@ -3,6 +3,7 @@ import type { VectorizationProvider, VectorizationProviderName } from './Vectori
 import { isVectorizationProviderName } from './VectorizationProvider'
 import type { RasterDecoderWasm } from './imageDecoder'
 import { PlaceholderProvider } from './PlaceholderProvider'
+import { VectorlaProvider } from './VectorlaProvider'
 import { PotraceProvider } from './PotraceProvider'
 import { VisionProvider } from './VisionProvider'
 import { OpenAIProvider } from './OpenAIProvider'
@@ -15,6 +16,8 @@ import { OpenAIProvider } from './OpenAIProvider'
  */
 export function createProviderByName(name: VectorizationProviderName, decoderWasm: RasterDecoderWasm): VectorizationProvider {
   switch (name) {
+    case 'vectorla':
+      return new VectorlaProvider(decoderWasm)
     case 'placeholder':
       return new PlaceholderProvider(decoderWasm)
     case 'potrace':

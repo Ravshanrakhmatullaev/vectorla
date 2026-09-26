@@ -9,28 +9,24 @@ export interface ProviderSelectionInput {
 
 /**
  * Chooses which VectorizationProvider a job should attempt, based on
- * ImageAnalysisService's classification (Phase 21):
+ * ImageAnalysisService's classification.
  *
- *   - monochrome logo   -> potrace     (bitmap tracing — still a stub, see
- *                                        PotraceProvider; ConversionService
- *                                        falls back to the working
- *                                        ImageTracer engine if this throws
- *                                        NotImplementedError)
- *   - colored logo /
- *     illustration       -> placeholder (the ImageTracer engine — see
- *                                        PlaceholderProvider.ts for why the
- *                                        name doesn't match what it does)
- *   - photograph         -> vision     (a professional AI-based tracer,
- *                                        also still a stub — same fallback
- *                                        applies; OpenAI itself is
- *                                        explicitly out of scope this phase)
+ * Every image type now routes to the Vectorla engine (src/engine/): on the
+ * render-and-diff benchmark it beats the ImageTracer ('placeholder') and
+ * Potrace paths on every category — flat logos, monochrome marks, text,
+ * stickers, illustrations and gradients (see BENCHMARKS.md). ImageTracer
+ * remains the automatic fallback if the engine fails (ConversionService), and
+ * 'vision'/'openai' stay reserved for a future AI-assisted photo pipeline.
  *
  * Pure and synchronous by design — no I/O, trivially unit-testable, and
  * reusable both for real dispatch (ConversionService) and for the
  * "recommended provider" field shown to the frontend (ImageAnalysisService).
  */
 export function selectProvider(input: ProviderSelectionInput): VectorizationProviderName {
-  if (input.imageType === 'photo') return 'vision'
-  if (input.imageType === 'logo' && input.isGrayscale) return 'potrace'
-  return 'placeholder'
+  switch (input.imageType) {
+    case 'photo':
+    case 'illustration':
+    case 'logo':
+      return 'vectorla'
+  }
 }

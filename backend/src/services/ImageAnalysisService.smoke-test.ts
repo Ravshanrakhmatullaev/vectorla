@@ -106,43 +106,43 @@ async function run() {
   const service = createImageAnalysisService(wasm)
   const upload = makeUpload()
 
-  // 1. Monochrome logo -> imageType 'logo', isGrayscale true, recommendedProvider 'potrace'
+  // 1. Monochrome logo -> imageType 'logo', isGrayscale true, recommendedProvider 'vectorla'
   const grayscaleBytes = await encodeTestPng(makeGrayscaleLogoLike())
   const grayscaleResult = await service.analyze(upload, grayscaleBytes)
   assertEqual(grayscaleResult.imageType, 'logo', 'grayscale bands classify as logo')
   assertEqual(grayscaleResult.isGrayscale, true, 'grayscale bands are detected as grayscale')
-  assertEqual(grayscaleResult.recommendedProvider, 'potrace', 'monochrome logo recommends potrace')
+  assertEqual(grayscaleResult.recommendedProvider, 'vectorla', 'monochrome logo recommends the vectorla engine')
   assertEqual(grayscaleResult.hasTransparency, false, 'opaque image has no transparency')
   console.log(
-    `PASS: monochrome logo -> logo/grayscale/potrace (colors=${grayscaleResult.colorCountEstimate}, quality=${grayscaleResult.estimatedQuality})`,
+    `PASS: monochrome logo -> logo/grayscale/vectorla (colors=${grayscaleResult.colorCountEstimate}, quality=${grayscaleResult.estimatedQuality})`,
   )
 
-  // 2. Colored logo -> imageType 'logo', isGrayscale false, recommendedProvider 'placeholder'
+  // 2. Colored logo -> imageType 'logo', isGrayscale false, recommendedProvider 'vectorla'
   const coloredBytes = await encodeTestPng(makeColoredLogoLike())
   const coloredResult = await service.analyze(upload, coloredBytes)
   assertEqual(coloredResult.imageType, 'logo', 'colored bands classify as logo')
   assertEqual(coloredResult.isGrayscale, false, 'colored bands are not grayscale')
-  assertEqual(coloredResult.recommendedProvider, 'placeholder', 'colored logo recommends placeholder (ImageTracer)')
+  assertEqual(coloredResult.recommendedProvider, 'vectorla', 'colored logo recommends the vectorla engine')
   assertTrue(coloredResult.dominantColors.length > 0, 'dominantColors is non-empty')
-  console.log(`PASS: colored logo -> logo/colored/placeholder (dominantColors=${coloredResult.dominantColors.join(', ')})`)
+  console.log(`PASS: colored logo -> logo/colored/vectorla (dominantColors=${coloredResult.dominantColors.join(', ')})`)
 
-  // 3. Illustration -> imageType 'illustration', recommendedProvider 'placeholder'
+  // 3. Illustration -> imageType 'illustration', recommendedProvider 'vectorla'
   const illustrationBytes = await encodeTestPng(makeIllustrationLike())
   const illustrationResult = await service.analyze(upload, illustrationBytes)
   assertEqual(illustrationResult.imageType, 'illustration', 'many-hued gradient classifies as illustration')
-  assertEqual(illustrationResult.recommendedProvider, 'placeholder', 'illustration recommends placeholder (ImageTracer)')
-  console.log(`PASS: illustration -> illustration/placeholder (colors=${illustrationResult.colorCountEstimate})`)
+  assertEqual(illustrationResult.recommendedProvider, 'vectorla', 'illustration recommends the vectorla engine')
+  console.log(`PASS: illustration -> illustration/vectorla (colors=${illustrationResult.colorCountEstimate})`)
 
-  // 4. Photograph -> imageType 'photo', recommendedProvider 'vision', a real credit/time estimate
+  // 4. Photograph -> imageType 'photo', recommendedProvider 'vectorla', a real credit/time estimate
   const photoBytes = await encodeTestPng(makePhotoLike())
   const photoResult = await service.analyze(upload, photoBytes)
   assertEqual(photoResult.imageType, 'photo', 'random noise classifies as photo')
-  assertEqual(photoResult.recommendedProvider, 'vision', 'photograph recommends vision (professional AI, future)')
+  assertEqual(photoResult.recommendedProvider, 'vectorla', 'photograph recommends the vectorla engine')
   assertTrue(photoResult.estimatedCredits > 0, 'estimatedCredits is positive')
   assertTrue(photoResult.estimatedProcessingTimeMs > 0, 'estimatedProcessingTimeMs is positive')
   assertTrue(photoResult.noiseLevel > grayscaleResult.noiseLevel, 'random noise has a higher noiseLevel than flat bands')
   console.log(
-    `PASS: photograph -> photo/vision (quality=${photoResult.estimatedQuality}, credits=${photoResult.estimatedCredits}, ` +
+    `PASS: photograph -> photo/vectorla (quality=${photoResult.estimatedQuality}, credits=${photoResult.estimatedCredits}, ` +
       `timeMs=${photoResult.estimatedProcessingTimeMs}, noise=${photoResult.noiseLevel.toFixed(2)})`,
   )
 
