@@ -14,10 +14,10 @@ function assertTrue(condition: boolean, message: string): void {
 // Budgets sit ~20-30% above the measured values recorded in BENCHMARKS.md, so
 // normal tuning noise passes but a real regression does not.
 const BUDGETS = {
-  // Measured on 25 variants (BENCHMARKS.md): ΔE 0.22, edge 0.16 px mean / 0.42 px worst, 7,163 segments.
-  professional: { meanDeltaE: 0.29, meanEdgeError: 0.21, maxEdgeError: 0.5, totalSegments: 9000 },
-  // Measured on 25 variants (BENCHMARKS.md): ΔE 0.34, edge 0.15 px mean / 0.37 px worst, 7,322 segments.
-  quick: { meanDeltaE: 0.42, meanEdgeError: 0.2, maxEdgeError: 0.5, totalSegments: 9200 },
+  // Measured on 25 variants (BENCHMARKS.md): ΔE 0.18, edge 0.12 px mean / 0.22 px worst, 3,616 segments.
+  professional: { meanDeltaE: 0.23, meanEdgeError: 0.16, maxEdgeError: 0.3, totalSegments: 4700 },
+  // Measured on 25 variants (BENCHMARKS.md): ΔE 0.31, edge 0.12 px mean / 0.22 px worst, 4,382 segments.
+  quick: { meanDeltaE: 0.39, meanEdgeError: 0.16, maxEdgeError: 0.3, totalSegments: 5700 },
 }
 
 // Professional reconstructs gradients; every gradient case must stay close

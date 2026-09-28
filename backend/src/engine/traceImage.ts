@@ -11,9 +11,9 @@
  */
 import { PathBuilder } from './svgWriter'
 import { toShortHex } from './color'
-import { bilateralDenoise, downscaleArea, gaussianBlur, upscaleBilinear, upscaleMaskStrict, type RgbaImage } from './raster'
+import { bilateralDenoise, downscaleArea, gaussianBlur, restoreJpegChroma, upscaleBilinear, upscaleMaskStrict, type RgbaImage } from './raster'
 import { computeFlatMask, computeOklab, extractDetailColors, extractPalette, labelPixels, TRANSPARENT_LABEL, type PaletteColor } from './palette'
-import { connectedComponents, mergeSmallRegions } from './regions'
+import { connectedComponents, dissolveBlendSlivers, mergeSmallRegions } from './regions'
 import { detectGradients, type GradientFill } from './gradients'
 import { buildRegionBoundaries, extractChains, OUTSIDE, type RegionLoop } from './planarMap'
 import { buildCurve, buildPolygon, refineJunctions, reverseFitted, type FittedChain } from './curveFit'
@@ -148,6 +148,7 @@ export function traceImage(input: ImageData | RgbaImage, overrides: Partial<Trac
   const lossy = options.sourceFormat === 'jpeg'
   const noiseSigma = estimateNoiseSigma(image)
   const denoise = options.denoise === 'on' || (options.denoise === 'auto' && (lossy || noiseSigma > 1.2))
+  if (lossy) image = restoreJpegChroma(image)
   if (denoise) image = bilateralDenoise(image, 2, Math.max(lossy ? 22 : 14, 3.5 * noiseSigma))
   lap('denoise')
 
@@ -201,6 +202,8 @@ export function traceImage(input: ImageData | RgbaImage, overrides: Partial<Trac
   lap('label')
 
   // 5. Speckle cleanup and final regions.
+  labels = mergeSmallRegions(labels, width, height, palette, minArea)
+  labels = dissolveBlendSlivers(labels, width, height, palette, lab, 0.75 * Math.sqrt(sourceToWorking))
   labels = mergeSmallRegions(labels, width, height, palette, minArea)
   let regions = connectedComponents(labels, width, height)
   // Region budget: pathological inputs (pure noise, dithering, halftones)

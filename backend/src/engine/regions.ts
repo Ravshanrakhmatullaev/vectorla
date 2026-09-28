@@ -196,3 +196,118 @@ export function mergeSmallRegions(
   for (let p = 0; p < labels.length; p++) out[p] = compLabel[find(ids[p]!)]!
   return out
 }
+
+/**
+ * Dissolves "blend slivers": thin regions lying between two other colors
+ * whose own color is (loosely) a blend of those two — anti-aliasing and JPEG
+ * chroma fringes that survived labeling (e.g. a light-blue rim along black
+ * text in a JPEG, a gray line between yellow and blue). Each sliver pixel
+ * goes to whichever of the two neighbour colors it is closer to, which puts
+ * the boundary back where the edge really is.
+ *
+ * Thin = area / boundary length below `maxHalfThickness` (a strip of
+ * thickness t has area/boundary ≈ t/2). Kept: real strokes, which either have
+ * one neighbour color on both sides (text, rings, outlines on a background)
+ * or a color no blend of their neighbours explains (a black outline).
+ */
+export function dissolveBlendSlivers(
+  labels: Int32Array,
+  width: number,
+  height: number,
+  palette: PaletteColor[],
+  lab: Float32Array,
+  maxHalfThickness: number,
+): Int32Array {
+  const comps = connectedComponents(labels, width, height)
+  const { ids, count, areas } = comps
+  const boundary = new Int32Array(count)
+  const addEdge = (a: number, b: number) => {
+    boundary[a] = boundary[a]! + 1
+    boundary[b] = boundary[b]! + 1
+  }
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const p = y * width + x
+      if (x + 1 < width && ids[p] !== ids[p + 1]) addEdge(ids[p]!, ids[p + 1]!)
+      if (y + 1 < height && ids[p] !== ids[p + width]) addEdge(ids[p]!, ids[p + width]!)
+    }
+  }
+  const thin = new Uint8Array(count)
+  let any = false
+  for (let c = 0; c < count; c++) {
+    if (comps.labels[c] === TRANSPARENT_LABEL || boundary[c] === 0) continue
+    if (areas[c]! / boundary[c]! < maxHalfThickness) {
+      thin[c] = 1
+      any = true
+    }
+  }
+  if (!any) return labels
+
+  // Neighbour-label border counts for thin components only.
+  const neighbourLabels = new Map<number, Map<number, number>>()
+  const note = (c: number, label: number) => {
+    if (!thin[c]) return
+    let m = neighbourLabels.get(c)
+    if (!m) {
+      m = new Map()
+      neighbourLabels.set(c, m)
+    }
+    m.set(label, (m.get(label) ?? 0) + 1)
+  }
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const p = y * width + x
+      const right = x + 1 < width ? p + 1 : -1
+      const down = y + 1 < height ? p + width : -1
+      for (const q of [right, down]) {
+        if (q < 0 || ids[p] === ids[q]) continue
+        note(ids[p]!, labels[q]!)
+        note(ids[q]!, labels[p]!)
+      }
+    }
+  }
+
+  const rgb = (label: number): [number, number, number] => {
+    const c = palette[label]!
+    return [c.r / 255, c.g / 255, c.b / 255]
+  }
+  const replacement = new Map<number, [number, number]>()
+  for (const [c, neighbours] of neighbourLabels) {
+    const own = comps.labels[c]!
+    const ranked = Array.from(neighbours.entries())
+      .filter(([label]) => label !== own && label !== TRANSPARENT_LABEL)
+      .sort((a, b) => b[1] - a[1])
+    if (ranked.length < 2) continue
+    const a = ranked[0]![0]
+    const b = ranked[1]![0]
+    const [ar, ag, ab] = rgb(a)
+    const [br, bg, bb] = rgb(b)
+    const [cr, cg, cb] = rgb(own)
+    const dx = br - ar
+    const dy = bg - ag
+    const dz = bb - ab
+    const len2 = dx * dx + dy * dy + dz * dz
+    if (len2 === 0) continue
+    const t = ((cr - ar) * dx + (cg - ag) * dy + (cb - ab) * dz) / len2
+    if (t < 0.05 || t > 0.95) continue
+    const residual = Math.hypot(ar + dx * t - cr, ag + dy * t - cg, ab + dz * t - cb)
+    if (residual < 0.12) replacement.set(c, [a, b])
+  }
+  if (replacement.size === 0) return labels
+
+  const out = labels.slice()
+  for (let p = 0; p < out.length; p++) {
+    const pair = replacement.get(ids[p]!)
+    if (!pair) continue
+    const L = lab[p * 3] ?? 0
+    const A = lab[p * 3 + 1] ?? 0
+    const B = lab[p * 3 + 2] ?? 0
+    const [a, b] = pair
+    const ca = palette[a]!
+    const cb = palette[b]!
+    const da = (L - ca.L) ** 2 + (A - ca.A) ** 2 + (B - ca.B) ** 2
+    const db = (L - cb.L) ** 2 + (A - cb.A) ** 2 + (B - cb.B) ** 2
+    out[p] = da <= db ? a : b
+  }
+  return out
+}

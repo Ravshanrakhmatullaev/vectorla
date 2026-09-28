@@ -261,3 +261,69 @@ export function upscaleMaskStrict(mask: Uint8Array, width: number, height: numbe
   }
   return out
 }
+
+/**
+ * JPEG chroma restoration (joint bilateral filter guided by luma).
+ *
+ * JPEG stores color (Cb/Cr) at half resolution in 8x8/16x16 blocks while
+ * keeping luma sharp. Around a color edge the decoded pixels therefore carry
+ * luma from one side but averaged chroma — colors that belong to neither
+ * shape (the gray fringe between yellow and blue) — and the chroma edge
+ * follows the block grid in 8-16 px steps. Re-estimating each pixel's chroma
+ * from neighbours with similar luma snaps color transitions back onto the
+ * sharp luma edge. Luma itself is left untouched.
+ */
+export function restoreJpegChroma(image: RgbaImage, radius = 4, lumaSigma = 12): RgbaImage {
+  const { width: w, height: h, data } = image
+  const n = w * h
+  const Y = new Float32Array(n)
+  const Cb = new Float32Array(n)
+  const Cr = new Float32Array(n)
+  for (let p = 0; p < n; p++) {
+    const r = data[p * 4] ?? 0
+    const g = data[p * 4 + 1] ?? 0
+    const b = data[p * 4 + 2] ?? 0
+    Y[p] = 0.299 * r + 0.587 * g + 0.114 * b
+    Cb[p] = -0.168736 * r - 0.331264 * g + 0.5 * b
+    Cr[p] = 0.5 * r - 0.418688 * g - 0.081312 * b
+  }
+  const spatialSigma = Math.max(1, radius / 2)
+  const spatial: number[] = []
+  for (let dy = -radius; dy <= radius; dy++) {
+    for (let dx = -radius; dx <= radius; dx++) spatial.push(Math.exp(-(dx * dx + dy * dy) / (2 * spatialSigma * spatialSigma)))
+  }
+  const rangeLut = new Float32Array(256)
+  for (let d = 0; d < 256; d++) rangeLut[d] = Math.exp(-(d * d) / (2 * lumaSigma * lumaSigma))
+
+  const out = new Uint8ClampedArray(data.length)
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const p = y * w + x
+      const y0 = Y[p]!
+      let sw = 0
+      let scb = 0
+      let scr = 0
+      let k = 0
+      for (let dy = -radius; dy <= radius; dy++) {
+        const ny = y + dy
+        for (let dx = -radius; dx <= radius; dx++, k++) {
+          const nx = x + dx
+          if (ny < 0 || ny >= h || nx < 0 || nx >= w) continue
+          const q = ny * w + nx
+          if ((data[q * 4 + 3] ?? 0) === 0) continue
+          const weight = spatial[k]! * rangeLut[Math.min(255, Math.round(Math.abs(Y[q]! - y0)))]!
+          sw += weight
+          scb += Cb[q]! * weight
+          scr += Cr[q]! * weight
+        }
+      }
+      const cb = sw > 0 ? scb / sw : Cb[p]!
+      const cr = sw > 0 ? scr / sw : Cr[p]!
+      out[p * 4] = y0 + 1.402 * cr
+      out[p * 4 + 1] = y0 - 0.344136 * cb - 0.714136 * cr
+      out[p * 4 + 2] = y0 + 1.772 * cb
+      out[p * 4 + 3] = data[p * 4 + 3] ?? 255
+    }
+  }
+  return { width: w, height: h, data: out }
+}

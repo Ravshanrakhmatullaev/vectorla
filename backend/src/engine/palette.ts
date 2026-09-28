@@ -401,19 +401,24 @@ export function labelPixels(
 
       candidates.length = 0
       let ownIsNearby = false
-      for (let dy = -windowRadius; dy <= windowRadius; dy += step) {
-        const ny = y + dy
-        if (ny < 0 || ny >= h) continue
-        for (let dx = -windowRadius; dx <= windowRadius; dx += step) {
-          const nx = x + dx
-          if (nx < 0 || nx >= w) continue
-          const q = ny * w + nx
-          if (!flat[q]) continue
-          const label = initial[q] ?? 0
-          if (label === own) ownIsNearby = true
-          if (seen[label] !== p) {
-            seen[label] = p
-            candidates.push(label)
+      // Widen the search when the window holds no flat pixels at all (JPEG
+      // ringing can leave a noisy band around text wider than the window).
+      for (let radius = windowRadius; radius <= windowRadius * 4 && candidates.length === 0; radius *= 2) {
+        const stride = radius >= 6 ? Math.max(step, Math.floor(radius / 4)) : step
+        for (let dy = -radius; dy <= radius; dy += stride) {
+          const ny = y + dy
+          if (ny < 0 || ny >= h) continue
+          for (let dx = -radius; dx <= radius; dx += stride) {
+            const nx = x + dx
+            if (nx < 0 || nx >= w) continue
+            const q = ny * w + nx
+            if (!flat[q]) continue
+            const label = initial[q] ?? 0
+            if (label === own) ownIsNearby = true
+            if (seen[label] !== p) {
+              seen[label] = p
+              candidates.push(label)
+            }
           }
         }
       }
@@ -438,6 +443,20 @@ export function labelPixels(
           }
         }
       }
+      // Only one flat color in reach (the other side of the edge is a thin or
+      // noisy stroke with no flat pixels): test blends of that color with
+      // every palette color as the unseen partner.
+      if (candidates.length === 1 && !ownIsNearby) {
+        const a = candidates[0]!
+        for (let b = 0; b < palette.length; b++) {
+          if (b === a) continue
+          const { residual, t } = mixtureResidual(pixel, linearPalette[a]!, linearPalette[b]!)
+          if (residual < bestResidual) {
+            bestResidual = residual
+            bestLabel = t < 0.5 ? a : b
+          }
+        }
+      }
       // Anti-aliasing coverage is linear in sRGB, so when a blend of two
       // surrounding colors explains the pixel, the blend parameter decides
       // which side of the true edge it lies on (t < 0.5 = more than half
@@ -445,7 +464,9 @@ export function labelPixels(
       // lightness is non-linear, so dark shapes would shrink by a fraction
       // of a pixel. When the pixel's own color isn't around, the blend must
       // also clearly beat that color.
-      if (bestResidual < 0.06 && (ownIsNearby ? bestResidual <= ownResidual + 0.02 : bestResidual < ownResidual * 0.6)) {
+      // A color that occurs nowhere nearby must beat the local blend outright;
+      // JPEG chroma bleed can push a pixel well off the exact blend line.
+      if (ownIsNearby ? bestResidual < 0.06 && bestResidual <= ownResidual + 0.02 : bestResidual < 0.15 && bestResidual < ownResidual) {
         labels[p] = bestLabel
         continue
       }
