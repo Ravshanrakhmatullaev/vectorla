@@ -14,6 +14,7 @@ import { toShortHex } from './color'
 import { bilateralDenoise, downscaleArea, gaussianBlur, upscaleBilinear, upscaleMaskStrict, type RgbaImage } from './raster'
 import { computeFlatMask, computeOklab, extractDetailColors, extractPalette, labelPixels, TRANSPARENT_LABEL, type PaletteColor } from './palette'
 import { connectedComponents, mergeSmallRegions } from './regions'
+import { detectGradients, type GradientFill } from './gradients'
 import { buildRegionBoundaries, extractChains, OUTSIDE, type RegionLoop } from './planarMap'
 import { buildCurve, buildPolygon, refineJunctions, reverseFitted, type FittedChain } from './curveFit'
 
@@ -44,6 +45,8 @@ export interface TraceEngineOptions {
   maxRegions: number
   /** Restore sharp corners rounded off by anti-aliasing and resampling. */
   snapCorners: boolean
+  /** Reconstruct smooth color ramps as SVG linear gradients instead of flat bands. */
+  gradients: boolean
   /** Source encoding hint: lossy JPEG input gets artifact-aware cleanup. */
   sourceFormat: 'png' | 'jpeg' | 'webp' | 'unknown'
 }
@@ -61,6 +64,7 @@ export const DEFAULT_ENGINE_OPTIONS: TraceEngineOptions = {
   alphaThreshold: 128,
   maxRegions: 6000,
   snapCorners: true,
+  gradients: false,
   sourceFormat: 'unknown',
 }
 
@@ -76,6 +80,7 @@ export interface TraceEngineStats {
   regionCount: number
   chainCount: number
   pathCount: number
+  gradientCount: number
   timingsMs: Record<string, number>
 }
 
@@ -209,6 +214,29 @@ export function traceImage(input: ImageData | RgbaImage, overrides: Partial<Trac
   }
   lap('regions')
 
+  // 5b. Gradient reconstruction: merge posterized bands back into regions
+  //     filled with fitted linear gradients (labels >= palette.length).
+  let gradientFills: GradientFill[] = []
+  if (options.gradients && regions.count > 1) {
+    const gradient = detectGradients(image, regions.ids, regions.count, (r) => regions.labels[r] === TRANSPARENT_LABEL, {
+      maxResidual: 0.02,
+      minRamp: 0.08,
+      minRegionRamp: 0.02,
+      minArea: minArea * 4,
+      edgeMargin: Math.ceil(1.5 * upscale) + 1,
+    })
+    if (gradient.fills.length > 0) {
+      const base = palette.length
+      for (let p = 0; p < n; p++) {
+        const g = gradient.groupOfRegion[regions.ids[p]!]!
+        if (g >= 0) labels[p] = base + g
+      }
+      regions = connectedComponents(labels, width, height)
+      gradientFills = gradient.fills
+    }
+  }
+  lap('gradients')
+
   // 6. Shared boundaries and curve fitting.
   const chains = extractChains(regions.ids, width, height)
   const boundaries = buildRegionBoundaries(chains, regions.count)
@@ -247,6 +275,25 @@ export function traceImage(input: ImageData | RgbaImage, overrides: Partial<Trac
       return isTransparentRegion(use.reversed ? chain.left : chain.right)
     })
 
+  const fillFor = (label: number): string => {
+    if (label >= palette.length) return `url(#g${label - palette.length})`
+    const color = palette[label]!
+    return toShortHex(color.r, color.g, color.b)
+  }
+  const round = (v: number) => Math.round(v * scale * 100) / 100
+  const defs =
+    gradientFills.length === 0
+      ? ''
+      : `<defs>${gradientFills
+          .map(
+            (fill, g) => {
+              const stops = fill.stops.map((stop) => `<stop offset="${Math.round(stop.offset * 1000) / 1000}" stop-color="${toShortHex(stop.r, stop.g, stop.b)}"/>`).join('')
+              return fill.kind === 'radial'
+                ? `<radialGradient id="g${g}" gradientUnits="userSpaceOnUse" cx="${round(fill.cx)}" cy="${round(fill.cy)}" r="${round(fill.r)}">${stops}</radialGradient>`
+                : `<linearGradient id="g${g}" gradientUnits="userSpaceOnUse" x1="${round(fill.x1)}" y1="${round(fill.y1)}" x2="${round(fill.x2)}" y2="${round(fill.y2)}">${stops}</linearGradient>`
+            },
+          )
+          .join('')}</defs>`
   const drawable = boundaries.filter((b) => b.outer && !isTransparentRegion(b.region))
   const paths: string[] = []
   if (options.mode === 'cutout') {
@@ -262,8 +309,7 @@ export function traceImage(input: ImageData | RgbaImage, overrides: Partial<Trac
       for (const hole of boundary.holes) builder.appendLoop(loopChains(hole))
     }
     for (const [label, builder] of byColor) {
-      const color = palette[label]!
-      paths.push(`<path fill="${toShortHex(color.r, color.g, color.b)}" d="${builder.toString()}"/>`)
+      paths.push(`<path fill="${fillFor(label)}" d="${builder.toString()}"/>`)
     }
   } else {
     drawable.sort((a, b) => Math.abs(b.outer!.area) - Math.abs(a.outer!.area))
@@ -273,14 +319,14 @@ export function traceImage(input: ImageData | RgbaImage, overrides: Partial<Trac
       for (const hole of boundary.holes) {
         if (bordersTransparent(hole)) builder.appendLoop(loopChains(hole))
       }
-      const color = palette[regions.labels[boundary.region]!]!
-      paths.push(`<path fill="${toShortHex(color.r, color.g, color.b)}" d="${builder.toString()}"/>`)
+      paths.push(`<path fill="${fillFor(regions.labels[boundary.region]!)}" d="${builder.toString()}"/>`)
     }
   }
   lap('svg')
 
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${sourceWidth}" height="${sourceHeight}" viewBox="0 0 ${sourceWidth} ${sourceHeight}">` +
+    defs +
     paths.join('') +
     '</svg>'
 
@@ -299,6 +345,7 @@ export function traceImage(input: ImageData | RgbaImage, overrides: Partial<Trac
       regionCount: regions.count,
       chainCount: chains.length,
       pathCount: paths.length,
+      gradientCount: gradientFills.length,
       timingsMs: timings,
     },
   }

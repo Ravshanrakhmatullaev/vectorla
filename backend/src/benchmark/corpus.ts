@@ -171,6 +171,46 @@ export const BENCHMARK_CORPUS: BenchmarkCase[] = [
     `),
   },
   {
+    id: 'gradient-banner',
+    category: 'gradient',
+    variants: [
+      { size: 384, format: 'png' },
+      { size: 384, format: 'jpeg' },
+    ],
+    svg: svg(
+      `
+      <defs>
+        <linearGradient id="b" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#4f46e5"/>
+          <stop offset="0.5" stop-color="#db2777"/>
+          <stop offset="1" stop-color="#f59e0b"/>
+        </linearGradient>
+      </defs>
+      <rect width="768" height="384" fill="#ffffff"/>
+      <rect x="32" y="32" width="704" height="320" rx="40" fill="url(#b)"/>
+      <circle cx="384" cy="192" r="92" fill="#ffffff"/>
+      <rect x="344" y="152" width="80" height="80" rx="12" fill="#111827"/>
+    `,
+      768,
+      384,
+    ),
+  },
+  {
+    id: 'radial-glow',
+    category: 'gradient',
+    variants: [{ size: 256, format: 'png' }],
+    svg: svg(`
+      <defs>
+        <radialGradient id="r" cx="0.5" cy="0.5" r="0.5">
+          <stop offset="0" stop-color="#fde047"/>
+          <stop offset="1" stop-color="#ea580c"/>
+        </radialGradient>
+      </defs>
+      <rect width="512" height="512" fill="#0f172a"/>
+      <circle cx="256" cy="256" r="200" fill="url(#r)"/>
+    `),
+  },
+  {
     id: 'qr-like',
     category: 'qr',
     variants: [{ size: 256, format: 'png' }],

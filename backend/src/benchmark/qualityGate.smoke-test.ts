@@ -14,11 +14,15 @@ function assertTrue(condition: boolean, message: string): void {
 // Budgets sit ~20-30% above the measured values recorded in BENCHMARKS.md, so
 // normal tuning noise passes but a real regression does not.
 const BUDGETS = {
-  // Measured (BENCHMARKS.md): ΔE 0.26, edge 0.17 px mean / 0.42 px worst, 6,895 segments.
-  professional: { meanDeltaE: 0.34, meanEdgeError: 0.22, maxEdgeError: 0.5, totalSegments: 8600 },
-  // Measured (BENCHMARKS.md): ΔE 0.26, edge 0.16 px mean / 0.37 px worst, 5,951 segments.
-  quick: { meanDeltaE: 0.34, meanEdgeError: 0.21, maxEdgeError: 0.5, totalSegments: 7500 },
+  // Measured on 25 variants (BENCHMARKS.md): ΔE 0.22, edge 0.16 px mean / 0.42 px worst, 7,163 segments.
+  professional: { meanDeltaE: 0.29, meanEdgeError: 0.21, maxEdgeError: 0.5, totalSegments: 9000 },
+  // Measured on 25 variants (BENCHMARKS.md): ΔE 0.34, edge 0.15 px mean / 0.37 px worst, 7,322 segments.
+  quick: { meanDeltaE: 0.42, meanEdgeError: 0.2, maxEdgeError: 0.5, totalSegments: 9200 },
 }
+
+// Professional reconstructs gradients; every gradient case must stay close
+// to the source (posterized output scores ~0.6-1.1 here).
+const PROFESSIONAL_GRADIENT_MAX_DELTA_E = 0.3
 
 const mean = (rows: BenchmarkRow[], pick: (r: BenchmarkRow) => number) => rows.reduce((s, r) => s + pick(r), 0) / rows.length
 
@@ -41,9 +45,21 @@ async function run(): Promise<void> {
       assertTrue(row.gapsPer10k === 0, `${engine}: ${row.caseId}@${row.variant} has gaps/seams (${row.gapsPer10k.toFixed(1)}/10k)`)
       const legacy = rows.find((r) => r.engine === 'legacy' && r.caseId === row.caseId && r.variant === row.variant)
       if (legacy) {
+        // Quick Trace deliberately posterizes gradients (flat colors for
+        // print/cut); only Professional reconstructs them, so Quick gets a
+        // looser bound on gradient art.
+        const tolerance = engine === 'quick' && row.category === 'gradient' ? 1.2 : 1.05
         assertTrue(
-          row.meanDeltaE <= legacy.meanDeltaE * 1.05,
+          row.meanDeltaE <= legacy.meanDeltaE * tolerance,
           `${engine}: ${row.caseId}@${row.variant} ΔE ${row.meanDeltaE.toFixed(2)} is worse than legacy ${legacy.meanDeltaE.toFixed(2)}`,
+        )
+      }
+    }
+    if (engine === 'professional') {
+      for (const row of mine.filter((r) => r.category === 'gradient')) {
+        assertTrue(
+          row.meanDeltaE <= PROFESSIONAL_GRADIENT_MAX_DELTA_E,
+          `professional: gradient case ${row.caseId}@${row.variant} ΔE ${row.meanDeltaE.toFixed(2)} exceeds ${PROFESSIONAL_GRADIENT_MAX_DELTA_E}`,
         )
       }
     }

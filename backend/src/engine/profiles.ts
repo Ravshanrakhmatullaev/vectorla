@@ -20,6 +20,7 @@ export const PROFESSIONAL_ENGINE_OPTIONS: Partial<TraceEngineOptions> = {
   maxWorkingPixels: 2_000_000,
   maxColors: 64,
   mergeDistance: 0.045,
+  gradients: true,
 }
 
 /**

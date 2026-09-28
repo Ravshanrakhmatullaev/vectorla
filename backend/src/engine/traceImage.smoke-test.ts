@@ -105,6 +105,24 @@ function run(): void {
   }
   console.log(`PASS: planar map -> ${chains.length} chains, all regions closed, open chains keep exact junction endpoints`)
 
+  // 8. Gradients: a smooth linear ramp is reconstructed as one gradient
+  //    fill (when enabled), and flat art never turns into gradients.
+  const ramp = makeImage(160, 120, (x, y) =>
+    x >= 20 && x < 140 && y >= 20 && y < 100
+      ? [Math.round(40 + (x - 20) * 1.6), Math.round(80 + (x - 20) * 0.8), 220, 255]
+      : [255, 255, 255, 255],
+  )
+  const flatRamp = traceImage(ramp)
+  const gradientRamp = traceImage(ramp, { gradients: true })
+  assertEqual(flatRamp.stats.gradientCount, 0, 'gradients are off by default (posterized bands)')
+  assertTrue(flatRamp.stats.pathCount > 3, `posterized ramp is several bands (${flatRamp.stats.pathCount} paths)`)
+  assertEqual(gradientRamp.stats.gradientCount, 1, 'ramp reconstructed as exactly one gradient')
+  assertEqual(gradientRamp.stats.pathCount, 2, 'background + one gradient-filled shape')
+  assertTrue(gradientRamp.svg.includes('<linearGradient') && gradientRamp.svg.includes('fill="url(#g0)"'), 'gradient fill is emitted and referenced')
+  const flatWithGradients = traceImage(disc(96, [200, 30, 40], [255, 255, 255, 255]), { gradients: true })
+  assertEqual(flatWithGradients.stats.gradientCount, 0, 'flat art never becomes a gradient')
+  console.log(`PASS: linear ramp -> 1 gradient (${gradientRamp.svg.length} bytes vs ${flatRamp.svg.length} posterized); flat art unaffected`)
+
   console.log('\nAll tracing engine smoke tests passed.')
 }
 
