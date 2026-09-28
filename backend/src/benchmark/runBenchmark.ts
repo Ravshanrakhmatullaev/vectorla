@@ -3,6 +3,7 @@
  *
  *   npx tsx src/benchmark/runBenchmark.ts [--engines=quick,professional,legacy,engine-default]
  *        [--cases=flat-logo,wordmark] [--out=benchmark-output] [--json=results.json]
+ *        [--compare[=baseline.json]] [--save-baseline]
  *
  * For every corpus case and raster variant: render the ground-truth SVG to a
  * raster, encode it as PNG/JPEG exactly as a customer upload would be, decode
@@ -21,6 +22,7 @@ import ImageTracer from 'imagetracerjs'
 import { decodeImage } from '../providers/imageDecoder'
 import { loadDecoderWasmModules } from '../testSupport/wasmTestFixtures'
 import { encodeTestJpeg, encodeTestPng } from '../testSupport/rasterEncode'
+import { readFileSync } from '../testSupport/node-fs.js'
 
 interface NodeFs {
   writeFileSync(path: string, data: string | Uint8Array): void
@@ -199,11 +201,57 @@ async function main(): Promise<void> {
   console.log(formatTable(rows))
   console.log('')
   console.log(formatSummary(rows))
+  const fs = (await import(fsSpecifier)) as NodeFs
   const jsonPath = args.get('json')
-  if (jsonPath) {
-    const fs = (await import(fsSpecifier)) as NodeFs
-    fs.writeFileSync(jsonPath, JSON.stringify(rows, null, 2))
+  if (jsonPath) fs.writeFileSync(jsonPath, JSON.stringify(rows, null, 2))
+
+  // --compare[=path]: per-variant deltas against a saved run (default: the
+  // committed baseline). --save-baseline: overwrite the committed baseline.
+  if (args.has('compare')) {
+    const baseline = JSON.parse(new TextDecoder().decode(await readFileSync(args.get('compare') || BASELINE_PATH))) as BenchmarkRow[]
+    console.log('')
+    console.log(formatComparison(baseline, rows))
   }
+  if (args.has('save-baseline')) {
+    fs.writeFileSync(BASELINE_PATH, `${JSON.stringify(rows.map(roundRow), null, 1)}\n`)
+    console.log(`\nSaved baseline to ${BASELINE_PATH}`)
+  }
+}
+
+/** Committed reference run (npm run bench -- --save-baseline). Timings are machine-specific and not compared. */
+export const BASELINE_PATH = 'src/benchmark/baseline.json'
+
+function roundRow(row: BenchmarkRow): BenchmarkRow {
+  const out = { ...row } as Record<string, unknown>
+  for (const [key, value] of Object.entries(out)) if (typeof value === 'number') out[key] = Math.round(value * 1000) / 1000
+  return out as unknown as BenchmarkRow
+}
+
+/**
+ * Per-variant comparison: flags any variant whose color error or edge error
+ * got worse by more than 0.02, or whose node count grew by more than 15%.
+ */
+export function formatComparison(baseline: BenchmarkRow[], current: BenchmarkRow[]): string {
+  const key = (r: BenchmarkRow) => `${r.engine}|${r.caseId}|${r.variant}`
+  const before = new Map(baseline.map((r) => [key(r), r]))
+  const lines = ['| Engine | Case | Variant | ΔE×100 | Edge err (px) | Segments | Verdict |', '|---|---|---|---|---|---|---|']
+  let regressions = 0
+  for (const row of current) {
+    const old = before.get(key(row))
+    if (!old) {
+      lines.push(`| ${row.engine} | ${row.caseId} | ${row.variant} | ${fmt(row.meanDeltaE)} (new) | ${fmt(row.boundaryError)} | ${row.segments} | new |`)
+      continue
+    }
+    const worse = row.meanDeltaE - old.meanDeltaE > 0.02 || row.boundaryError - old.boundaryError > 0.02 || row.segments > old.segments * 1.15
+    const better = old.meanDeltaE - row.meanDeltaE > 0.01 || old.boundaryError - row.boundaryError > 0.01 || row.segments < old.segments * 0.9
+    if (worse) regressions++
+    if (!worse && !better) continue
+    lines.push(
+      `| ${row.engine} | ${row.caseId} | ${row.variant} | ${fmt(old.meanDeltaE)} → ${fmt(row.meanDeltaE)} | ${fmt(old.boundaryError)} → ${fmt(row.boundaryError)} | ${old.segments} → ${row.segments} | ${worse ? '**WORSE**' : 'better'} |`,
+    )
+  }
+  lines.push('', `${regressions} regression(s) against the baseline; unchanged variants omitted.`)
+  return lines.join('\n')
 }
 
 const invokedDirectly = processRef.argv[1]?.includes('runBenchmark')
