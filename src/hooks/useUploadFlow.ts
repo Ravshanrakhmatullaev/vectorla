@@ -5,6 +5,10 @@ import { ApiError } from '@/lib/api/client'
 import type { Conversion, ImageAnalysisResult, Job } from '@/lib/api/types'
 
 const POLL_INTERVAL_MS = 1000
+// Give up polling after this long; the backend fails + refunds stuck jobs itself.
+const POLL_TIMEOUT_MS = 10 * 60 * 1000
+// Tolerate this many transient poll errors in a row before showing a failure.
+const MAX_CONSECUTIVE_POLL_ERRORS = 5
 
 /** Which of the task's four required error states a failure maps to. */
 export type UploadFailureKind = 'auth' | 'insufficient-credits' | 'generic'
@@ -122,36 +126,58 @@ export function useUploadFlow() {
     setAnalysis(null)
   }, [])
 
+  // Poll the active job. Only the server's terminal states (completed /
+  // failed) end polling as such; a transient network or server error is
+  // tolerated a few times in a row, and a job that never finishes gives up
+  // after POLL_TIMEOUT_MS (the backend fails and refunds stuck jobs on its
+  // own; this just stops the spinner).
+  const activeJobId = state.status === 'queued' || state.status === 'processing' ? state.jobId : null
   useEffect(() => {
-    if (state.status !== 'queued' && state.status !== 'processing') {
+    if (!activeJobId) {
       pollJobIdRef.current = null
       return
     }
-    const jobId = state.jobId
+    const jobId = activeJobId
     pollJobIdRef.current = jobId
+    const startedAt = Date.now()
+    let consecutiveErrors = 0
+    let inFlight = false
 
     const interval = window.setInterval(() => {
+      if (inFlight) return
+      inFlight = true
       void (async () => {
         try {
           const result = await getJobConversion(jobId)
           if (pollJobIdRef.current !== jobId) return // a newer upload superseded this poll
+          consecutiveErrors = 0
 
           if (result.status === 'completed') {
             setState({ status: 'completed', jobId, conversion: result.conversion })
           } else if (result.status === 'failed') {
             setState({ status: 'failed', stage: 'processing', kind: classifyFailureMessage(result.error), message: result.error ?? 'Conversion failed' })
+          } else if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
+            setState({ status: 'failed', stage: 'processing', kind: 'generic', message: 'The conversion is taking too long. Please try again.' })
           } else {
-            setState({ status: result.status, jobId })
+            setState((previous) =>
+              previous.status === result.status && 'jobId' in previous && previous.jobId === jobId ? previous : { status: result.status, jobId },
+            )
           }
         } catch (error) {
           if (pollJobIdRef.current !== jobId) return
-          setState({ status: 'failed', stage: 'processing', kind: classifyError(error), message: describeError(error) })
+          consecutiveErrors++
+          const kind = classifyError(error)
+          if (kind !== 'generic' || consecutiveErrors >= MAX_CONSECUTIVE_POLL_ERRORS || Date.now() - startedAt > POLL_TIMEOUT_MS) {
+            setState({ status: 'failed', stage: 'processing', kind, message: describeError(error) })
+          }
+        } finally {
+          inFlight = false
         }
       })()
     }, POLL_INTERVAL_MS)
 
     return () => window.clearInterval(interval)
-  }, [state])
+  }, [activeJobId])
 
   return { state, analysis, traceMode, upload, retry, reset, selectTraceMode }
 }
