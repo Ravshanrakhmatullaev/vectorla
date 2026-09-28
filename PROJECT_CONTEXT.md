@@ -287,16 +287,24 @@ See `backend/API.md` and the served OpenAPI document for response contracts.
 - Root `npm run build` runs strict TypeScript project builds and Vite.
 - Root `npm run lint` runs oxlint (it also scans `backend/`).
 - `cd backend && npm run typecheck` runs backend TypeScript without emit.
-- `cd backend && npm test` runs every `*.smoke-test.ts` (25 files) and
-  reports pass/fail. This includes the engine tests and the vector quality
-  gate (~60 s).
-- `cd backend && npm run bench` prints the render-and-diff benchmark.
+- `cd backend && npm test` runs every `*.smoke-test.ts` (27 files) and
+  reports pass/fail. This includes the engine tests, the job-lifecycle and credit
+  concurrency tests (`queueConsumer.smoke-test.ts`), the decompression-bomb
+  guard and the vector quality gate (~90 s).
+- `cd backend && npm run bench` prints the render-and-diff benchmark;
+  `-- --compare` diffs it against the committed `src/benchmark/baseline.json`.
+- `backend/supabase/tests/credit_integrity.test.sql` asserts the ledger,
+  constraints and signup grant on real Postgres (see the CI `database` job).
 - Tests call real handlers/services with fake Cloudflare bindings and
   in-memory repositories; no real Supabase project is required. Concurrency
   and Supabase-specific paths are not exercised.
-- No CI workflow yet (ROADMAP P8).
+- CI: `.github/workflows/ci.yml` (frontend lint/build, backend typecheck +
+  tests + Worker dry-run bundles, Postgres 16 migration tests).
 
 ## Deployment context
+
+See `DEPLOYMENT.md` for the step-by-step runbook (resources, database
+migrations, secrets, staging then production, verification, rollback).
 
 - Frontend target: Cloudflare Pages, build `npm run build`, output `dist`.
 - Backend target: Cloudflare Workers through `backend/wrangler.toml`.

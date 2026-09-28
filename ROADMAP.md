@@ -94,7 +94,10 @@ Legend: ✅ done · 🔜 next · ⏳ planned · 🧑 needs an owner decision, cr
   position) and emit `<linearGradient>`/`<radialGradient>` fills instead of
   bands; merge the bands back into one region. Target: gradient-mark ΔE
   0.59 → < 0.25, and far fewer paths on gradient art.
-- 🔜 **Q4. Lossy-source quality**: chroma-aware cleanup for 4:2:0 JPEG, node
+- ✅ **Q4. Lossy-source quality**: done. Luma-guided chroma restoration,
+  blend-sliver dissolve, and edge labeling next to thin strokes. JPEG flat-logo
+  716 → 77 segments; the JPEG wordmark's edge error 0.42 → 0.19 px. Follow-up: a heavy
+  low-quality JPEG and phone-photo corpus. Original plan: chroma-aware cleanup for 4:2:0 JPEG, node
   reduction on noisy boundaries (curvature-aware simplification). Target: JPEG
   variants within 1.3× of PNG node counts and < 0.3 px edge error.
 - ⏳ **Q5. Pinch points and pixel art**: resolve diagonal corner-to-corner
@@ -143,10 +146,13 @@ Legend: ✅ done · 🔜 next · ⏳ planned · 🧑 needs an owner decision, cr
 - ✅ **P5. Free-credit grant on signup**: 10 credits via `handle_new_user`, with a backfill
   for existing users. 🧑 A recurring monthly grant for free users is a pricing
   decision and is not implemented.
-- ⏳ **P6.** ✅ CSP `blob:` for previews and HSTS are done. Remaining: drop the duplicate-filename unique index;
-  `[env.staging]` in wrangler; constant-time HMAC compare; HSTS.
+- ⏳ **P6.** Done: CSP `blob:` for previews, HSTS, and `[env.staging]` in wrangler
+  (separate Worker, bucket and queues) with a `DEPLOYMENT.md` runbook. Remaining: drop
+  the duplicate-filename unique index; constant-time HMAC compare.
 - ⏳ **P7.** Rate limiting (Workers Rate Limiting or Turnstile) and a stricter dev bypass.
-- ⏳ **P8.** CI (GitHub Actions: typecheck, lint, `npm test` incl. quality gate).
+- ✅ **P8.** CI (`.github/workflows/ci.yml`): lint and build, typecheck, `npm test`
+  including the quality gate, Worker dry-run bundles, and a Postgres 16 job running
+  schema + migration + credit-integrity assertions + a concurrency check.
 - ⏳ **P9.** Observability: Workers observability and error tracking; a
   health check that probes dependencies.
 - 🧑 **P10.** Supabase project `rvrpuapbeglqmcajsdgm` is **paused**. Resume it
