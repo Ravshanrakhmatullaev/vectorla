@@ -229,6 +229,26 @@ async function run() {
   )
   console.log('PASS: oversized file rejected for free plan')
 
+  // 6b. Decompression bomb: a tiny file whose PNG header declares 30000x30000.
+  const bomb = pngBytes(64)
+  const bombView = new DataView(bomb)
+  new Uint8Array(bomb).set([0x49, 0x48, 0x44, 0x52], 12) // "IHDR"
+  bombView.setUint32(16, 30000)
+  bombView.setUint32(20, 30000)
+  await assertRejects(
+    () =>
+      service.createUpload({
+        userId: 'user-2',
+        plan: 'free',
+        file: bomb,
+        originalFileName: 'bomb.png',
+        mimeType: 'image/png',
+      }),
+    /megapixels/,
+    'decompression bomb',
+  )
+  console.log('PASS: decompression-bomb header rejected at upload time')
+
   // 7. Larger plan allows the same size free rejects
   const uploadBig = await service.createUpload({
     userId: 'user-3',

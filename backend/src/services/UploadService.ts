@@ -15,6 +15,7 @@ import {
   validateFileSignature,
   getCanonicalExtension,
 } from './validateUpload'
+import { assertDimensionsWithinLimits } from '../providers/imageDimensions'
 
 export interface CreateUploadInput {
   // Derived from the authenticated session by routes/uploads.ts (see
@@ -48,6 +49,7 @@ export class UploadService {
     validateNotEmpty(input.file.byteLength)
     validateFileSize(input.file.byteLength, input.plan)
     validateFileSignature(input.file, input.mimeType)
+    assertDimensionsWithinLimits(input.file, input.mimeType)
 
     // Fast path: avoids a wasted R2 write in the common (non-racing) case.
     // The real guarantee is repository.create()'s atomic uniqueness check

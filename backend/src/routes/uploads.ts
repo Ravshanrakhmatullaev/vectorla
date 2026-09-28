@@ -6,6 +6,7 @@ import { createProfileService } from '../services/ProfileService'
 import { requireAuth } from '../middleware/requireAuth'
 import { jsonSuccess, jsonError, mapErrorToResponse } from '../api/response'
 import { UnauthorizedError } from '../errors'
+import { MAX_UPLOAD_BODY_BYTES } from '../config'
 
 /** POST /api/v1/uploads is implemented. GET/DELETE /api/v1/uploads/:id are not yet (see UploadService). */
 export async function handleUploadsRoute(request: Request, env: Env, requestId: string): Promise<Response> {
@@ -19,6 +20,13 @@ export async function handleUploadsRoute(request: Request, env: Env, requestId: 
   } catch (error) {
     if (error instanceof UnauthorizedError) return mapErrorToResponse(error, requestId)
     throw error
+  }
+
+  // Reject oversized bodies before buffering them: formData() reads the whole
+  // body into memory. The per-plan limit is still enforced precisely later.
+  const declaredLength = Number(request.headers.get('Content-Length') ?? '0')
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_UPLOAD_BODY_BYTES) {
+    return jsonError('VALIDATION_ERROR', `Upload body exceeds ${MAX_UPLOAD_BODY_BYTES} bytes`, 413, requestId)
   }
 
   let formData: FormData

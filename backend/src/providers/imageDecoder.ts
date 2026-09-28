@@ -1,4 +1,5 @@
-import { UnsupportedMediaTypeError } from '../errors'
+import { PayloadTooLargeError, UnsupportedMediaTypeError } from '../errors'
+import { assertDecodableDimensions } from './imageDimensions'
 import { init as initPngDecoder, default as decodePng } from '@jsquash/png/decode.js'
 import { init as initJpegDecoder, default as decodeJpeg } from '@jsquash/jpeg/decode.js'
 import { init as initWebpDecoder, default as decodeWebp } from '@jsquash/webp/decode.js'
@@ -17,6 +18,17 @@ export interface RasterDecoderWasm {
  * before a provider is even chosen — see providers/ProviderSelector.ts).
  */
 export async function decodeImage(mimeType: string, fileBytes: ArrayBuffer, wasm: RasterDecoderWasm): Promise<ImageData> {
+  // Header check before any allocation: every decode (upload-time analysis
+  // and queue processing) passes through here, so no path can be bombed.
+  if (mimeType === 'image/png' || mimeType === 'image/jpeg' || mimeType === 'image/webp') {
+    try {
+      assertDecodableDimensions(fileBytes, mimeType)
+    } catch (error) {
+      if (error instanceof PayloadTooLargeError) throw error
+      const reason = error instanceof Error ? error.message : String(error)
+      throw new Error(`Failed to decode ${mimeType} image: ${reason}`)
+    }
+  }
   try {
     switch (mimeType) {
       case 'image/png':

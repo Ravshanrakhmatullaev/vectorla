@@ -5,6 +5,19 @@ import type { PlanLimitsByPlan, ExportFormat } from '../types'
 // SVG output (see providers/PlaceholderProvider.ts) is ever produced by this system.
 export const ALLOWED_UPLOAD_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const
 
+// Decompression-bomb limits, enforced from the file header before any decode
+// (see providers/imageDimensions.ts). 40 MP of RGBA is 160 MB — the decoded
+// buffer alone would exceed a Worker's 128 MB, so the real ceiling is set by
+// memory, not taste: 24 MP (96 MB RGBA) leaves room for the tracing engine,
+// which area-downsamples everything to <= 2 MP immediately after decode.
+export const MAX_IMAGE_PIXELS = 24_000_000
+export const MAX_IMAGE_DIMENSION = 12_000
+
+// Hard ceiling on an upload request body, checked from Content-Length before
+// the body is buffered. Plan limits above this can't be honored by a Worker
+// holding the file in memory (see ROADMAP P6 on plan size limits).
+export const MAX_UPLOAD_BODY_BYTES = 30 * 1024 * 1024
+
 /** Content-Type to send when streaming a conversion's file — see routes/download.ts. */
 export const EXPORT_FORMAT_MIME_TYPES: Record<ExportFormat, string> = {
   svg: 'image/svg+xml',
