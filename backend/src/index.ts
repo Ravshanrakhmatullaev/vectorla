@@ -5,7 +5,7 @@ import type { ConversionQueueMessage } from './integrations/queue'
 import { createJobService } from './services/JobService'
 import { createConversionService } from './services/ConversionService'
 import { NotFoundError } from './errors'
-import { CONVERSION_DLQ_NAME, handleConversionMessages, handleDeadLetters, sweepStaleJobs } from './queueConsumer'
+import { isDeadLetterQueue, handleConversionMessages, handleDeadLetters, sweepStaleJobs } from './queueConsumer'
 import { mapErrorToResponse } from './api/response'
 import { handlePreflight, applyCors } from './api/cors'
 import { logRequest } from './api/logging'
@@ -130,7 +130,7 @@ export default {
     const env = await withWasmModules(rawEnv)
     assertRequiredBackendSecrets(env)
     const conversionService = createConversionService(env)
-    if (batch.queue === CONVERSION_DLQ_NAME) {
+    if (isDeadLetterQueue(batch.queue)) {
       await handleDeadLetters(batch.messages, conversionService)
       return
     }

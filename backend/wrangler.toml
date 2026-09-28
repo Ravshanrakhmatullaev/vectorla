@@ -46,7 +46,7 @@ cpu_ms = 60000
 
 [vars]
 # Safe deployment default. `npm run dev` overrides this value explicitly;
-# staging should be deployed with `--var ENVIRONMENT:staging`.
+# staging has its own environment block at the end of this file.
 ENVIRONMENT = "production"
 # Default vectorization backend for createVectorizationProvider (see
 # src/providers/ProviderFactory.ts). Per-job dispatch (ConversionService) uses
@@ -67,3 +67,41 @@ VECTORIZATION_PROVIDER = "vectorla"
 #   wrangler secret put SUPABASE_SERVICE_ROLE_KEY
 #   wrangler secret put DOWNLOAD_URL_SECRET
 # For local `wrangler dev`, copy .dev.vars.example to .dev.vars instead.
+
+# --- Staging -----------------------------------------------------------------
+# Deploy with: npx wrangler deploy --env staging
+# A separate Worker with its own bucket, queues and secrets, so staging can
+# never touch production data. Create its resources once with:
+#   wrangler r2 bucket create vectorla-uploads-staging
+#   wrangler queues create vectorla-conversions-staging
+#   wrangler queues create vectorla-conversions-staging-dlq
+#   wrangler secret put SUPABASE_URL --env staging   (and the other secrets)
+[env.staging]
+name = "vectorla-api-staging"
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+VECTORIZATION_PROVIDER = "vectorla"
+
+[[env.staging.r2_buckets]]
+binding = "UPLOADS_BUCKET"
+bucket_name = "vectorla-uploads-staging"
+
+[[env.staging.queues.producers]]
+queue = "vectorla-conversions-staging"
+binding = "CONVERSION_QUEUE"
+
+[[env.staging.queues.consumers]]
+queue = "vectorla-conversions-staging"
+max_batch_size = 1
+max_batch_timeout = 5
+max_retries = 6
+dead_letter_queue = "vectorla-conversions-staging-dlq"
+
+[[env.staging.queues.consumers]]
+queue = "vectorla-conversions-staging-dlq"
+max_batch_size = 10
+max_batch_timeout = 30
+
+[env.staging.triggers]
+crons = ["*/15 * * * *"]

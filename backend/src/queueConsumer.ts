@@ -13,8 +13,10 @@ export interface ConversionMessage {
   retry(options?: { delaySeconds?: number }): void
 }
 
-/** Name of the dead-letter queue (wrangler.toml). */
-export const CONVERSION_DLQ_NAME = 'vectorla-conversions-dlq'
+/** Dead-letter queues are named "<queue>-dlq" in every environment (wrangler.toml). */
+export function isDeadLetterQueue(queueName: string): boolean {
+  return queueName.endsWith('-dlq')
+}
 
 const RETRY_BASE_DELAY_SECONDS = 15
 

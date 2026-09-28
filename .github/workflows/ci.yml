@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      # All smoke tests, including the vector-quality gate (render-and-diff benchmark).
+      - run: npm test
+      - name: Worker bundles (production and staging)
+        run: |
+          npx wrangler deploy --dry-run --outdir /tmp/wrangler-prod
+          npx wrangler deploy --dry-run --env staging --outdir /tmp/wrangler-staging
+
+  database:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    defaults:
+      run:
+        working-directory: backend/supabase
+    steps:
+      - uses: actions/checkout@v4
+      - name: Schema, migrations (applied twice) and credit-integrity assertions
+        run: >-
+          psql -v ON_ERROR_STOP=1
+          -f tests/supabase_stubs.sql
+          -f schema.sql
+          -f migrations/0002_credit_integrity.sql
+          -f migrations/0002_credit_integrity.sql
+          -f tests/credit_integrity.test.sql
+      - name: Concurrent debits never overdraw
+        run: |
+          U=00000000-0000-0000-0000-000000000002
+          psql -v ON_ERROR_STOP=1 -c "update credit_balances set balance = 10 where user_id = '$U'"
+          for i in $(seq 1 20); do
+            psql -q -c "select 1 from apply_credit_entry('$U', -1, 'debit', 'race', null)" >/dev/null 2>&1 &
+          done
+          wait
+          balance=$(psql -At -c "select balance from credit_balances where user_id = '$U'")
+          echo "balance after 20 concurrent debits of 1 against 10: $balance"
+          test "$balance" = "0"

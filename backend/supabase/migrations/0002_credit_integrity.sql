@@ -170,5 +170,12 @@ end;
 $$;
 
 -- Backfill: every existing profile receives the signup grant once.
-select public.apply_credit_entry(p.id, 10, 'credit', 'Free signup credits', null, 'signup')
-from public.profiles p;
+do $$
+declare
+  v_id uuid;
+begin
+  for v_id in select p.id from public.profiles p loop
+    perform public.apply_credit_entry(v_id, 10, 'credit', 'Free signup credits', null, 'signup');
+  end loop;
+end;
+$$;
