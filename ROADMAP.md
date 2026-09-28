@@ -85,7 +85,11 @@ Legend: ✅ done · 🔜 next · ⏳ planned · 🧑 needs an owner decision, cr
 - ✅ **Q2b. Production integration**: every image type routes to the engine,
   Quick and Professional use engine profiles, ImageTracer is the automatic
   fallback, and the harmful preprocessing stages are removed.
-- 🔜 **Q3. Gradient reconstruction** (Professional differentiator). Detect
+- ✅ **Q3. Gradient reconstruction** (Professional differentiator). Done:
+  linear and radial gradients, gradient ΔE 0.58–1.06 → 0.04–0.23 (BENCHMARKS.md).
+  Follow-ups: off-center/focal radial gradients, leftover rim slivers on
+  radial art, gradients under transparency.
+  Original plan: Detect
   regions whose color varies smoothly (linear or radial fit of color vs.
   position) and emit `<linearGradient>`/`<radialGradient>` fills instead of
   bands; merge the bands back into one region. Target: gradient-mark ΔE
@@ -127,18 +131,19 @@ Legend: ✅ done · 🔜 next · ⏳ planned · 🧑 needs an owner decision, cr
 
 ### Tier 2: Production safety (launch blockers)
 
-- 🔜 **P1. Decompression-bomb guard**: parse PNG IHDR, JPEG SOF and WebP
+- ✅ **P1. Decompression-bomb guard**: parse PNG IHDR, JPEG SOF and WebP
   VP8/VP8L/VP8X dimensions before decode; reject anything over the megapixel limit.
-- 🔜 **P2. Job lease / stuck-job recovery**: `processing_started_at`, takeover
+- ✅ **P2. Job lease / stuck-job recovery** (also a DLQ consumer and a 15-min sweeper): `processing_started_at`, takeover
   after N minutes, ack only on terminal state; frontend polling timeout.
-- 🔜 **P3. Queue configuration**: `max_batch_size = 1`, explicit `cpu_ms`,
+- ✅ **P3. Queue configuration**: `max_batch_size = 1`, explicit `cpu_ms`,
   DLQ, `max_retries`, retry delay.
-- 🔜 **P4. Credit integrity**: atomic reserve/debit/refund in Postgres
+- ✅ **P4. Credit integrity** (`supabase/migrations/0002_credit_integrity.sql`, verified on Postgres 16): atomic reserve/debit/refund in Postgres
   functions, `CHECK (balance >= 0)`, unique debit/refund per job, partial
   unique index for one active job per upload, and a refund on terminal failure.
-- 🔜 **P5. Free-credit grant on signup** in `handle_new_user`, plus a monthly
-  grant schedule. 🧑 Confirm free-tier amount (config says 10/month).
-- ⏳ **P6.** CSP `blob:` for previews; drop the duplicate-filename unique index;
+- ✅ **P5. Free-credit grant on signup**: 10 credits via `handle_new_user`, with a backfill
+  for existing users. 🧑 A recurring monthly grant for free users is a pricing
+  decision and is not implemented.
+- ⏳ **P6.** ✅ CSP `blob:` for previews and HSTS are done. Remaining: drop the duplicate-filename unique index;
   `[env.staging]` in wrangler; constant-time HMAC compare; HSTS.
 - ⏳ **P7.** Rate limiting (Workers Rate Limiting or Turnstile) and a stricter dev bypass.
 - ⏳ **P8.** CI (GitHub Actions: typecheck, lint, `npm test` incl. quality gate).

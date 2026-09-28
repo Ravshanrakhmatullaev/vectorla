@@ -122,7 +122,10 @@ multi-format export, batch workflows, and launch operations remain incomplete.
   polygon-level corner restoration and least-squares junction refinement →
   stacked (default, seamless) or cutout SVG with compact path data.
 - Quick and Professional Trace are engine profiles
-  (`engine/profiles.ts`: 1.5 MP / 32 colors vs 2 MP / 64 colors). Legacy
+  (`engine/profiles.ts`: 1.5 MP / 32 colors / flat fills vs 2 MP / 64 colors /
+  gradient reconstruction). Professional merges posterized bands back into
+  regions filled with fitted `<linearGradient>`/`<radialGradient>`
+  (`engine/gradients.ts`). Legacy
   preset names sent explicitly as `Job.preset` adjust engine options.
 - `ImageTracer` (`PlaceholderProvider`) is the automatic fallback if the
   engine throws; `PotraceProvider` is still available; Vision/OpenAI remain stubs.
@@ -190,8 +193,8 @@ Open quality work is tracked in `ROADMAP.md` (Q3–Q15): gradient
 reconstruction, JPEG-source node counts, diagonal pinch points and pixel art,
 tangent continuity at junctions, 1× sub-pixel refinement, stroke output,
 designer-grade SVG structure, real-image corpus, and vision assistance.
-Professional currently scores about the same as Quick on the corpus; it needs
-real differentiators (Q3 gradients first) to justify its 2× credit cost.
+Professional's differentiator is gradient reconstruction (Q3). On flat art the
+two modes score about the same.
 
 ### Export and print-ready model
 

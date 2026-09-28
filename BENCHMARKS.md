@@ -10,15 +10,17 @@ Structural proxies (path counts, "curve ratio") cannot tell whether a trace
 *looks right*. The benchmark therefore starts from vectors whose correct answer
 is known:
 
-1. **Ground truth.** `backend/src/benchmark/corpus.ts` holds 11 hand-authored
+1. **Ground truth.** `backend/src/benchmark/corpus.ts` holds 13 hand-authored
    SVG designs covering the customer categories: flat logo, wordmark (real
    font text, including small 12 px subtitle text at the low-res variant), line
    icon, die-cut sticker with transparency, fine-detail badge (thin rings,
    24 small dots), multi-color wedges (3-color junctions), cartoon mascot with
-   outlines, gradient mark, QR code, blueprint line art, and a signature.
+   outlines, three gradient designs (2-stop linear mark, 3-stop linear banner
+   with flat shapes on top, radial glow), QR code, blueprint line art, and a
+   signature.
 2. **Customer-like rasters.** Each design is rendered anti-aliased (resvg) at
    1–3 source sizes (64 px to 768 px), encoded as PNG or JPEG (q75) exactly
-   like an upload, and decoded through the production decoder: 22 variants in all.
+   like an upload, and decoded through the production decoder: 25 variants in all.
 3. **Trace** with each engine.
 4. **Render the traced SVG back at 4× the source size** (capped at 2400 px)
    and compare it with the ground truth rendered at the same 4× size. Because
@@ -48,31 +50,38 @@ npx tsx src/benchmark/qualityGate.smoke-test.ts  # regression gate (also part of
 
 `--out` writes each source raster, traced SVG and 4× render for visual review.
 
-## Current results (2026-09-26)
+## Current results (2026-09-28)
 
 Engines:
 
-- **professional**: Vectorla engine, Professional profile (2 MP working size, 64 colors).
+- **professional**: Vectorla engine, Professional profile (2 MP working size, 64 colors, gradient reconstruction).
 - **quick**: Vectorla engine, Quick profile (1.5 MP working size, 32 colors).
 - **legacy**: the pre-engine production path (image analysis → named preset →
   ImageTracer → regex SVG cleanup). It is kept as the fallback provider.
 
-### Summary (22 variants)
+### Summary (25 variants)
 
 | Engine | Mean ΔE×100 | Mean bad px % | Mean edge err (px) | Mean gaps/10k | Total segments | Total KB | Total ms |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| **professional** | **0.26** | **0.68** | **0.17** | **0.0** | 6,895 | 137.6 | 11,194 |
-| **quick** | **0.26** | **0.66** | **0.16** | **0.0** | 5,951 | 122.5 | 9,962 |
-| legacy (ImageTracer) | 0.93 | 1.69 | 0.41 | 24.0 | 41,234 | 1,252.0 | 4,931 |
-| legacy Professional pipeline (removed) | 4.37 | 13.47 | 5.95 | n/a¹ | 51,424 | 1,644.0 | 7,487 |
+| **professional** | **0.22** | **0.62** | **0.16** | **0.0** | 7,163 | 145.0 | 22,325 |
+| **quick** | **0.34** | **0.61** | **0.15** | **0.0** | 7,322 | 150.1 | 17,988 |
+| legacy (ImageTracer) | 0.95 | 1.59 | 0.40 | 22.7 | 44,035 | 1,320.4 | 8,503 |
+| legacy Professional pipeline (removed, 22-variant corpus) | 4.37 | 13.47 | 5.95 | n/a¹ | 51,424 | 1,644.0 | 7,487 |
 
 ¹ Measured before the gap metric was restricted to interior pixels; its visual
 failure was gross edge displacement (up to 23 px) caused by whole-image
 quantization and auto-levels running before tracing.
 
-Compared with the legacy path, the engine delivers **3.6× lower color error, 2.5× lower edge error,
-zero gaps/seams, 6× fewer nodes, and 9–10× smaller files**. It is never worse
-than legacy on any single variant; the quality gate enforces this.
+Compared with the legacy path, Professional delivers **4.3× lower color error, 2.5× lower
+edge error, zero gaps/seams, 6× fewer nodes and 9× smaller files**. Neither
+mode is worse than legacy on any flat-art variant; the quality gate enforces
+this. On gradients Quick posterizes by design and is only required to stay within 1.2×
+of legacy.
+
+**Gradients (Professional only).** Posterized bands are merged back into
+single regions filled with fitted `<linearGradient>` / `<radialGradient>`
+definitions. This improves gradient-mark 0.58 → 0.06, gradient-banner 1.06 → 0.15
+(JPEG 1.00 → 0.23), and radial-glow 0.76 → 0.04, with no change on any flat-art case.
 
 ### Per variant
 
@@ -96,7 +105,10 @@ than legacy on any single variant; the quality gate enforces this.
 | mascot | 200 | 0.44 / 0.36 / 204 / 5.1 | 0.44 / 0.35 / 216 / 5.4 | 0.87 / 0.34 / 60.4 / 576 / 19.3 |
 | mascot | 600 | 0.11 / 0.18 / 226 / 5.8 | 0.10 / 0.18 / 193 / 5.1 | 0.41 / 0.30 / 15.0 / 1472 / 52.0 |
 | mascot | 600jpg | 0.26 / 0.19 / 682 / 15.9 | 0.26 / 0.19 / 681 / 15.8 | 0.56 / 0.38 / 59.6 / 7923 / 218.6 |
-| gradient-mark | 256 | 0.59 / 0.05 / 131 / 2.8 | 0.58 / 0.04 / 133 / 2.6 | 0.74 / 0.41 / 16.5 / 682 / 15.4 |
+| gradient-mark | 256 | 0.06 / 0.13 / 29 / 1.0 | 0.58 / 0.04 / 133 / 2.6 | 0.74 / 0.41 / 16.5 / 682 / 15.4 |
+| gradient-banner | 384 | 0.15 / 0.08 / 105 / 2.5 | 1.06 / 0.08 / 341 / 6.3 | 1.27 / 0.39 / 4.5 / 530 / 11.6 |
+| gradient-banner | 384jpg | 0.23 / 0.07 / 231 / 5.3 | 1.00 / 0.08 / 706 / 13.8 | 1.35 / 0.39 / 26.5 / 1026 / 31.2 |
+| radial-glow | 256 | 0.04 / 0.10 / 34 / 1.4 | 0.76 / 0.13 / 324 / 7.5 | 0.69 / 0.38 / 9.3 / 1245 / 25.6 |
 | qr-like | 256 | 1.11 / 0.15 / 535 / 5.2 | 1.11 / 0.15 / 535 / 5.2 | 2.43 / 0.27 / 0.0 / 1599 / 35.8 |
 | blueprint | 512 | 0.19 / 0.16 / 45 / 1.2 | 0.19 / 0.16 / 45 / 1.2 | 0.77 / 0.39 / 0.0 / 180 / 3.1 |
 | signature | 384 | 0.07 / 0.15 / 65 / 1.8 | 0.07 / 0.15 / 65 / 1.8 | 0.33 / 0.56 / 51.3 / 1318 / 33.8 |
@@ -120,7 +132,7 @@ Vectorla stands on this benchmark:
 | Smooth curves with few nodes | ✅ Met | Potrace-grade fitting + curve optimization; 6× fewer segments than legacy. A 33 px-radius circle is 3 cubics. |
 | Small text and hairlines preserved | ✅ Met in corpus | Detail-color pass recovers 12 px subtitle text in its exact color `#2563eb`; the first engine version dropped it. |
 | Clean output from JPEG sources | ⚠️ Partial | Artifact-aware denoise and speckle removal work. JPEG variants still carry 2–3× the nodes of PNG and about 2× the edge error. |
-| Gradients reproduced as gradients | ❌ Not yet | Gradients are posterized into flat bands (gradient-mark ΔE 0.59, now the second-worst case). |
+| Gradients reproduced as gradients | ✅ Met (Professional) | Linear and radial gradients are reconstructed as SVG gradients: ΔE 0.04–0.23 vs 0.58–1.06 posterized. Quick keeps flat bands for print and cut work. Multi-center, conic and mesh-like shading are not modeled. |
 | Corner-to-corner touching shapes (QR, pixel art, checkerboards) | ⚠️ Partial | Corners are sharp, but diagonal "pinch" points still produce slight tilts near them (QR ΔE 1.11). |
 | Tangent-continuous curves through 3-color junctions | ⚠️ Partial | Junction positions are least-squares refined; tangents are not yet matched across junctions. |
 | Photos / continuous tone | ⚠️ Posterized only | Bounded and clean, but not a photo-realistic vectorization. |
@@ -134,4 +146,5 @@ Vectorla stands on this benchmark:
 | 2026-09-26 | Baseline, legacy Professional pipeline | 4.37 | 5.95 | yes |
 | 2026-09-26 | Vectorla engine v1 (shared boundaries + Potrace-grade fitting) | 0.42 | 0.22 | 0 |
 | 2026-09-26 | + detail colors, sRGB blend model, JPEG cleanup | 0.33 | 0.18 | 0 |
-| 2026-09-26 | + corner restoration, junction refinement, coverage-correct labeling | **0.26** | **0.16–0.17** | 0 |
+| 2026-09-26 | + corner restoration, junction refinement, coverage-correct labeling | 0.26 | 0.16–0.17 | 0 |
+| 2026-09-28 | + gradient corpus cases (25 variants); Professional gradient reconstruction | **0.22** (Pro) / 0.34 (Quick) | **0.15–0.16** | 0 |
