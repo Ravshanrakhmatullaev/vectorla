@@ -1,4 +1,4 @@
-import type { CreditBalance, CreditTransaction, CreditTransactionType, UserPlan } from '../types'
+import type { CreditBalance, CreditTransaction, UserPlan } from '../types'
 import type { Env } from '../env'
 import { isLocalDevelopment } from '../env'
 import { createCreditsRepository } from '../repositories/createCreditsRepository'
@@ -9,10 +9,7 @@ import {
   CREDIT_COST_ADDITIONAL_EXPORT_FORMAT,
   CREDIT_COST_PRINT_READY_MODE,
 } from '../config'
-import { InsufficientCreditsError, ConflictError } from '../errors'
-
-/** Bounded optimistic-lock retries for applyTransaction — see setBalance's ConflictError. */
-const MAX_BALANCE_UPDATE_ATTEMPTS = 5
+import { InsufficientCreditsError } from '../errors'
 
 /**
  * Computes the credit cost of a conversion: a base cost, plus
@@ -58,10 +55,10 @@ export class CreditsService {
   }
 
   /**
-   * Throws InsufficientCreditsError if the user can't cover requiredCredits —
-   * callers (e.g. ConversionService) let this fail the job. In local
-   * development (autoGrantInDevelopment), a short balance is topped up
-   * automatically instead of failing — see the constructor's doc comment.
+   * Cheap pre-check: throws InsufficientCreditsError if the user can't cover
+   * requiredCredits right now. Not a reservation — chargeJob is the atomic
+   * operation. In local development (autoGrantInDevelopment), a short
+   * balance is topped up automatically instead.
    */
   async ensureEnoughCredits(userId: string, requiredCredits: number): Promise<void> {
     const { balance } = await this.getBalance(userId)
@@ -75,76 +72,48 @@ export class CreditsService {
     )
   }
 
-  async debitCredits(userId: string, amount: number, reason: string, jobId: string | null = null): Promise<CreditTransaction> {
-    return this.applyTransaction(userId, -amount, amount, 'debit', reason, jobId)
+  /**
+   * Charges a job exactly once, atomically (the balance can never go
+   * negative, and a redelivered/retried job is never charged twice).
+   * Returns false if the job had already been charged.
+   */
+  async chargeJob(userId: string, jobId: string, amount: number, reason: string): Promise<boolean> {
+    try {
+      const result = await this.repository.applyEntry({ userId, delta: -amount, type: 'debit', reason, jobId })
+      return !result.duplicate
+    } catch (error) {
+      if (!(error instanceof InsufficientCreditsError) || !this.autoGrantInDevelopment) throw error
+      await this.ensureEnoughCredits(userId, amount)
+      const result = await this.repository.applyEntry({ userId, delta: -amount, type: 'debit', reason, jobId })
+      return !result.duplicate
+    }
   }
 
-  async credit(userId: string, amount: number, reason: string): Promise<CreditTransaction> {
-    return this.applyTransaction(userId, amount, amount, 'credit', reason, null)
+  async debitCredits(userId: string, amount: number, reason: string, jobId: string | null = null): Promise<CreditTransaction> {
+    return (await this.repository.applyEntry({ userId, delta: -amount, type: 'debit', reason, jobId })).transaction
+  }
+
+  async credit(userId: string, amount: number, reason: string, grantKey: string | null = null): Promise<CreditTransaction> {
+    return (await this.repository.applyEntry({ userId, delta: amount, type: 'credit', reason, jobId: null, grantKey })).transaction
   }
 
   /**
-   * Phase 26: refunds a specific job's debit — used when a caller supersedes
-   * an already-completed (and already-billed) job with a new one for the
-   * same upload (see JobService.createJob's `supersedesJobId`), so switching
-   * Quick Trace <-> Professional Trace after a result already exists never
-   * stacks charges on top of each other. Idempotent: a no-op (returns null)
-   * if the job was never actually debited, or was already refunded —
-   * safe to call more than once for the same jobId.
+   * Refunds a job's debit — when a completed job is superseded (see
+   * JobService.createJob's `supersedesJobId`) or a job fails terminally.
+   * Atomic and idempotent: null if the job was never charged or was
+   * already refunded, so concurrent callers can never refund twice.
    */
   async refundJobDebit(userId: string, jobId: string, reason: string): Promise<CreditTransaction | null> {
-    const transactions = await this.repository.findTransactionsByUserId(userId)
-    const debit = transactions.find((t) => t.jobId === jobId && t.type === 'debit')
-    if (!debit) return null
-    const alreadyRefunded = transactions.some((t) => t.jobId === jobId && t.type === 'refund')
-    if (alreadyRefunded) return null
-    return this.applyTransaction(userId, debit.amount, debit.amount, 'refund', reason, jobId)
-  }
-
-  /** Grants PLAN_LIMITS[plan].monthlyCredits — called on billing-cycle renewal (see config/index.ts). */
-  async grantMonthlyCredits(userId: string, plan: UserPlan): Promise<CreditTransaction> {
-    const amount = PLAN_LIMITS[plan].monthlyCredits
-    return this.applyTransaction(userId, amount, amount, 'credit', `Monthly credit grant for plan "${plan}"`, null)
+    return this.repository.refundJob(userId, jobId, reason)
   }
 
   /**
-   * Read-modify-write on the balance, guarded by optimistic locking
-   * (CreditsRepository.setBalance) so two concurrent debits/credits for the
-   * same user can't both read the same starting balance and silently lose
-   * one update. Retries a bounded number of times on conflict before giving
-   * up — real contention on one user's balance is expected to be rare (at
-   * most one in-flight conversion per job today).
+   * Grants PLAN_LIMITS[plan].monthlyCredits. With a grantKey (e.g.
+   * "monthly:2026-09") the grant is applied at most once per key.
    */
-  private async applyTransaction(
-    userId: string,
-    balanceDelta: number,
-    transactionAmount: number,
-    type: CreditTransactionType,
-    reason: string,
-    jobId: string | null,
-  ): Promise<CreditTransaction> {
-    let lastConflict: ConflictError | undefined
-    for (let attempt = 0; attempt < MAX_BALANCE_UPDATE_ATTEMPTS; attempt++) {
-      const previous = await this.repository.getBalance(userId)
-      const currentBalance = previous?.balance ?? 0
-      try {
-        await this.repository.setBalance(userId, currentBalance + balanceDelta, previous)
-        const transaction: CreditTransaction = {
-          id: crypto.randomUUID(),
-          userId,
-          amount: transactionAmount,
-          type,
-          reason,
-          jobId,
-          createdAt: new Date().toISOString(),
-        }
-        return await this.repository.createTransaction(transaction)
-      } catch (error) {
-        if (!(error instanceof ConflictError)) throw error
-        lastConflict = error
-      }
-    }
-    throw lastConflict
+  async grantMonthlyCredits(userId: string, plan: UserPlan, grantKey: string | null = null): Promise<CreditTransaction> {
+    const amount = PLAN_LIMITS[plan].monthlyCredits
+    return this.credit(userId, amount, `Monthly credit grant for plan "${plan}"`, grantKey)
   }
 }
 

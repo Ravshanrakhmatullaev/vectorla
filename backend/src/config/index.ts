@@ -18,6 +18,24 @@ export const MAX_IMAGE_DIMENSION = 12_000
 // holding the file in memory (see ROADMAP P6 on plan size limits).
 export const MAX_UPLOAD_BODY_BYTES = 30 * 1024 * 1024
 
+// --- Job processing (see ConversionService.processJob / index.ts queue()) ---
+// A 'processing' job belongs to the delivery that claimed it for this long;
+// a later delivery may take it over once the lease expires (Worker crashed,
+// hit its CPU limit, or was evicted mid-job). Must exceed the worst-case
+// processing time (tracing is seconds; cpu_ms is 60 s in wrangler.toml).
+export const JOB_LEASE_MS = 5 * 60 * 1000
+// Transient failures are retried; after this many attempts a job fails
+// terminally and its credits are refunded.
+export const MAX_JOB_ATTEMPTS = 3
+// Scheduled sweeper: jobs stuck this long are failed and refunded, as a
+// backstop for lost queue messages.
+export const STALE_PROCESSING_JOB_MS = 20 * 60 * 1000
+export const STALE_QUEUED_JOB_MS = 60 * 60 * 1000
+
+// Free credits granted once at signup (Postgres handle_new_user trigger,
+// supabase/migrations/0002_credit_integrity.sql) — keep the two in sync.
+export const FREE_SIGNUP_CREDITS = 10
+
 /** Content-Type to send when streaming a conversion's file — see routes/download.ts. */
 export const EXPORT_FORMAT_MIME_TYPES: Record<ExportFormat, string> = {
   svg: 'image/svg+xml',

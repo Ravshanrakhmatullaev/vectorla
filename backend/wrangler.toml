@@ -14,11 +14,35 @@ bucket_name = "vectorla-uploads"
 queue = "vectorla-conversions"
 binding = "CONVERSION_QUEUE"
 
-# This same Worker also consumes the queue it produces to.
+# This same Worker also consumes the queue it produces to. One message per
+# invocation: tracing is CPU-heavy, and a batch shares one CPU budget.
+# Failed messages retry up to max_retries times (the consumer applies its
+# own backoff and lease delays, see src/queueConsumer.ts), then move to the
+# dead-letter queue — create it with:
+#   wrangler queues create vectorla-conversions-dlq
 [[queues.consumers]]
 queue = "vectorla-conversions"
+max_batch_size = 1
+max_batch_timeout = 5
+max_retries = 6
+dead_letter_queue = "vectorla-conversions-dlq"
+
+# Dead-lettered jobs are failed and their credits refunded.
+[[queues.consumers]]
+queue = "vectorla-conversions-dlq"
 max_batch_size = 10
 max_batch_timeout = 30
+
+# Stale-job sweeper (src/queueConsumer.ts sweepStaleJobs): backstop for
+# lost messages — fails and refunds jobs stuck far past any real run.
+[triggers]
+crons = ["*/15 * * * *"]
+
+# Tracing takes seconds of CPU; the default 30 s leaves too little headroom
+# for 2 MP Professional traces on slow isolates. Requires the Workers Paid
+# plan (already required by Queues). JOB_LEASE_MS (5 min) must stay above it.
+[limits]
+cpu_ms = 60000
 
 [vars]
 # Safe deployment default. `npm run dev` overrides this value explicitly;

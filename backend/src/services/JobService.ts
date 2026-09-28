@@ -7,7 +7,8 @@ import { createUploadsRepository } from '../repositories/createUploadsRepository
 import type { JobsRepository } from '../repositories/JobsRepository'
 import type { UploadsRepository } from '../repositories/UploadsRepository'
 import { CreditsService, createCreditsService } from './CreditsService'
-import { NotFoundError, ValidationError, ForbiddenError } from '../errors'
+import { NotFoundError, ValidationError, ForbiddenError, ConflictError, JobLeaseHeldError } from '../errors'
+import { JOB_LEASE_MS } from '../config'
 
 export interface CreateJobInput {
   userId: string
@@ -83,7 +84,16 @@ export class JobService {
       completedAt: null,
     }
 
-    const created = await this.repository.create(job)
+    let created: Job
+    try {
+      created = await this.repository.create(job)
+    } catch (error) {
+      // A concurrent request created the active job first (unique index).
+      if (!(error instanceof ConflictError)) throw error
+      const winner = await this.repository.findActiveByUploadId(input.uploadId)
+      if (winner) return winner
+      throw error
+    }
     await this.queueService.enqueueConversionJob(created)
     return created
   }
@@ -107,6 +117,46 @@ export class JobService {
       version: job.version + 1,
       updatedAt: new Date().toISOString(),
     })
+  }
+
+  /**
+   * Claims a job for this delivery. A queued job is claimed outright; a
+   * processing job whose lease (updatedAt + JOB_LEASE_MS) is still live
+   * belongs to another delivery — JobLeaseHeldError tells the consumer to
+   * check back after the lease; an expired lease is taken over (the worker
+   * holding it died). Optimistic locking makes concurrent claims safe: the
+   * loser gets ConflictError.
+   */
+  async claimForProcessing(job: Job, now: number = Date.now()): Promise<Job> {
+    if (job.status === 'processing') {
+      const leaseEnds = Date.parse(job.updatedAt) + JOB_LEASE_MS
+      if (leaseEnds > now) throw new JobLeaseHeldError(job.id, Math.ceil((leaseEnds - now) / 1000))
+      console.warn(`Taking over job "${job.id}": processing lease expired (worker likely crashed)`)
+    }
+    return this.repository.update(job, {
+      ...job,
+      status: 'processing',
+      version: job.version + 1,
+      updatedAt: new Date(now).toISOString(),
+    })
+  }
+
+  /** After a transient failure: back to 'queued' (not failed) so the retry can claim it. */
+  async releaseAfterError(jobId: string, errorMessage: string): Promise<Job> {
+    const job = await this.getJob(jobId)
+    if (job.status !== 'processing') return job
+    return this.repository.update(job, {
+      ...job,
+      status: 'queued',
+      errorMessage,
+      retryCount: job.retryCount + 1,
+      version: job.version + 1,
+      updatedAt: new Date().toISOString(),
+    })
+  }
+
+  findStaleJobs(status: 'queued' | 'processing', olderThanMs: number, limit = 50, now: number = Date.now()): Promise<Job[]> {
+    return this.repository.findStale(status, new Date(now - olderThanMs).toISOString(), limit)
   }
 
   async markCompleted(jobId: string): Promise<Job> {

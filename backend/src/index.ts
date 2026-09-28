@@ -1,10 +1,11 @@
-import type { ExportedHandler, MessageBatch } from '@cloudflare/workers-types'
+import type { ExportedHandler, MessageBatch, ScheduledController } from '@cloudflare/workers-types'
 import type { Env } from './env'
 import { assertRequiredBackendSecrets } from './env'
 import type { ConversionQueueMessage } from './integrations/queue'
 import { createJobService } from './services/JobService'
 import { createConversionService } from './services/ConversionService'
-import { ConflictError, NotFoundError } from './errors'
+import { NotFoundError } from './errors'
+import { CONVERSION_DLQ_NAME, handleConversionMessages, handleDeadLetters, sweepStaleJobs } from './queueConsumer'
 import { mapErrorToResponse } from './api/response'
 import { handlePreflight, applyCors } from './api/cors'
 import { logRequest } from './api/logging'
@@ -124,35 +125,23 @@ export default {
     return finalResponse
   },
 
-  // TODO(backend): real AI vectorization goes inside ConversionService.processJob
-  // — for now it produces a placeholder SVG, so the full pipeline (queued ->
-  // processing -> stored -> completed) can be exercised end-to-end.
+  // Conversion jobs (and their dead-letter queue) — see queueConsumer.ts.
   async queue(batch: MessageBatch<ConversionQueueMessage>, rawEnv: Env): Promise<void> {
     const env = await withWasmModules(rawEnv)
     assertRequiredBackendSecrets(env)
-    const jobService = createJobService(env)
     const conversionService = createConversionService(env)
-
-    for (const message of batch.messages) {
-      try {
-        await conversionService.processJob(message.body.jobId)
-        message.ack()
-      } catch (error) {
-        if (error instanceof ConflictError) {
-          // Another delivery of this message is already handling the job (or
-          // just finished) — see ConversionService.processJob. Safe to ack
-          // without marking the job failed or retrying: retrying here would
-          // just race the in-flight delivery again.
-          console.warn(`Skipping duplicate delivery for job ${message.body.jobId}: ${error.message}`)
-          message.ack()
-          continue
-        }
-        const reason = error instanceof Error ? error.message : 'Unknown error'
-        await jobService.markFailed(message.body.jobId, reason).catch((markFailedError: unknown) => {
-          console.error(`Failed to mark job ${message.body.jobId} as failed:`, markFailedError)
-        })
-        message.retry()
-      }
+    if (batch.queue === CONVERSION_DLQ_NAME) {
+      await handleDeadLetters(batch.messages, conversionService)
+      return
     }
+    await handleConversionMessages(batch.messages, conversionService, createJobService(env))
+  },
+
+  // Cron trigger (wrangler.toml [triggers]): fail + refund jobs stuck past any real run.
+  async scheduled(_controller: ScheduledController, rawEnv: Env): Promise<void> {
+    const env = await withWasmModules(rawEnv)
+    assertRequiredBackendSecrets(env)
+    const swept = await sweepStaleJobs(createConversionService(env), createJobService(env))
+    if (swept > 0) console.warn(`Stale-job sweep failed and refunded ${swept} job(s)`)
   },
 } satisfies ExportedHandler<Env, ConversionQueueMessage>

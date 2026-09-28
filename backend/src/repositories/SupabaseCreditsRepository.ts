@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { CreditBalance, CreditTransaction, CreditTransactionType } from '../types'
-import type { CreditsRepository } from './CreditsRepository'
-import { ConflictError } from '../errors'
+import type { CreditsRepository, LedgerEntry, LedgerResult } from './CreditsRepository'
+import { InsufficientCreditsError } from '../errors'
 
 // Mirrors backend/supabase/schema.sql's `credit_balances` table exactly.
 interface BalanceRow {
@@ -38,6 +38,24 @@ function mapRowToTransaction(row: TransactionRow): CreditTransaction {
   }
 }
 
+// Row returned by apply_credit_entry / refund_job_credits.
+interface LedgerRow extends TransactionRow {
+  duplicate: boolean
+  balance: number
+}
+
+function mapLedgerRow(row: LedgerRow): LedgerResult {
+  const { duplicate, balance, ...transaction } = row
+  return { transaction: mapRowToTransaction(transaction), duplicate, balance }
+}
+
+function mapLedgerError(error: { message: string }, userId: string): Error {
+  if (error.message.includes('insufficient_credits')) {
+    return new InsufficientCreditsError(`User "${userId}" does not have enough credits`)
+  }
+  return new Error(`Credit ledger operation failed: ${error.message}`)
+}
+
 /** Real Supabase-backed implementation — used whenever SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY are configured (see createCreditsRepository). */
 export class SupabaseCreditsRepository implements CreditsRepository {
   constructor(private readonly client: SupabaseClient) {}
@@ -53,62 +71,30 @@ export class SupabaseCreditsRepository implements CreditsRepository {
     return data ? mapRowToBalance(data) : null
   }
 
-  /**
-   * Optimistic locking via `version` (a plain timestamp isn't safe here —
-   * two updates within the same millisecond would collide and the lock
-   * would silently fail to notice). `previous === null` means "no row
-   * existed when we read it" — the insert itself fails closed (unique
-   * violation) if a row was created concurrently in the meantime.
-   */
-  async setBalance(userId: string, balance: number, previous: CreditBalance | null): Promise<CreditBalance> {
-    const now = new Date().toISOString()
-
-    if (!previous) {
-      const { data, error } = await this.client
-        .from('credit_balances')
-        .insert({ user_id: userId, balance, version: 1, updated_at: now })
-        .select()
-        .maybeSingle<BalanceRow>()
-
-      if (error) {
-        if (error.code === '23505') {
-          throw new ConflictError(`Credit balance for user "${userId}" was created concurrently`)
-        }
-        throw new Error(`Failed to create credit balance: ${error.message}`)
-      }
-      if (!data) throw new Error(`Failed to create credit balance for user "${userId}": no row returned`)
-      return mapRowToBalance(data)
-    }
-
+  /** Calls the apply_credit_entry Postgres function (supabase/migrations/0002_credit_integrity.sql). */
+  async applyEntry(entry: LedgerEntry): Promise<LedgerResult> {
     const { data, error } = await this.client
-      .from('credit_balances')
-      .update({ balance, version: previous.version + 1, updated_at: now })
-      .eq('user_id', userId)
-      .eq('version', previous.version)
-      .select()
-      .maybeSingle<BalanceRow>()
-
-    if (error) throw new Error(`Failed to update credit balance: ${error.message}`)
-    if (!data) throw new ConflictError(`Credit balance for user "${userId}" was modified concurrently`)
-    return mapRowToBalance(data)
+      .rpc('apply_credit_entry', {
+        p_user_id: entry.userId,
+        p_delta: entry.delta,
+        p_type: entry.type,
+        p_reason: entry.reason,
+        p_job_id: entry.jobId,
+        p_grant_key: entry.grantKey ?? null,
+      })
+      .single<LedgerRow>()
+    if (error) throw mapLedgerError(error, entry.userId)
+    return mapLedgerRow(data)
   }
 
-  async createTransaction(transaction: CreditTransaction): Promise<CreditTransaction> {
+  /** Calls the refund_job_credits Postgres function — refunds a job's debit exactly once. */
+  async refundJob(userId: string, jobId: string, reason: string): Promise<CreditTransaction | null> {
     const { data, error } = await this.client
-      .from('credit_transactions')
-      .insert({
-        id: transaction.id,
-        user_id: transaction.userId,
-        amount: transaction.amount,
-        type: transaction.type,
-        reason: transaction.reason,
-        job_id: transaction.jobId,
-      })
-      .select()
-      .single<TransactionRow>()
-
-    if (error) throw new Error(`Failed to save credit transaction: ${error.message}`)
-    return mapRowToTransaction(data)
+      .rpc('refund_job_credits', { p_user_id: userId, p_job_id: jobId, p_reason: reason })
+      .maybeSingle<LedgerRow>()
+    if (error) throw mapLedgerError(error, userId)
+    if (!data || data.duplicate) return null
+    return mapLedgerRow(data).transaction
   }
 
   async findTransactionsByUserId(userId: string, limit?: number): Promise<CreditTransaction[]> {

@@ -12,6 +12,11 @@ export class InMemoryJobsRepository implements JobsRepository {
   private readonly jobsById = new Map<string, Job>()
 
   async create(job: Job): Promise<Job> {
+    // Mirrors the jobs_one_active_per_upload partial unique index.
+    // Synchronous check-and-set (no await in between), so it is atomic.
+    if ((job.status === 'queued' || job.status === 'processing') && this.activeFor(job.uploadId)) {
+      throw new ConflictError(`Upload "${job.uploadId}" already has an active job`)
+    }
     this.jobsById.set(job.id, job)
     return job
   }
@@ -30,12 +35,22 @@ export class InMemoryJobsRepository implements JobsRepository {
   }
 
   async findActiveByUploadId(uploadId: string): Promise<Job | null> {
+    return this.activeFor(uploadId)
+  }
+
+  private activeFor(uploadId: string): Job | null {
     for (const job of this.jobsById.values()) {
       if (job.uploadId === uploadId && (job.status === 'queued' || job.status === 'processing')) {
         return job
       }
     }
     return null
+  }
+
+  async findStale(status: 'queued' | 'processing', before: string, limit: number): Promise<Job[]> {
+    return Array.from(this.jobsById.values())
+      .filter((job) => job.status === status && job.updatedAt < before)
+      .slice(0, limit)
   }
 
   async findPageByUserId(userId: string, limit: number, offset: number): Promise<{ jobs: Job[]; total: number }> {

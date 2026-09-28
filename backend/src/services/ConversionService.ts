@@ -18,7 +18,7 @@ import {
 } from '../pipeline/ProfessionalTracePipeline'
 import { CreditsService, createCreditsService, calculateRequiredCredits } from './CreditsService'
 import { sourceFormatFromMime } from '../engine/profiles'
-import { NotFoundError, ConflictError, NotImplementedError } from '../errors'
+import { NotFoundError, NotImplementedError, InsufficientCreditsError, PayloadTooLargeError, UnsupportedMediaTypeError, ValidationError } from '../errors'
 
 /** Result of looking up a job's conversion — see ConversionService.getConversionByJob. */
 export interface ConversionByJobResult {
@@ -42,89 +42,93 @@ export class ConversionService {
   ) {}
 
   /**
-   * Runs the conversion pipeline for a queued job: load job + upload, mark
-   * processing, verify the user can cover the credit cost (see
-   * CreditsService.ensureEnoughCredits — throwing here leaves the job for
-   * the Worker's queue() consumer to mark 'failed' with a clear message,
-   * same as any other processing error), analyze the image (Phase 21 — see
-   * ImageAnalysisService) and let ProviderSelector pick a provider for it,
-   * vectorize, store the result in R2, save the Conversion row, debit the
-   * credits, then mark the job completed.
+   * Runs the conversion pipeline for a queued job: claim it (processing
+   * lease), charge its credits (atomic, at most once per job), trace, store
+   * the result in R2, record the Conversion, mark the job completed.
    *
-   * ProviderSelector routes every image to the Vectorla engine. If it (or a
-   * not-yet-implemented provider such as Vision) throws, this transparently
-   * falls back to the ImageTracer engine ('placeholder') instead of failing
-   * the job — a tracing bug degrades quality rather than availability.
+   * Safe under queue redelivery and crashes:
+   *  - completed job  -> returns the existing conversion (no re-trace, no second charge)
+   *  - failed job     -> terminal, returns [] (the user retries with a new job)
+   *  - processing job -> JobLeaseHeldError while another delivery's lease is
+   *    live; after it expires (that worker died) the job is taken over and
+   *    re-run — the charge, R2 key and Conversion row are all idempotent
+   *  - concurrent claim -> the loser gets ConflictError
+   * Terminal failures are handled by failJob, which refunds the charge. See
+   * queueConsumer.ts for how each outcome maps to ack/retry.
    *
-   * A job whose preset is exactly PROFESSIONAL_TRACE_JOB_PRESET runs the
-   * engine's Professional profile (pipeline/ProfessionalTracePipeline.ts),
-   * with the same fallback.
-   *
-   * Idempotent against queue redelivery: a message for an already-completed
-   * job returns the existing conversion(s) as a no-op (no re-vectorizing, no
-   * double debit); a message for a job that's already 'processing' throws
-   * ConflictError so the caller (see index.ts's queue() consumer) can treat
-   * it as "another delivery is already handling this" rather than a real
-   * failure. markProcessing()'s own optimistic lock (see JobsRepository)
-   * closes the remaining race if two deliveries pass this check at once.
+   * ProviderSelector routes every image to the Vectorla engine; if it (or a
+   * not-yet-implemented provider) throws, tracing falls back to ImageTracer.
+   * A job whose preset is PROFESSIONAL_TRACE_JOB_PRESET runs the
+   * Professional profile (pipeline/ProfessionalTracePipeline.ts).
    */
-  async processJob(jobId: string): Promise<Conversion[]> {
+  async processJob(jobId: string, now: number = Date.now()): Promise<Conversion[]> {
     const job = await this.jobs.getJob(jobId)
 
     if (job.status === 'completed') {
       const existing = await this.conversions.findByJobId(jobId)
       return existing ? [existing] : []
     }
-    if (job.status === 'processing') {
-      throw new ConflictError(`Job "${jobId}" is already being processed`)
-    }
+    // Terminal: a failed job is never reprocessed by a stale delivery (the
+    // user retries by creating a new job). Its credits were already refunded.
+    if (job.status === 'failed') return []
 
     const upload = await this.uploads.findById(job.uploadId)
     if (!upload) {
       throw new NotFoundError(`No upload found with id "${job.uploadId}"`)
     }
 
-    await this.jobs.markProcessing(job.id)
+    // Throws JobLeaseHeldError (another live delivery owns it) or
+    // ConflictError (a concurrent delivery claimed it first).
+    const claimed = await this.jobs.claimForProcessing(job, now)
 
     // TODO(backend): formatCount/printReady are hardcoded until Job carries
     // the caller's requested formats/print-ready flag — see calculateRequiredCredits.
-    // Phase 26: Professional Trace bills PROFESSIONAL_TRACE_CREDIT_MULTIPLIER
-    // times the base cost — it runs real extra preprocessing work, not just
-    // a different default preset.
-    const isProfessionalTrace = job.preset === PROFESSIONAL_TRACE_JOB_PRESET
+    // Professional Trace bills PROFESSIONAL_TRACE_CREDIT_MULTIPLIER times the base cost.
+    const isProfessionalTrace = claimed.preset === PROFESSIONAL_TRACE_JOB_PRESET
     const requiredCredits = calculateRequiredCredits(1, false) * (isProfessionalTrace ? PROFESSIONAL_TRACE_CREDIT_MULTIPLIER : 1)
-    await this.credits.ensureEnoughCredits(job.userId, requiredCredits)
+    // Charged up front, atomically and at most once per job: concurrent jobs
+    // can't overdraw the balance, and a retried job is never charged twice.
+    // A job that later fails terminally is refunded (failJob).
+    await this.credits.chargeJob(claimed.userId, claimed.id, requiredCredits, `Conversion for job "${claimed.id}"`)
 
     const fileStream = await this.storage.getFile(upload.storageKey)
     const fileBytes = await new Response(fileStream).arrayBuffer()
 
     const result = isProfessionalTrace
-      ? await this.traceProfessional(job.id, upload, fileBytes)
-      : await this.traceQuick(job.id, job.preset, upload, fileBytes)
-    const storageKey = `conversions/${job.userId}/${job.id}/output.${result.format}`
+      ? await this.traceProfessional(claimed.id, upload, fileBytes)
+      : await this.traceQuick(claimed.id, claimed.preset, upload, fileBytes)
+    // Deterministic key: a retry after a crash simply overwrites the object.
+    const storageKey = `conversions/${claimed.userId}/${claimed.id}/output.${result.format}`
     await this.storage.storeFile(storageKey, result.data)
 
-    const conversion: Conversion = {
-      id: crypto.randomUUID(),
-      jobId: job.id,
-      userId: job.userId,
-      format: result.format,
-      storageKey,
-      fileSizeBytes: result.data.byteLength,
-      downloadUrl: null,
-      createdAt: new Date().toISOString(),
+    let created = await this.conversions.findByJobId(claimed.id)
+    if (!created) {
+      const conversion: Conversion = {
+        id: crypto.randomUUID(),
+        jobId: claimed.id,
+        userId: claimed.userId,
+        format: result.format,
+        storageKey,
+        fileSizeBytes: result.data.byteLength,
+        downloadUrl: null,
+        createdAt: new Date().toISOString(),
+      }
+      created = await this.conversions.create(conversion)
     }
-    const created = await this.conversions.create(conversion)
 
-    // NOTE: if this debit fails after the conversion row above was already
-    // created, the job is left for the queue consumer to mark 'failed' with
-    // that error — same "no rollback on partial failure" trade-off as
-    // UploadService's R2-then-Supabase write (see backend/README.md).
-    await this.credits.debitCredits(job.userId, requiredCredits, `Conversion for job "${job.id}"`, job.id)
-
-    await this.jobs.markCompleted(job.id)
-
+    await this.jobs.markCompleted(claimed.id)
     return [created]
+  }
+
+  /**
+   * Terminal failure: marks the job failed and refunds its charge (exactly
+   * once — a no-op if it was never charged or already refunded).
+   */
+  async failJob(jobId: string, reason: string): Promise<void> {
+    const job = await this.jobs.getJob(jobId)
+    if (job.status === 'completed') return
+    if (job.status !== 'failed') await this.jobs.markFailed(jobId, reason)
+    await this.credits.refundJobDebit(job.userId, jobId, `Refund: job failed (${reason.slice(0, 120)})`)
   }
 
   /** Professional Trace: the engine's Professional profile, ImageTracer fallback on failure. */
@@ -234,4 +238,19 @@ export function createConversionService(env: Env): ConversionService {
   const imageAnalysis = createImageAnalysisService(decoderWasm)
   const credits = createCreditsService(env)
   return new ConversionService(jobs, uploads, storage, conversions, imageAnalysis, decoderWasm, credits)
+}
+
+/**
+ * Errors that retrying cannot fix — the queue consumer fails these jobs
+ * immediately (and refunds) instead of burning retries on them.
+ */
+export function isPermanentJobError(error: unknown): boolean {
+  return (
+    error instanceof InsufficientCreditsError ||
+    error instanceof PayloadTooLargeError ||
+    error instanceof UnsupportedMediaTypeError ||
+    error instanceof ValidationError ||
+    error instanceof NotFoundError ||
+    (error instanceof Error && error.message.startsWith('Failed to decode'))
+  )
 }

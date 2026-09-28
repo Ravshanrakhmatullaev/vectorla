@@ -150,13 +150,14 @@ async function run() {
   assertEqual(message.retried, false, 'message.retry() not called on success')
   console.log('PASS: queue() consumer moves a job queued -> processing -> completed and acks the message')
 
-  // 2. Failure path: a job id that doesn't exist should fail + retry, not throw
+  // 2. A job id that doesn't exist is a permanent failure: acked (never
+  // retried forever), and the consumer must not throw.
   const badMessage = createFakeMessage({ jobId: 'does-not-exist' })
   const badBatch = createFakeBatch([badMessage])
   await worker.queue(badBatch, env) // must not throw
-  assertEqual(badMessage.retried, true, 'message.retry() called when the job lookup fails')
-  assertEqual(badMessage.acked, false, 'message.ack() not called when the job lookup fails')
-  console.log('PASS: queue() consumer retries (does not crash) when the job cannot be found')
+  assertEqual(badMessage.acked, true, 'message.ack() called for an unknown job (permanent failure)')
+  assertEqual(badMessage.retried, false, 'message.retry() not called for an unknown job')
+  console.log('PASS: queue() consumer acks (does not crash or retry forever) when the job cannot be found')
 
   // 3. A queued job whose R2 source is missing exercises the consumer's
   // processing-failure path without weakening staging/production's new
@@ -182,9 +183,10 @@ async function run() {
     (afterProcessingFailure.errorMessage ?? '').length > 0,
     'processing failure stores a useful error message',
   )
-  assertEqual(poorMessage.retried, true, 'message.retry() called on processing failure')
-  assertEqual(poorMessage.acked, false, 'message.ack() not called on processing failure')
-  console.log('PASS: queue() consumer records a failed job and retries when processing fails')
+  // A user without credits is a permanent failure: failed, acked, not retried.
+  assertEqual(poorMessage.acked, true, 'message.ack() called on a permanent processing failure')
+  assertEqual(poorMessage.retried, false, 'message.retry() not called on a permanent processing failure')
+  console.log('PASS: queue() consumer fails a job terminally (and acks) when processing fails permanently')
 
   console.log('\nAll queue() consumer smoke tests passed.')
 }

@@ -57,7 +57,10 @@ export class SupabaseJobsRepository implements JobsRepository {
       .select()
       .single<JobRow>()
 
-    if (error) throw new Error(`Failed to save job: ${error.message}`)
+    if (error) {
+      if (error.code === '23505') throw new ConflictError(`Upload "${job.uploadId}" already has an active job`)
+      throw new Error(`Failed to save job: ${error.message}`)
+    }
     return mapRowToJob(data)
   }
 
@@ -103,6 +106,19 @@ export class SupabaseJobsRepository implements JobsRepository {
 
     if (error) throw new Error(`Failed to look up active job: ${error.message}`)
     return data ? mapRowToJob(data) : null
+  }
+
+  async findStale(status: 'queued' | 'processing', before: string, limit: number): Promise<Job[]> {
+    const { data, error } = await this.client
+      .from('jobs')
+      .select()
+      .eq('status', status)
+      .lt('updated_at', before)
+      .order('updated_at', { ascending: true })
+      .limit(limit)
+      .returns<JobRow[]>()
+    if (error) throw new Error(`Failed to list stale jobs: ${error.message}`)
+    return (data ?? []).map(mapRowToJob)
   }
 
   async findPageByUserId(userId: string, limit: number, offset: number): Promise<{ jobs: Job[]; total: number }> {

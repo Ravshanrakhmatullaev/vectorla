@@ -289,12 +289,12 @@ async function run() {
   )
   console.log('PASS: processJob is idempotent for an already-completed job — no re-processing, no double debit')
 
-  // 8c. Retry safety (Phase 18): a job already 'processing' must not be
-  // processed a second time concurrently — processJob throws ConflictError
-  // instead of racing the in-flight attempt.
+  // 8c. Retry safety: a job 'processing' under another delivery's live
+  // lease must not be processed a second time concurrently — processJob
+  // throws JobLeaseHeldError (the consumer retries after the lease).
   const racingJob = await jobService.createJob({ userId: 'user-1', uploadId: 'upload-1' })
   await jobService.markProcessing(racingJob.id)
-  await assertRejects(() => service.processJob(racingJob.id), /already being processed/, 'processing collision')
+  await assertRejects(() => service.processJob(racingJob.id), /being processed by another delivery/, 'processing collision')
   assertEqual(
     await service.listUserConversions('user-1').then((c) => c.length),
     1,
