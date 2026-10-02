@@ -14,10 +14,22 @@ const ALLOWED_METHODS = 'GET, POST, OPTIONS'
 const PRODUCTION_ALLOWED_HEADERS = 'Content-Type, Authorization'
 const DEVELOPMENT_ALLOWED_HEADERS = `${PRODUCTION_ALLOWED_HEADERS}, X-Test-User-Id`
 
+// Per-environment additions (env.CORS_EXTRA_ORIGINS, e.g. the staging Pages
+// URL). Exact https origins only: no wildcards, paths or trailing slashes.
+const EXTRA_ORIGIN_PATTERN = /^https:\/\/[a-z0-9.-]+(:\d+)?$/
+
+function extraOrigins(env: Env): string[] {
+  return (env.CORS_EXTRA_ORIGINS ?? '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => EXTRA_ORIGIN_PATTERN.test(origin))
+}
+
 function resolveAllowedOrigin(request: Request, env: Env): string | null {
   const origin = request.headers.get('Origin')
   if (!origin) return null
   if (ALLOWED_ORIGINS.has(origin)) return origin
+  if (extraOrigins(env).includes(origin)) return origin
   if (isLocalDevelopment(env) && DEV_ORIGIN_PATTERN.test(origin)) return origin
   return null
 }

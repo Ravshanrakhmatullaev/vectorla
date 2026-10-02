@@ -11,8 +11,14 @@ each has its own Worker, bucket, queues and secrets.
 
 ## 0. Prerequisites (owner)
 
-- Cloudflare account with the **Workers Paid** plan. Queues and the
-  `[limits] cpu_ms` setting need it. This is a billing decision for the owner.
+- Cloudflare account with the **Workers Paid** plan (a billing decision for
+  the owner). Workers Free allows 10 ms of CPU per invocation, but tracing
+  takes seconds, and `[limits] cpu_ms = 60000` is a Paid-only setting.
+  Queues, the DLQ and cron triggers also work on Free (Queues: 10,000
+  operations/day, 24 h retention), so CPU time is the only hard requirement.
+- R2 enabled on the account (free tier: 10 GB-month storage, 1M Class A /
+  10M Class B operations per month). Cloudflare may ask for a payment method
+  when you enable R2 for the first time.
 - Supabase project, resumed and reachable.
 - `npx wrangler login` on the deploying machine.
 
@@ -87,12 +93,17 @@ Staging and production fail closed (every API call returns an error) if any of t
 ```bash
 cd backend
 npm ci && npm run typecheck && npm test      # includes the vector-quality gate
+npx wrangler deploy --dry-run --env staging  # offline: bundle + bindings check
+npx wrangler deploy --dry-run --env=""
 npx wrangler deploy --env staging            # vectorla-api-staging
-npx wrangler deploy                          # vectorla-api (production)
+npx wrangler deploy --env=""                 # vectorla-api (production)
 ```
 
-CORS allows `https://vectorla.app`. If staging's frontend runs on another
-origin, add it in `backend/src/api/cors.ts` first.
+CORS always allows `https://vectorla.app` and `https://www.vectorla.app`.
+Before staging is used from a browser, set `CORS_EXTRA_ORIGINS` in
+`[env.staging.vars]` (`wrangler.toml`) to the staging frontend's exact
+origin, e.g. `https://staging.<pages-project>.pages.dev`. Only exact
+`https://` origins are accepted, with no wildcards.
 
 ## 5. Deploy the frontend (Cloudflare Pages)
 

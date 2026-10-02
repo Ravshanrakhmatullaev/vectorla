@@ -123,6 +123,26 @@ async function run() {
   assertEqual(corsRes.headers.get('Access-Control-Allow-Origin'), 'https://vectorla.app', 'a real request from an allowed origin gets the CORS header')
   console.log('PASS: a normal request from an allowed origin gets Access-Control-Allow-Origin')
 
+  // 7b. CORS_EXTRA_ORIGINS adds exact https origins (e.g. the staging Pages
+  // URL) and ignores malformed or wildcard entries.
+  {
+    const stagingEnv = {
+      ...(await createFakeEnv('staging', true)),
+      CORS_EXTRA_ORIGINS: ' https://staging.vectorla.pages.dev , https://*.pages.dev, http://insecure.example, https://bad.example/ ',
+    }
+    const allowed = async (origin: string) =>
+      (await worker.fetch(new Request('http://localhost/api/v1/health', { headers: { Origin: origin } }), stagingEnv)).headers.get('Access-Control-Allow-Origin')
+    assertEqual(await allowed('https://staging.vectorla.pages.dev'), 'https://staging.vectorla.pages.dev', 'a configured extra origin is allowed')
+    assertEqual(await allowed('https://vectorla.app'), 'https://vectorla.app', 'built-in origins stay allowed alongside extras')
+    for (const origin of ['https://evil.pages.dev', 'http://insecure.example', 'https://bad.example', 'https://staging.vectorla.pages.dev.evil.com']) {
+      assertEqual(await allowed(origin), null, `${origin} is not allowed`)
+    }
+    const productionEnv = await createFakeEnv('production', true)
+    const prodRes = await worker.fetch(new Request('http://localhost/api/v1/health', { headers: { Origin: 'https://staging.vectorla.pages.dev' } }), productionEnv)
+    assertEqual(prodRes.headers.get('Access-Control-Allow-Origin'), null, 'extra origins never leak into an environment that does not set them')
+  }
+  console.log('PASS: CORS_EXTRA_ORIGINS allows exact configured https origins only')
+
   // 8. A request with no Origin header (e.g. server-to-server) gets no CORS header, and still succeeds.
   const noOriginRes = await worker.fetch(new Request('http://localhost/api/v1/health'), env)
   assertEqual(noOriginRes.status, 200, 'a request with no Origin header still succeeds')

@@ -22,6 +22,12 @@ export interface Env {
   JPEG_DECODER_WASM: WebAssembly.Module
   WEBP_DECODER_WASM: WebAssembly.Module
   ENVIRONMENT: 'development' | 'staging' | 'production'
+  /**
+   * Optional comma-separated list of extra exact HTTPS origins allowed by
+   * CORS (e.g. the staging Cloudflare Pages URL). A plain var, set per
+   * environment in wrangler.toml — see api/cors.ts.
+   */
+  CORS_EXTRA_ORIGINS?: string
 }
 
 /**

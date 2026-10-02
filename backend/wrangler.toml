@@ -40,7 +40,7 @@ crons = ["*/15 * * * *"]
 
 # Tracing takes seconds of CPU; the default 30 s leaves too little headroom
 # for 2 MP Professional traces on slow isolates. Requires the Workers Paid
-# plan (already required by Queues). JOB_LEASE_MS (5 min) must stay above it.
+# plan (Free allows 10 ms CPU per invocation). JOB_LEASE_MS (5 min) must stay above it.
 [limits]
 cpu_ms = 60000
 
@@ -82,6 +82,10 @@ name = "vectorla-api-staging"
 [env.staging.vars]
 ENVIRONMENT = "staging"
 VECTORIZATION_PROVIDER = "vectorla"
+# Exact https origin(s) of the staging frontend (comma-separated), e.g.
+# "https://staging.<pages-project>.pages.dev". Required before staging can be
+# used from a browser: CORS otherwise only allows https://vectorla.app.
+CORS_EXTRA_ORIGINS = ""
 
 [[env.staging.r2_buckets]]
 binding = "UPLOADS_BUCKET"
