@@ -61,6 +61,8 @@ export class SupabaseUploadsRepository implements UploadsRepository {
 
   async findById(id: string): Promise<Upload | null> {
     const { data, error } = await this.client.from('uploads').select().eq('id', id).maybeSingle<UploadRow>()
+    // 22P02: the id isn't a valid UUID, so no such row can exist.
+    if (error?.code === '22P02') return null
     if (error) throw new Error(`Failed to fetch upload: ${error.message}`)
     return data ? mapRowToUpload(data) : null
   }

@@ -12,7 +12,7 @@ import { cn } from '@/utils/cn'
 const exportBadges = ['SVG', 'EPS', 'PDF', 'AI', 'DXF']
 
 export function Hero() {
-  const { splitPct, containerRef, containerHandlers, onHandleKeyDown } = useCompareSlider(52)
+  const { splitPct, containerHandlers, onHandleKeyDown } = useCompareSlider(52)
   const { isDragOver, dropzoneHandlers } = useDropzone()
   const [activeStep, setActiveStep] = useState(0)
   const { t } = useLanguage()
@@ -158,7 +158,6 @@ export function Hero() {
 
               {/* before/after comparison slider */}
               <div
-                ref={containerRef}
                 className="relative mt-6 aspect-[4/3] select-none overflow-hidden rounded-xl bg-[var(--bg-subtle)]"
                 {...containerHandlers}
               >

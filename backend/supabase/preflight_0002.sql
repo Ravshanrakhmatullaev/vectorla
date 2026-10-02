@@ -21,22 +21,32 @@ from (values
   ('0002: index one active job/upload',  to_regclass('public.jobs_one_active_per_upload') is not null)
 ) as t(name, present);
 
--- Row counts (context for the backfill: each profile gets one signup grant).
-select 'count' as kind, 'auth.users' as name, count(*) from auth.users
-union all select 'count', 'profiles', count(*) from public.profiles
-union all select 'count', 'auth users without profile', count(*) from auth.users u where not exists (select 1 from public.profiles p where p.id = u.id)
-union all select 'count', 'credit_balances', count(*) from public.credit_balances
-union all select 'count', 'credit_transactions', count(*) from public.credit_transactions
-union all select 'count', 'jobs', count(*) from public.jobs;
-
--- Violations that would make 0002 fail (all must be 0).
-select 'violations' as kind, 'negative balances' as name, count(*) from public.credit_balances where balance < 0
-union all
-select 'violations', 'jobs with >1 debit', count(*) from (select job_id from public.credit_transactions where type = 'debit' and job_id is not null group by job_id having count(*) > 1) d
-union all
-select 'violations', 'jobs with >1 refund', count(*) from (select job_id from public.credit_transactions where type = 'refund' and job_id is not null group by job_id having count(*) > 1) r
-union all
-select 'violations', 'uploads with >1 active job', count(*) from (select upload_id from public.jobs where status in ('queued', 'processing') group by upload_id having count(*) > 1) a;
+-- Row counts and violations. Every query is passed as text and only run when
+-- its tables exist, so this also works on an empty database (where everything
+-- is reported as null = "table missing", and there is nothing to violate).
+with q(kind, name, needs, sql) as (values
+  ('count', 'auth.users', 'auth.users', 'select count(*) from auth.users'),
+  ('count', 'profiles', 'public.profiles', 'select count(*) from public.profiles'),
+  ('count', 'auth users without profile', 'public.profiles',
+     'select count(*) from auth.users u where not exists (select 1 from public.profiles p where p.id = u.id)'),
+  ('count', 'credit_balances', 'public.credit_balances', 'select count(*) from public.credit_balances'),
+  ('count', 'credit_transactions', 'public.credit_transactions', 'select count(*) from public.credit_transactions'),
+  ('count', 'jobs', 'public.jobs', 'select count(*) from public.jobs'),
+  -- Violations that would make 0002 fail (all must be 0).
+  ('violations', 'negative balances', 'public.credit_balances',
+     'select count(*) from public.credit_balances where balance < 0'),
+  ('violations', 'jobs with >1 debit', 'public.credit_transactions',
+     'select count(*) from (select job_id from public.credit_transactions where type = ''debit'' and job_id is not null group by job_id having count(*) > 1) d'),
+  ('violations', 'jobs with >1 refund', 'public.credit_transactions',
+     'select count(*) from (select job_id from public.credit_transactions where type = ''refund'' and job_id is not null group by job_id having count(*) > 1) r'),
+  ('violations', 'uploads with >1 active job', 'public.jobs',
+     'select count(*) from (select upload_id from public.jobs where status in (''queued'', ''processing'') group by upload_id having count(*) > 1) a')
+)
+select kind, name,
+       case when to_regclass(needs) is null then null
+            else (xpath('/row/count/text()', query_to_xml(sql, false, true, '')))[1]::text::bigint
+       end as count
+from q;
 
 -- Privileges the Worker needs (service_role) and must NOT be exposed (anon/authenticated).
 select 'privileges' as kind, r.role || ' on ' || t.tbl as name,

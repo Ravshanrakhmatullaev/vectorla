@@ -52,6 +52,8 @@ export class SupabaseConversionsRepository implements ConversionsRepository {
 
   async findById(id: string): Promise<Conversion | null> {
     const { data, error } = await this.client.from('conversions').select().eq('id', id).maybeSingle<ConversionRow>()
+    // 22P02: the id isn't a valid UUID, so no such row can exist.
+    if (error?.code === '22P02') return null
     if (error) throw new Error(`Failed to fetch conversion: ${error.message}`)
     return data ? mapRowToConversion(data) : null
   }

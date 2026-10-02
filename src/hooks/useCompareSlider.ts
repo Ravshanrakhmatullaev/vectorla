@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
+import { useState, type KeyboardEvent, type PointerEvent } from 'react'
 import { clamp } from '@/utils/clamp'
 
 const KEYBOARD_STEP = 5
@@ -11,22 +11,25 @@ const KEYBOARD_STEP = 5
  */
 export function useCompareSlider(initialPct: number) {
   const [splitPct, setSplitPct] = useState(initialPct)
-  const containerRef = useRef<HTMLDivElement>(null)
 
-  function updateFromClientX(clientX: number) {
-    const el = containerRef.current
-    if (!el) return
+  // Measures the element the handlers are attached to (the event's
+  // currentTarget). A shared container ref broke dragging once a component
+  // swapped which element held it (WorkspacePreview: demo -> real result).
+  function updateFromClientX(el: Element, clientX: number) {
     const rect = el.getBoundingClientRect()
     setSplitPct(clamp(((clientX - rect.left) / rect.width) * 100, 0, 100))
   }
 
   function onPointerDown(e: PointerEvent<HTMLDivElement>) {
-    updateFromClientX(e.clientX)
+    // Controls inside the slider (e.g. the Download button) must keep their
+    // clicks: capturing the pointer would retarget the click to the container.
+    if (e.target instanceof Element && e.target.closest('button, a, input, select, textarea')) return
+    updateFromClientX(e.currentTarget, e.clientX)
     e.currentTarget.setPointerCapture(e.pointerId)
   }
 
   function onPointerMove(e: PointerEvent<HTMLDivElement>) {
-    if (e.currentTarget.hasPointerCapture(e.pointerId)) updateFromClientX(e.clientX)
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) updateFromClientX(e.currentTarget, e.clientX)
   }
 
   function onHandleKeyDown(e: KeyboardEvent) {
@@ -38,7 +41,6 @@ export function useCompareSlider(initialPct: number) {
 
   return {
     splitPct,
-    containerRef,
     containerHandlers: { onPointerDown, onPointerMove },
     onHandleKeyDown,
   }

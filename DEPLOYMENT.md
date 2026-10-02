@@ -116,6 +116,36 @@ origin, add it in `backend/src/api/cors.ts` first.
 6. `npx wrangler tail` shows no errors, and the cron sweeper runs every 15 minutes
    with no "failed and refunded" messages on a healthy system.
 
+## Local development with local Supabase (no hosted project needed)
+
+Needs Docker (Windows: Docker Desktop with the WSL 2 backend) and Node 22.
+Everything runs on your machine; the keys printed by `supabase status` are
+fixed local-development defaults, not production secrets. Still, keep them
+only in the gitignored files below.
+
+1. Outside the repo, create a Supabase workdir:
+   `npx supabase@latest init` (accept the defaults). Then start only the core
+   services:
+   `npx supabase start -x realtime,studio,storage-api,imgproxy,edge-runtime,logflare,vector,postgres-meta,supavisor,mailpit`.
+2. `npx supabase status -o env` prints `API_URL`, `DB_URL`, `ANON_KEY` and
+   `SERVICE_ROLE_KEY`.
+3. Database, in the same order as production (§2): run
+   `psql "$DB_URL" -f backend/supabase/preflight_0002.sql`, stop if any
+   violation is not 0 or null, then apply `schema.sql` and
+   `migrations/0002_credit_integrity.sql`.
+4. `backend/.dev.vars` (gitignored): `SUPABASE_URL=<API_URL>`,
+   `SUPABASE_SERVICE_ROLE_KEY=<SERVICE_ROLE_KEY>`,
+   `DOWNLOAD_URL_SECRET=<any random string>`. Then run `cd backend && npm run dev`.
+   R2 and Queues are simulated locally by wrangler, and the queue consumer
+   runs too.
+5. `.env.local` (gitignored): `VITE_API_BASE_URL=http://127.0.0.1:8787`,
+   `VITE_SUPABASE_URL=<API_URL>`, `VITE_SUPABASE_PUBLISHABLE_KEY=<ANON_KEY>`.
+   Then run `npm run dev` and open http://localhost:5173.
+
+Local email confirmation is off by default, so signup signs you in
+immediately. `npx supabase stop` stops everything; `supabase db reset` wipes
+the local database.
+
 ## Rollback
 
 - Worker: `npx wrangler rollback` (per environment).

@@ -66,6 +66,8 @@ export class SupabaseJobsRepository implements JobsRepository {
 
   async findById(id: string): Promise<Job | null> {
     const { data, error } = await this.client.from('jobs').select().eq('id', id).maybeSingle<JobRow>()
+    // 22P02: the id isn't a valid UUID, so no such row can exist.
+    if (error?.code === '22P02') return null
     if (error) throw new Error(`Failed to fetch job: ${error.message}`)
     return data ? mapRowToJob(data) : null
   }

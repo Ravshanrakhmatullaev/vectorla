@@ -60,7 +60,7 @@ export function WorkspacePreview() {
   const [activePreset, setActivePreset] = useState<(typeof workspacePresets)[number]>('logo')
   const [printReady, setPrintReady] = useState(true)
   const [showDemo, setShowDemo] = useState(false)
-  const { splitPct, containerRef, containerHandlers, onHandleKeyDown } = useCompareSlider(55)
+  const { splitPct, containerHandlers, onHandleKeyDown } = useCompareSlider(55)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { t } = useLanguage()
   const { state: uploadState, analysis, traceMode: selectedMode, upload, retry, reset, selectTraceMode } = useUploadFlow()
@@ -297,7 +297,6 @@ export function WorkspacePreview() {
 
                 {isActive && !backendConfigured && (
                   <motion.div
-                    ref={containerRef}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ duration: 0.3, ease: 'easeOut' }}
@@ -340,7 +339,6 @@ export function WorkspacePreview() {
 
                 {isActive && backendConfigured && (
                   <motion.div
-                    ref={isCompleted && vectorizedUrl ? containerRef : undefined}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ duration: 0.3, ease: 'easeOut' }}
