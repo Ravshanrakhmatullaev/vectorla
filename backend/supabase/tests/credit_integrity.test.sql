@@ -93,3 +93,31 @@ exception when insufficient_privilege then
 end;
 $$;
 reset role;
+
+-- The Worker (service-role key) can read and write every table it uses and
+-- call the ledger functions; RLS does not block it (service_role bypasses RLS).
+set role service_role;
+do $$
+declare
+  u uuid := '00000000-0000-0000-0000-000000000001';
+  up uuid := gen_random_uuid();
+  j uuid := gen_random_uuid();
+  before_balance integer;
+  r record;
+begin
+  select balance into before_balance from public.credit_balances where user_id = u;
+  perform 1 from public.profiles where id = u;
+  insert into public.uploads (id, user_id, original_file_name, mime_type, size_bytes, storage_key)
+  values (up, u, 'worker.png', 'image/png', 1, 'worker-' || up);
+  insert into public.jobs (id, user_id, upload_id, status) values (j, u, up, 'queued');
+  update public.jobs set status = 'processing', version = version + 1 where id = j;
+  select * into r from public.apply_credit_entry(u, -1, 'debit', 'worker check', j);
+  insert into public.conversions (job_id, user_id, format, storage_key, file_size_bytes) values (j, u, 'svg', 'worker-out-' || j, 10);
+  update public.jobs set status = 'completed' where id = j;
+  select * into r from public.refund_job_credits(u, j, 'worker check refund');
+  assert r.balance = before_balance, 'worker debit + refund nets to zero';
+  delete from public.conversions where job_id = j;
+  raise notice 'credit_integrity: service_role (Worker) privileges OK';
+end;
+$$;
+reset role;

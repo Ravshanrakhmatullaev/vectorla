@@ -9,6 +9,11 @@
 --   * a job could be debited/refunded more than once         -> unique indexes
 --   * concurrent POST /jobs could create two active jobs     -> partial unique index
 --   * nothing granted credits in production                  -> signup grant + backfill
+--   * Worker table privileges on projects without default grants -> explicit GRANTs
+
+-- All-or-nothing: if any statement fails (e.g. existing rows violate a new
+-- constraint — run preflight_0002.sql first), nothing is applied.
+begin;
 
 -- 1. Invariants ---------------------------------------------------------------
 
@@ -140,6 +145,19 @@ begin
 end;
 $$;
 
+-- 2b. Worker table privileges --------------------------------------------------
+-- The Worker uses the service-role key. Supabase normally grants it table
+-- privileges by default, but projects created with automatic Data API
+-- grants disabled do not — then every Worker query fails with "permission
+-- denied". These match the GRANTs added to schema.sql; GRANT is idempotent,
+-- so having them in both places is harmless.
+grant select, insert, update, delete on table public.profiles to service_role;
+grant select, insert, update, delete on table public.uploads to service_role;
+grant select, insert, update, delete on table public.jobs to service_role;
+grant select, insert, update, delete on table public.conversions to service_role;
+grant select, insert, update, delete on table public.credit_balances to service_role;
+grant select, insert, update, delete on table public.credit_transactions to service_role;
+
 -- Only the Worker's service-role client may call these.
 revoke all on function public.apply_credit_entry(uuid, integer, text, text, uuid, text) from public, anon, authenticated;
 revoke all on function public.refund_job_credits(uuid, uuid, text) from public, anon, authenticated;
@@ -150,24 +168,29 @@ grant execute on function public.refund_job_credits(uuid, uuid, text) to service
 
 -- Signup grant = PLAN_LIMITS.free.monthlyCredits in backend/src/config (10).
 -- Keep FREE_SIGNUP_CREDITS in config/index.ts in sync with this value.
-create or replace function public.handle_new_user()
+--
+-- A separate trigger (not a change to handle_new_user), so re-running
+-- schema.sql — which redefines handle_new_user — can never silently remove
+-- the grant. Triggers for the same event fire in name order:
+-- on_auth_user_created (creates the profile) runs before
+-- on_auth_user_created_grant_credits (needs the profile for its FK).
+create or replace function public.grant_signup_credits()
 returns trigger
 language plpgsql
 security definer set search_path = ''
 as $$
 begin
-  insert into public.profiles (id, display_name, avatar_url)
-  values (
-    new.id,
-    nullif(new.raw_user_meta_data ->> 'display_name', ''),
-    nullif(new.raw_user_meta_data ->> 'avatar_url', '')
-  )
-  on conflict (id) do nothing;
-
   perform public.apply_credit_entry(new.id, 10, 'credit', 'Free signup credits', null, 'signup');
   return new;
 end;
 $$;
+
+revoke all on function public.grant_signup_credits() from public, anon, authenticated;
+
+drop trigger if exists on_auth_user_created_grant_credits on auth.users;
+create trigger on_auth_user_created_grant_credits
+  after insert on auth.users
+  for each row execute procedure public.grant_signup_credits();
 
 -- Backfill: every existing profile receives the signup grant once.
 do $$
@@ -179,3 +202,5 @@ begin
   end loop;
 end;
 $$;
+
+commit;

@@ -155,8 +155,13 @@ Legend: ✅ done · 🔜 next · ⏳ planned · 🧑 needs an owner decision, cr
   schema + migration + credit-integrity assertions + a concurrency check.
 - ⏳ **P9.** Observability: Workers observability and error tracking; a
   health check that probes dependencies.
-- 🧑 **P10.** Supabase project `rvrpuapbeglqmcajsdgm` is **paused**. Resume it
-  and apply `schema.sql` as migrations when ready to deploy.
+- 🧑 **P10.** Supabase project `rvrpuapbeglqmcajsdgm` is **paused** (INACTIVE).
+  The free org already has 2 active projects, so resuming needs an owner
+  decision: pause another project or upgrade. Everything else is prepared
+  offline and verified on Postgres 16: `preflight_0002.sql` (read-only
+  check), service_role GRANTs (needed; kept in the owner's local schema.sql
+  and mirrored in 0002), a signup grant that survives schema.sql re-runs,
+  and an atomic 0002. The apply order is in DEPLOYMENT.md §2.
 
 ### Tier 3: Product and SaaS (after quality and safety)
 

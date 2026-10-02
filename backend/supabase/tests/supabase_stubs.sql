@@ -5,6 +5,8 @@ begin
   if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon; end if;
   if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated; end if;
   if not exists (select 1 from pg_roles where rolname = 'service_role') then create role service_role; end if;
+  -- Supabase's service_role bypasses RLS; the Worker relies on that.
+  alter role service_role bypassrls;
 end;
 $$;
 create schema if not exists auth;

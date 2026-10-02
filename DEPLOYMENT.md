@@ -34,14 +34,35 @@ npx wrangler queues create vectorla-conversions-staging-dlq
 
 In order, in the SQL editor or with `psql`:
 
-1. `backend/supabase/schema.sql` (base schema, RLS, signup trigger)
+0. `backend/supabase/preflight_0002.sql` (read-only). It reports which
+   objects already exist, row counts, Worker/anon/authenticated table
+   privileges, RLS per table, and rows that would violate 0002. **Every
+   `violations` row must be 0** before you continue. If one isn't, stop and
+   decide how to repair the data; never delete it blindly.
+1. `backend/supabase/schema.sql` (base schema, RLS, profile trigger, and the
+   six `service_role` table GRANTs)
 2. `backend/supabase/migrations/0002_credit_integrity.sql` (atomic credit
-   ledger, balance ≥ 0, one active job per upload, free signup credits and
-   a backfill for existing users)
+   ledger, balance ≥ 0, one active job per upload, the same six
+   `service_role` GRANTs, free signup credits via a separate trigger, and a
+   backfill for existing users). Runs in one transaction, so a failure
+   applies nothing.
+3. Re-run `preflight_0002.sql`. Expect every `0002:` object to be `t`,
+   `service_role` to be `t` on all six tables, anon and authenticated to be
+   `f`, RLS to be `t`, and violations to be 0.
 
-Both files are idempotent, so re-running them is safe. CI runs them
-(the migration applied twice) plus `supabase/tests/credit_integrity.test.sql`
-against Postgres 16 on every push.
+Both files are idempotent, and the order is robust. Re-running `schema.sql`
+after 0002 keeps the signup grant, because it lives in its own trigger
+(`on_auth_user_created_grant_credits`) rather than in `handle_new_user`.
+CI runs the stubs, schema, the migration twice, and
+`supabase/tests/credit_integrity.test.sql` against Postgres 16 on every
+push. The tests cover ledger invariants, anon denial, and a full Worker
+cycle as `service_role`.
+
+**Why the GRANTs:** projects created with automatic Data API grants
+disabled give `service_role` no table privileges. Every Worker query then
+fails with `permission denied for table profiles`. This was reproduced
+offline: with the GRANTs, the full upload → job → debit → conversion →
+refund cycle passes as `service_role`.
 
 Supabase Auth settings to confirm: the site URL and redirect allowlist
 (`https://vectorla.app`, and the staging Pages URL), email confirmation, the
@@ -100,6 +121,6 @@ origin, add it in `backend/src/api/cors.ts` first.
 - Worker: `npx wrangler rollback` (per environment).
 - Pages: promote the previous deployment in the dashboard.
 - Database: the migration is additive (a constraint, indexes, a column,
-  functions, a trigger body). To undo the signup grant, restore the
-  `handle_new_user` body from `schema.sql`. Don't drop the ledger functions
+  functions, a trigger, GRANTs). To undo the signup grant:
+  `drop trigger on_auth_user_created_grant_credits on auth.users;`. Don't drop the ledger functions
   while a Worker that calls them is deployed.

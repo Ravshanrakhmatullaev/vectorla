@@ -316,6 +316,17 @@ migrations, secrets, staging then production, verification, rollback).
 - Repository files describe intended deployment. Do not claim the domain,
   Worker, R2 bucket, Queue, or Supabase project is live without external
   verification.
+- Supabase project `rvrpuapbeglqmcajsdgm` (Vectorla, ap-northeast-2, PG 17)
+  is paused. The free org allows 2 active projects, and poligrafiya and
+  safar-taxi are both active. Do not pause other projects or change billing
+  without the owner. Database apply order: preflight_0002.sql → schema.sql →
+  0002 → preflight again (DEPLOYMENT.md §2).
+- The owner's local `backend/supabase/schema.sql` has six uncommitted
+  `grant select, insert, update, delete ... to service_role` statements
+  (profiles, uploads, jobs, conversions, credit_balances,
+  credit_transactions). They are needed and must be kept; the owner commits
+  them. 0002 carries identical GRANTs, so the two files are compatible in
+  either order.
 - Cloudflare Pages CSP permits the intended API host, Workers deployments, and
   Supabase HTTPS endpoints. Narrow wildcard hosts once final production origins
   are confirmed.
