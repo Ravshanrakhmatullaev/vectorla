@@ -60,7 +60,10 @@ function run(): void {
   const square = traceImage(makeImage(64, 64, (x, y) => (x >= 16 && x < 48 && y >= 16 && y < 48 ? [0, 0, 0, 255] : [255, 255, 255, 255])))
   const squarePath = square.svg.match(/<path fill="#000" d="[^"]*"\/>/)?.[0] ?? ''
   // Exact geometry, sharp corners, and the minimal path (z closes the 4th side).
-  assertEqual(squarePath, '<path fill="#000" d="m48 48v-32h-32v32z"/>', 'square traces to its exact minimal outline')
+  // The start corner follows the polygon search (its 128-point outline
+  // exceeds MAX_SEGMENT_POINTS, curveFit.ts), so only the corner set and
+  // orientation are fixed: 48,16 -> 16,16 -> 16,48 -> 48,48.
+  assertEqual(squarePath, '<path fill="#000" d="m48 16h-32v32h32z"/>', 'square traces to its exact minimal outline')
   console.log(`PASS: square -> straight edges only (${squarePath})`)
 
   // 4. Shared boundaries: two touching colors share one fitted chain, so the
