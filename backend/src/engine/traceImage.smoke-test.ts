@@ -2,7 +2,7 @@
 // shapes, robustness on degenerate inputs, and resource bounds.
 //
 // Run with: npx tsx src/engine/traceImage.smoke-test.ts (from inside backend/)
-import { traceImage } from './traceImage'
+import { fitWorkingSize, traceImage } from './traceImage'
 import { fitChain } from './curveFit'
 import { extractChains, buildRegionBoundaries } from './planarMap'
 import { measureSvgStructure } from '../benchmark/metrics'
@@ -122,6 +122,35 @@ function run(): void {
   const flatWithGradients = traceImage(disc(96, [200, 30, 40], [255, 255, 255, 255]), { gradients: true })
   assertEqual(flatWithGradients.stats.gradientCount, 0, 'flat art never becomes a gradient')
   console.log(`PASS: linear ramp -> 1 gradient (${gradientRamp.svg.length} bytes vs ${flatRamp.svg.length} posterized); flat art unaffected`)
+
+  // 9. Early downscale (decodeForTrace): tracing a pre-fitted image with
+  //    sourceSize is byte-identical to tracing the full-resolution original.
+  const big = makeImage(1400, 900, (x, y) =>
+    (x - 500) ** 2 + (y - 450) ** 2 < 300 ** 2 ? [200, 40, 60, 255] : x > 1000 && y > 200 && y < 700 ? [30, 90, 200, 255] : [250, 250, 245, 255],
+  )
+  const fitOptions = { maxWorkingPixels: 300_000 }
+  const direct = traceImage(big, fitOptions).svg
+  const fitted = traceImage(fitWorkingSize(big, fitOptions.maxWorkingPixels), { ...fitOptions, sourceSize: { width: 1400, height: 900 } }).svg
+  assertTrue(direct === fitted, 'pre-fitted trace with sourceSize is identical to the full-resolution trace')
+  assertTrue(fitted.includes('width="1400" height="900"'), 'SVG keeps the original dimensions')
+  console.log('PASS: fitWorkingSize + sourceSize is byte-identical and keeps the upload size')
+
+  // 10. Palette separation: a pale tint on white (~0.05 OKLab apart, under
+  //     Quick's merge distance) with compression-like noise stays two colors
+  //     (the JPEG end-to-end case is gated in realWorldGate.smoke-test.ts).
+  let noiseSeed = 11
+  const jitter = () => ((noiseSeed = (noiseSeed * 1103515245 + 12345) & 0x7fffffff) % 5) - 2
+  const pale = makeImage(240, 240, (x, y) => {
+    const inside = (x - 120) ** 2 + (y - 120) ** 2 < 80 ** 2
+    const base = inside ? [233, 240, 255] : [255, 255, 255]
+    return [base[0]! + jitter(), base[1]! + jitter(), base[2]! + jitter(), 255] as [number, number, number, number]
+  })
+  const lightColors = (r: ReturnType<typeof traceImage>) => r.palette.filter((c) => c.r > 220 && c.g > 220 && c.b > 220).length
+  const separated = traceImage(pale, { maxColors: 32, mergeDistance: 0.05 })
+  const merged = traceImage(pale, { maxColors: 32, mergeDistance: 0.05, paletteSeparation: 0 })
+  assertEqual(lightColors(merged), 1, 'without separation the tint merges into white (the bug)')
+  assertEqual(lightColors(separated), 2, 'pale tint and white stay separate colors')
+  console.log('PASS: pale tint on white kept as its own color under compression-like noise')
 
   console.log('\nAll tracing engine smoke tests passed.')
 }

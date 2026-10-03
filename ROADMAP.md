@@ -136,10 +136,22 @@ Legend: ✅ done · 🔜 next · ⏳ planned · 🧑 needs an owner decision, cr
   Professional), seam underlay (0 seams), coverage-preserving hairlines,
   blend-tint palette filter, memory limits (4 MP uploads with in-browser
   downscale, 1.2 MP working size). See BENCHMARKS.md "Real-world corpus".
-- ⏳ **Q17. Next quality work** (evidence in BENCHMARKS.md): serifs and joins in
-  small text, dashed ~1.5 px diagonals, Quick merging pale fills into white on
-  heavy JPEG, SVG size (underlay strokes only where a seam would show), and
-  memory measured inside workerd rather than Node.
+- ✅ **Q17. Optimization round** (2026-10-03, branch): Quick keeps pale tints
+  on JPEGs (palette separation), thin diagonals no longer dash (ridge
+  promotion), size-relative coordinate precision (−6% SVG size), and lower
+  memory (single decode, early downscale, decoder reset, scoped buffers:
+  4 MP photo live peak 68 → 43 MB Quick, 46 → 36 MB Professional). Selective
+  seam underlay was measured and rejected (−0.3% size). See BENCHMARKS.md
+  "Optimization round".
+- ⏳ **Q18. Lower-memory engine for more detail**: tracing a 4 MP upload at
+  full resolution instead of 1.2 MP cuts edge error 2–4× (BENCHMARKS.md
+  "Resolution"), but needs ~140 MB with today's per-pixel buffers. Options:
+  tiled or streaming segmentation, 8/16-bit label and coverage buffers, OKLab
+  on demand. The same work enables an edge-directed upsampler, which fixes
+  isolated ≤ 1 px hairlines vanishing.
+- ⏳ **Q19. Production memory check**: measure the isolate on Cloudflare
+  itself (preview deployment, owner approval needed). Locally the workerd
+  isolate is sampled at ≤ ~91 MB for a 4 MP photo.
 
 ### Tier 2: Production safety (launch blockers)
 

@@ -39,6 +39,12 @@ export interface PaletteOptions {
   minClusterFraction: number
   /** Alpha below which a pixel counts as transparent (0-255). */
   alphaThreshold: number
+  /**
+   * Keep two large clusters apart, even closer than mergeDistance, when the
+   * gap between them is this many times their combined spread (two flat inks,
+   * e.g. a pale tint on white, rather than one noisy ink). 0 disables.
+   */
+  separation?: number
 }
 
 export const TRANSPARENT_LABEL = -1
@@ -60,6 +66,13 @@ interface Cluster {
   sr: number
   sg: number
   sb: number
+  /** Sum of squared OKLab coordinates of member pixels (second moment, additive under merging). */
+  ss: number
+}
+
+/** RMS distance of a cluster's pixels from its center (OKLab). */
+function spread(c: Cluster): number {
+  return Math.sqrt(Math.max(0, c.ss / c.weight - (c.L * c.L + c.A * c.A + c.B * c.B)))
 }
 
 function dist2(aL: number, aA: number, aB: number, bL: number, bA: number, bB: number): number {
@@ -162,9 +175,10 @@ export function extractPalette(
     const key = Math.round(L / BIN) * 1_000_000 + (Math.round(A / BIN) + 500) * 1000 + (Math.round(B / BIN) + 500)
     let bin = bins.get(key)
     if (!bin) {
-      bin = { L: 0, A: 0, B: 0, weight: 0, sr: 0, sg: 0, sb: 0 }
+      bin = { L: 0, A: 0, B: 0, weight: 0, sr: 0, sg: 0, sb: 0, ss: 0 }
       bins.set(key, bin)
     }
+    bin.ss += L * L + A * A + B * B
     bin.L += L
     bin.A += A
     bin.B += B
@@ -198,13 +212,13 @@ export function extractPalette(
       }
     }
     if (best >= 0 && bestD <= merge2) continue
-    clusters.push({ L: bin.L, A: bin.A, B: bin.B, weight: 0, sr: 0, sg: 0, sb: 0 })
+    clusters.push({ L: bin.L, A: bin.A, B: bin.B, weight: 0, sr: 0, sg: 0, sb: 0, ss: 0 })
     if (clusters.length > 1024) break
   }
 
   // Weighted k-means refinement over bins.
   for (let iteration = 0; iteration < 6; iteration++) {
-    const acc = clusters.map(() => ({ L: 0, A: 0, B: 0, weight: 0, sr: 0, sg: 0, sb: 0 }))
+    const acc = clusters.map(() => ({ L: 0, A: 0, B: 0, weight: 0, sr: 0, sg: 0, sb: 0, ss: 0 }))
     for (const bin of binList) {
       let best = 0
       let bestD = Infinity
@@ -224,10 +238,11 @@ export function extractPalette(
       a.sr += bin.sr
       a.sg += bin.sg
       a.sb += bin.sb
+      a.ss += bin.ss
     }
     clusters = acc
       .filter((a) => a.weight > 0)
-      .map((a) => ({ L: a.L / a.weight, A: a.A / a.weight, B: a.B / a.weight, weight: a.weight, sr: a.sr, sg: a.sg, sb: a.sb }))
+      .map((a) => ({ L: a.L / a.weight, A: a.A / a.weight, B: a.B / a.weight, weight: a.weight, sr: a.sr, sg: a.sg, sb: a.sb, ss: a.ss }))
   }
 
   // Drop negligible clusters (their pixels get relabeled to real colors).
@@ -238,6 +253,17 @@ export function extractPalette(
 
   // Ward merge: repeatedly merge the pair whose merge adds the least
   // variance, until under the cap and no pair is closer than mergeDistance.
+  // Below the cap, a pair of large, tight, well-separated clusters is two
+  // inks and is never merged (a pale tint next to white on a JPEG logo sits
+  // ~0.05 apart, but each side's noise spread is far smaller than the gap).
+  const separation = options.separation ?? 0
+  const sepWeight = totalWeight * 0.005
+  const separable = (a: Cluster, b: Cluster, d2: number) =>
+    separation > 0 &&
+    a.weight >= sepWeight &&
+    b.weight >= sepWeight &&
+    d2 >= merge2 * 0.25 &&
+    Math.sqrt(d2) > separation * (spread(a) + spread(b))
   for (;;) {
     let bestI = -1
     let bestJ = -1
@@ -248,6 +274,7 @@ export function extractPalette(
         const a = clusters[i]!
         const b = clusters[j]!
         const d = dist2(a.L, a.A, a.B, b.L, b.A, b.B)
+        if (clusters.length <= options.maxColors && separable(a, b, d)) continue
         const cost = ((a.weight * b.weight) / (a.weight + b.weight)) * d
         if (cost < bestCost) {
           bestCost = cost
@@ -270,6 +297,7 @@ export function extractPalette(
       sr: a.sr + b.sr,
       sg: a.sg + b.sg,
       sb: a.sb + b.sb,
+      ss: a.ss + b.ss,
     }
     clusters.splice(bestJ, 1)
   }
@@ -511,12 +539,20 @@ export function labelPixels(
     }
   }
 
-  if (thinRadius > 0) preserveThinCoverage(labels, pairA, pairB, coverage, w, h, thinRadius, thinPeakRadius)
+  if (thinRadius > 0) preserveThinCoverage(labels, pairA, pairB, coverage, w, h, thinRadius, thinPeakRadius, palette)
   return labels
 }
 
 /** Pixels with less coverage than this are never promoted (noise). */
 const THIN_MIN_COVERAGE = 0.15
+/**
+ * Ridge promotion (see preserveThinCoverage): minimum coverage of a ridge
+ * pixel and of its two neighbours along the stroke, and minimum OKLab
+ * contrast between a stroke and what it is drawn on.
+ */
+const THIN_RIDGE_COVERAGE = 0.2
+const THIN_RIDGE_CONTINUE = 0.1
+const THIN_RIDGE_CONTRAST = 0.15
 /** Features whose coverage reaches this anywhere nearby are wide, not thin. */
 const THIN_MAX_PEAK = 0.85
 
@@ -548,6 +584,7 @@ function preserveThinCoverage(
   h: number,
   radius: number,
   peakRadius: number,
+  palette: PaletteColor[],
 ): void {
   const peakRadius2 = peakRadius * peakRadius
   // Decisions are collected and applied afterwards, so every pixel is judged
@@ -567,6 +604,33 @@ function preserveThinCoverage(
     if (label === x) return 1
     if (label === y) return 0
     return -1
+  }
+  // Strokes contrast with what they are drawn on; neighbouring shades of a
+  // shaded area (posterized gradient bands) do not, and their AA ridges are
+  // not lines.
+  const contrastOk = (a: number, b: number): boolean => {
+    const ca = palette[a]
+    const cb = palette[b]
+    return !ca || !cb || dist2(ca.L, ca.A, ca.B, cb.L, cb.A, cb.B) >= THIN_RIDGE_CONTRAST * THIN_RIDGE_CONTRAST
+  }
+  const RIDGE_DIRS = [1, 0, 0, 1, 1, 1, 1, -1]
+  const isRidge = (x0: number, y0: number, cp: number, other: number, own: number): boolean => {
+    for (let d = 0; d < RIDGE_DIRS.length; d += 2) {
+      const dx = RIDGE_DIRS[d]!
+      const dy = RIDGE_DIRS[d + 1]!
+      const x1 = x0 - dx, y1 = y0 - dy, x2 = x0 + dx, y2 = y0 + dy
+      if (x1 < 0 || y1 < 0 || y1 >= h || x2 >= w || y2 < 0 || y2 >= h || x1 >= w || x2 < 0) continue
+      const c1 = coverageOf(y1 * w + x1, other, own)
+      const c2 = coverageOf(y2 * w + x2, other, own)
+      if (c1 < 0 || c2 < 0) continue
+      if (!(cp >= c1 && cp >= c2 && (cp > c1 || cp > c2) && cp - Math.min(c1, c2) > 0.02)) continue
+      // A line continues along the ridge; a corner's apex (also a maximum
+      // across its axis) does not — past the tip coverage falls to nothing.
+      const x3 = x0 - dy, y3 = y0 + dx, x4 = x0 + dy, y4 = y0 - dx
+      if (x3 < 0 || y3 < 0 || x3 >= w || y3 >= h || x4 < 0 || y4 < 0 || x4 >= w || y4 >= h) continue
+      if (coverageOf(y3 * w + x3, other, own) >= THIN_RIDGE_CONTINUE && coverageOf(y4 * w + x4, other, own) >= THIN_RIDGE_CONTINUE) return true
+    }
+    return false
   }
   for (let y0 = 0; y0 < h; y0++) {
     for (let x0 = 0; x0 < w; x0++) {
@@ -604,7 +668,17 @@ function preserveThinCoverage(
       }
       // A nearly pure pixel of that color nearby means a wide shape, where the
       // per-pixel 50% rule is already right; only thin features need this.
-      if (peak < THIN_MAX_PEAK && above + 0.5 < sum) promote.push(p, other)
+      if (peak >= THIN_MAX_PEAK) continue
+      if (above + 0.5 < sum) {
+        promote.push(p, other)
+        continue
+      }
+      // Ridge: where a thin diagonal crosses between pixel rows its ink is
+      // split over two rows, so no pixel there ranks among the window's
+      // densest and the stroke falls apart into dashes. Its center line is
+      // still a coverage maximum across the stroke; keeping it keeps the
+      // stroke connected.
+      if (cp >= THIN_RIDGE_COVERAGE && sum >= 1 && contrastOk(own, other) && isRidge(x0, y0, cp, other, own)) promote.push(p, other)
     }
   }
   for (let i = 0; i < promote.length; i += 2) labels[promote[i]!] = promote[i + 1]!

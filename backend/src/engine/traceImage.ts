@@ -51,6 +51,10 @@ export interface TraceEngineOptions {
    * 0 disables.
    */
   underlay: number
+  /** Keep large flat inks apart when their gap exceeds this × their noise spread (see PaletteOptions.separation). 0 disables. */
+  paletteSeparation: number
+  /** Decimal places of path coordinates (source px); -1 = auto (step ≤ 1/5000 of the longer side). */
+  precision: number
   /** Coverage-preserving labeling that keeps hairlines, small-text stems and thin gaps (see palette.ts). */
   thinFeatures: boolean
   /** Radius (source px) within which a near-solid pixel marks a feature as wide, not thin. */
@@ -65,6 +69,15 @@ export interface TraceEngineOptions {
   gradients: boolean
   /** Source encoding hint: lossy JPEG input gets artifact-aware cleanup. */
   sourceFormat: 'png' | 'jpeg' | 'webp' | 'unknown'
+  /** Called after each pipeline stage (profiling and memory measurement). */
+  onStage?: (stage: string) => void
+  /**
+   * Original size of an input the caller already reduced with
+   * fitWorkingSize (so it could drop the full-resolution decode early). The
+   * SVG keeps these dimensions; the result is identical to tracing the
+   * original.
+   */
+  sourceSize?: { width: number; height: number }
 }
 
 export const DEFAULT_ENGINE_OPTIONS: TraceEngineOptions = {
@@ -79,6 +92,8 @@ export const DEFAULT_ENGINE_OPTIONS: TraceEngineOptions = {
   denoise: 'auto',
   mode: 'stacked',
   underlay: 1,
+  paletteSeparation: 3,
+  precision: -1,
   thinFeatures: true,
   thinPeakScale: 1,
   alphaThreshold: 128,
@@ -141,6 +156,21 @@ function autoUpscale(width: number, height: number, maxWorkingPixels: number): n
   return factor
 }
 
+/**
+ * Step 1 of traceImage: area-downsamples an image above maxWorkingPixels to
+ * the engine's working size (returns the input unchanged otherwise). Callers
+ * holding a large decode can run this first, release the full-resolution
+ * pixels, and trace the result with `sourceSize` set to the original size.
+ */
+const NO_POINTS = new Int32Array(0)
+
+export function fitWorkingSize(image: RgbaImage, maxWorkingPixels: number): RgbaImage {
+  const pixels = image.width * image.height
+  if (pixels <= maxWorkingPixels) return image
+  const ratio = Math.sqrt(maxWorkingPixels / pixels)
+  return downscaleArea(image, Math.max(1, Math.floor(image.width * ratio)), Math.max(1, Math.floor(image.height * ratio)))
+}
+
 export function traceImage(input: ImageData | RgbaImage, overrides: Partial<TraceEngineOptions> = {}): TraceEngineResult {
   const options: TraceEngineOptions = { ...DEFAULT_ENGINE_OPTIONS, ...overrides }
   const timings: Record<string, number> = {}
@@ -148,126 +178,133 @@ export function traceImage(input: ImageData | RgbaImage, overrides: Partial<Trac
   const lap = (name: string) => {
     const now = performance.now()
     timings[name] = now - mark
-    mark = now
+    options.onStage?.(name)
+    mark = performance.now()
   }
 
-  const sourceWidth = input.width
-  const sourceHeight = input.height
-  let image: RgbaImage = { width: input.width, height: input.height, data: input.data }
+  const sourceWidth = options.sourceSize?.width ?? input.width
+  const sourceHeight = options.sourceSize?.height ?? input.height
 
-  // 1. Bound the working size for huge inputs.
-  if (sourceWidth * sourceHeight > options.maxWorkingPixels) {
-    const ratio = Math.sqrt(options.maxWorkingPixels / (sourceWidth * sourceHeight))
-    image = downscaleArea(image, Math.max(1, Math.floor(sourceWidth * ratio)), Math.max(1, Math.floor(sourceHeight * ratio)))
-  }
-  lap('downscale')
+  // Steps 1-6a run in their own scope so every per-pixel buffer (working
+  // image, OKLab, masks, labels, region ids: ~30 MB at the 1.2 MP working
+  // size) is garbage before curve fitting and SVG output, which only need the
+  // regions' colors and their shared boundary chains (Worker memory).
+  const seg = (() => {
+    // 1. Bound the working size for huge inputs.
+    let image = fitWorkingSize({ width: input.width, height: input.height, data: input.data }, options.maxWorkingPixels)
+    lap('downscale')
 
-  // 2. Denoise at (near) source resolution, before upsampling spreads noise.
-  // JPEG ringing/mosquito noise concentrates right at edges, where a global
-  // noise estimate barely sees it, so the format hint forces cleanup.
-  const lossy = options.sourceFormat === 'jpeg'
-  const noiseSigma = estimateNoiseSigma(image)
-  const denoise = options.denoise === 'on' || (options.denoise === 'auto' && (lossy || noiseSigma > 1.2))
-  if (lossy) image = restoreJpegChroma(image)
-  if (denoise) image = bilateralDenoise(image, 2, Math.max(lossy ? 22 : 14, 3.5 * noiseSigma))
-  lap('denoise')
+    // 2. Denoise at (near) source resolution, before upsampling spreads noise.
+    // JPEG ringing/mosquito noise concentrates right at edges, where a global
+    // noise estimate barely sees it, so the format hint forces cleanup.
+    const lossy = options.sourceFormat === 'jpeg'
+    const noiseSigma = estimateNoiseSigma(image)
+    const denoise = options.denoise === 'on' || (options.denoise === 'auto' && (lossy || noiseSigma > 1.2))
+    if (lossy) image = restoreJpegChroma(image)
+    if (denoise) image = bilateralDenoise(image, 2, Math.max(lossy ? 22 : 14, 3.5 * noiseSigma))
+    lap('denoise')
 
-  // 3. Palette at source resolution: here anti-aliased edge pixels differ
-  //    sharply from their neighbours, so the flat-pixel test cleanly excludes
-  //    them (after upsampling, blends become smooth ramps that look "flat").
-  const sourcePixels = sourceWidth * sourceHeight
-  const speckleSource = options.speckleArea > 0 ? options.speckleArea : Math.max(2, Math.min(40, sourcePixels * 5e-6)) * (lossy ? 3 : 1)
-  const baseN = image.width * image.height
-  const baseOpaque = new Uint8Array(baseN)
-  for (let p = 0; p < baseN; p++) if ((image.data[p * 4 + 3] ?? 0) >= options.alphaThreshold) baseOpaque[p] = 1
-  const baseLab = computeOklab(image)
-  const baseFlat = computeFlatMask(image, baseLab, baseOpaque)
-  const baseToSource = sourcePixels / baseN
-  const palette = extractPalette(image, baseLab, baseOpaque, baseFlat, {
-    mergeDistance: options.mergeDistance,
-    maxColors: options.maxColors,
-    minClusterFraction: Math.max(3e-5, (speckleSource * 2) / baseToSource / Math.max(1, baseN)),
-    alphaThreshold: options.alphaThreshold,
-  })
-  palette.push(
-    ...extractDetailColors(image, baseLab, baseOpaque, baseFlat, palette, {
+    // 3. Palette at source resolution: here anti-aliased edge pixels differ
+    //    sharply from their neighbours, so the flat-pixel test cleanly excludes
+    //    them (after upsampling, blends become smooth ramps that look "flat").
+    const sourcePixels = sourceWidth * sourceHeight
+    const speckleSource = options.speckleArea > 0 ? options.speckleArea : Math.max(2, Math.min(40, sourcePixels * 5e-6)) * (lossy ? 3 : 1)
+    const baseN = image.width * image.height
+    const baseOpaque = new Uint8Array(baseN)
+    for (let p = 0; p < baseN; p++) if ((image.data[p * 4 + 3] ?? 0) >= options.alphaThreshold) baseOpaque[p] = 1
+    const baseLab = computeOklab(image)
+    const baseFlat = computeFlatMask(image, baseLab, baseOpaque)
+    const baseToSource = sourcePixels / baseN
+    const palette = extractPalette(image, baseLab, baseOpaque, baseFlat, {
       mergeDistance: options.mergeDistance,
-      minPixels: Math.max(6, Math.round((speckleSource * 3) / baseToSource)),
       maxColors: options.maxColors,
-    }),
-  )
-  lap('palette')
-
-  // 4. Upsample small inputs so anti-aliasing becomes sub-pixel geometry;
-  //    a light blur removes bilinear's grid-periodic ripple.
-  const upscale = options.upscale > 0 ? Math.round(options.upscale) : autoUpscale(image.width, image.height, Math.max(options.maxWorkingPixels, options.maxUpscaledPixels))
-  const baseWidth = image.width
-  const baseHeight = image.height
-  if (upscale > 1) image = gaussianBlur(upscaleBilinear(image, upscale), 0.45 * upscale)
-  else if (lossy) image = gaussianBlur(image, 0.5)
-  lap('upscale')
-
-  const { width, height } = image
-  const n = width * height
-  const opaque = new Uint8Array(n)
-  for (let p = 0; p < n; p++) if ((image.data[p * 4 + 3] ?? 0) >= options.alphaThreshold) opaque[p] = 1
-  const lab = upscale > 1 ? computeOklab(image) : baseLab
-  const flat = upscaleMaskStrict(baseFlat, baseWidth, baseHeight, upscale)
-  for (let p = 0; p < n; p++) if (!opaque[p]) flat[p] = 0
-  lap('oklab')
-
-  const sourceToWorking = (width / sourceWidth) * (height / sourceHeight)
-  const minArea = Math.max(1, Math.round(speckleSource * sourceToWorking))
-  let labels = labelPixels(image, lab, opaque, flat, palette, 2 * upscale + 1, options.mergeDistance * 2, options.thinFeatures ? upscale + 2 : 0, Math.max(1, Math.round(upscale * options.thinPeakScale)))
-  lap('label')
-
-  // 5. Speckle cleanup and final regions.
-  labels = mergeSmallRegions(labels, width, height, palette, minArea)
-  labels = dissolveBlendSlivers(labels, width, height, palette, lab, 0.75 * Math.sqrt(sourceToWorking))
-  labels = mergeSmallRegions(labels, width, height, palette, minArea)
-  let regions = connectedComponents(labels, width, height)
-  // Region budget: pathological inputs (pure noise, dithering, halftones)
-  // would otherwise produce tens of thousands of paths and megabyte SVGs.
-  // Coarsen speckle removal until the region count is sane.
-  let budgetArea = minArea
-  while (regions.count > options.maxRegions && budgetArea < n / 50) {
-    budgetArea *= 2
-    labels = mergeSmallRegions(labels, width, height, palette, budgetArea)
-    regions = connectedComponents(labels, width, height)
-  }
-  lap('regions')
-
-  // 5b. Gradient reconstruction: merge posterized bands back into regions
-  //     filled with fitted linear gradients (labels >= palette.length).
-  let gradientFills: GradientFill[] = []
-  if (options.gradients && regions.count > 1) {
-    const detected = detectGradients(image, regions.ids, regions.count, (r) => regions.labels[r] === TRANSPARENT_LABEL, {
-      maxResidual: 0.02,
-      minRamp: 0.08,
-      minRegionRamp: 0.02,
-      minArea: minArea * 4,
-      edgeMargin: Math.ceil(1.5 * upscale) + 1,
+      minClusterFraction: Math.max(3e-5, (speckleSource * 2) / baseToSource / Math.max(1, baseN)),
+      alphaThreshold: options.alphaThreshold,
+      separation: options.paletteSeparation,
     })
-    const gradient = validateGradientGroups(image, regions.ids, regions.count, (r) => {
-      const color = palette[regions.labels[r]!]
-      return color ? [color.r, color.g, color.b] : null
-    }, detected)
-    if (gradient.fills.length > 0) {
-      const base = palette.length
-      for (let p = 0; p < n; p++) {
-        const g = gradient.groupOfRegion[regions.ids[p]!]!
-        if (g >= 0) labels[p] = base + g
-      }
-      regions = connectedComponents(labels, width, height)
-      gradientFills = gradient.fills
-    }
-  }
-  lap('gradients')
+    palette.push(
+      ...extractDetailColors(image, baseLab, baseOpaque, baseFlat, palette, {
+        mergeDistance: options.mergeDistance,
+        minPixels: Math.max(6, Math.round((speckleSource * 3) / baseToSource)),
+        maxColors: options.maxColors,
+      }),
+    )
+    lap('palette')
 
-  // 6. Shared boundaries and curve fitting.
-  const chains = extractChains(regions.ids, width, height)
-  const boundaries = buildRegionBoundaries(chains, regions.count)
-  lap('chains')
+    // 4. Upsample small inputs so anti-aliasing becomes sub-pixel geometry;
+    //    a light blur removes bilinear's grid-periodic ripple.
+    const upscale = options.upscale > 0 ? Math.round(options.upscale) : autoUpscale(image.width, image.height, Math.max(options.maxWorkingPixels, options.maxUpscaledPixels))
+    const baseWidth = image.width
+    const baseHeight = image.height
+    if (upscale > 1) image = gaussianBlur(upscaleBilinear(image, upscale), 0.45 * upscale)
+    else if (lossy) image = gaussianBlur(image, 0.5)
+    lap('upscale')
+
+    const { width, height } = image
+    const n = width * height
+    const opaque = new Uint8Array(n)
+    for (let p = 0; p < n; p++) if ((image.data[p * 4 + 3] ?? 0) >= options.alphaThreshold) opaque[p] = 1
+    const lab = upscale > 1 ? computeOklab(image) : baseLab
+    const flat = upscaleMaskStrict(baseFlat, baseWidth, baseHeight, upscale)
+    for (let p = 0; p < n; p++) if (!opaque[p]) flat[p] = 0
+    lap('oklab')
+
+    const sourceToWorking = (width / sourceWidth) * (height / sourceHeight)
+    const minArea = Math.max(1, Math.round(speckleSource * sourceToWorking))
+    let labels = labelPixels(image, lab, opaque, flat, palette, 2 * upscale + 1, options.mergeDistance * 2, options.thinFeatures ? upscale + 2 : 0, Math.max(1, Math.round(upscale * options.thinPeakScale)))
+    lap('label')
+
+    // 5. Speckle cleanup and final regions.
+    labels = mergeSmallRegions(labels, width, height, palette, minArea)
+    labels = dissolveBlendSlivers(labels, width, height, palette, lab, 0.75 * Math.sqrt(sourceToWorking))
+    labels = mergeSmallRegions(labels, width, height, palette, minArea)
+    let regions = connectedComponents(labels, width, height)
+    // Region budget: pathological inputs (pure noise, dithering, halftones)
+    // would otherwise produce tens of thousands of paths and megabyte SVGs.
+    // Coarsen speckle removal until the region count is sane.
+    let budgetArea = minArea
+    while (regions.count > options.maxRegions && budgetArea < n / 50) {
+      budgetArea *= 2
+      labels = mergeSmallRegions(labels, width, height, palette, budgetArea)
+      regions = connectedComponents(labels, width, height)
+    }
+    lap('regions')
+
+    // 5b. Gradient reconstruction: merge posterized bands back into regions
+    //     filled with fitted linear gradients (labels >= palette.length).
+    let gradientFills: GradientFill[] = []
+    if (options.gradients && regions.count > 1) {
+      const detected = detectGradients(image, regions.ids, regions.count, (r) => regions.labels[r] === TRANSPARENT_LABEL, {
+        maxResidual: 0.02,
+        minRamp: 0.08,
+        minRegionRamp: 0.02,
+        minArea: minArea * 4,
+        edgeMargin: Math.ceil(1.5 * upscale) + 1,
+      })
+      const gradient = validateGradientGroups(image, regions.ids, regions.count, (r) => {
+        const color = palette[regions.labels[r]!]
+        return color ? [color.r, color.g, color.b] : null
+      }, detected)
+      if (gradient.fills.length > 0) {
+        const base = palette.length
+        for (let p = 0; p < n; p++) {
+          const g = gradient.groupOfRegion[regions.ids[p]!]!
+          if (g >= 0) labels[p] = base + g
+        }
+        regions = connectedComponents(labels, width, height)
+        gradientFills = gradient.fills
+      }
+    }
+    lap('gradients')
+
+    // 6. Shared boundaries and curve fitting.
+    const chains = extractChains(regions.ids, width, height)
+    const boundaries = buildRegionBoundaries(chains, regions.count)
+    lap('chains')
+    return { width, height, upscale, denoise, noiseSigma, sourceToWorking, palette, regionLabels: regions.labels, regionCount: regions.count, chains, boundaries, gradientFills }
+  })()
+  const { width, height, upscale, denoise, noiseSigma, sourceToWorking, palette, chains, boundaries, gradientFills } = seg
+  const regions = { labels: seg.regionLabels, count: seg.regionCount }
   const workingPerSource = Math.sqrt(sourceToWorking)
   const fitOptions = {
     alphaMax: options.alphaMax,
@@ -276,9 +313,13 @@ export function traceImage(input: ImageData | RgbaImage, overrides: Partial<Trac
       ? { minLineLength: 2.5 * workingPerSource, maxCornerSpan: 1.5 * workingPerSource, minTurnDegrees: 30 }
       : null,
   }
-  const polygons = chains.map((chain) => buildPolygon(chain.points, chain.closed, fitOptions))
-  refineJunctions(polygons, width, height, 0.75 * workingPerSource)
-  const fitted: FittedChain[] = polygons.map((polygon) => buildCurve(polygon, fitOptions))
+  const fitted: FittedChain[] = (() => {
+    const polygons = chains.map((chain) => buildPolygon(chain.points, chain.closed, fitOptions))
+    refineJunctions(polygons, width, height, 0.75 * workingPerSource)
+    return polygons.map((polygon) => buildCurve(polygon, fitOptions))
+  })()
+  // Only the chains' side regions are needed from here on; drop their lattice points.
+  for (const chain of chains) chain.points = NO_POINTS
   const reversedCache = new Map<number, FittedChain>()
   const fittedUse = (chain: number, reversed: boolean): FittedChain => {
     if (!reversed) return fitted[chain]!
@@ -293,7 +334,10 @@ export function traceImage(input: ImageData | RgbaImage, overrides: Partial<Trac
 
   // 7. SVG output.
   const scale = sourceWidth / width
-  const precision = Math.max(sourceWidth, sourceHeight) <= 600 ? 2 : 1
+  // Auto: coordinate step at most 1/5000 of the longer side (3 decimals
+  // under 50 px, 2 under 500 px, 1 under 5000 px) — finer is invisible even at
+  // 4× zoom and only adds bytes.
+  const precision = options.precision >= 0 ? options.precision : Math.max(0, Math.ceil(Math.log10(5000 / Math.max(sourceWidth, sourceHeight))))
   const isTransparentRegion = (region: number) => region === OUTSIDE || regions.labels[region] === TRANSPARENT_LABEL
   const loopChains = (loop: RegionLoop) => loop.uses.map((use) => fittedUse(use.chain, use.reversed))
   const bordersTransparent = (loop: RegionLoop) =>

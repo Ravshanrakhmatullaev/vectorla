@@ -48,9 +48,184 @@ npm run bench -- --engines=professional --cases=wordmark,qr-like --out=/tmp/benc
 npx tsx src/benchmark/qualityGate.smoke-test.ts  # regression gate (also part of npm test)
 npm run bench -- --corpus=real --memory --compare # real-world corpus, peak memory, vs baseline-realworld.json
 npx tsx src/benchmark/realWorldGate.smoke-test.ts  # real-world regression gate (also part of npm test)
+npm run bench -- --corpus=all --engines=quick,professional --memory --compare=before.json  # all 80 images
 ```
 
 `--out` writes each source raster, traced SVG and 4× render for visual review.
+
+## Optimization round (2026-10-03, branch `claude/bold-newton-y6wsui`)
+
+Goals: smaller SVGs, better small text and thin lines, Quick keeping pale
+colors on JPEGs, lower memory, and an answer on whether 4 MP is enough. Every
+change below was A/B-tested on all 80 images (core + real-world) in both modes.
+A change was kept only if no image got worse by more than ±0.01 ΔE.
+
+### Before and after (80 images)
+
+| Metric | Quick before | Quick after | Professional before | Professional after |
+|---|---:|---:|---:|---:|
+| Mean ΔE×100 | 0.60 | **0.58** | 0.52 | 0.52 |
+| Mean bad px % | 1.08 | **1.07** | 1.06 | 1.06 |
+| Mean edge error (px)¹ | 0.13 | 0.13 | 0.13 | 0.13 |
+| Mean seams / 10k¹ | 0.0 | 0.0 | 0.0 | 0.0 |
+| Total segments | 192,589 | 195,289 (+1.4%) | 214,501 | 216,073 (+0.7%) |
+| Total SVG size | 5,182 KB | **4,879 KB (−5.9%)** | 5,822 KB | **5,439 KB (−6.6%)** |
+| Total trace time (Node, 1 core) | 63.9 s | **62.4 s** | 75.6 s | **72.2 s** |
+| Failed traces | 0 | 0 | 0 | 0 |
+
+¹ Vector-reference images only.
+
+Largest per-image changes: logo-complex@512 JPEG q40 (Quick) 1.60 → 0.38;
+emoji-fox@256 blurred (Quick) 0.50 → 0.10; thin-lines@256 (Quick) 0.70 → 0.49;
+typo-serif@512 0.92 → 0.85. Every image whose segment count rose by more than
+15% also improved or held its ΔE (thin strokes kept, the pale fill kept).
+
+### Kept
+
+1. **Palette separation** (`paletteSeparation`, engine/palette.ts). Two
+   large color clusters closer than the merge distance are kept apart when
+   the gap between them is more than 3× their combined noise spread. A pale
+   tint next to white (#e9f0ff vs #fff, ~0.05 OKLab apart) is two inks, while
+   one noisy ink is not. This was the cause of Quick tinting the whole
+   background of the q40 logo. Professional's finer merge distance already
+   avoided it.
+2. **Ridge promotion for thin strokes** (preserveThinCoverage). Where a
+   shallow diagonal crosses between pixel rows, its ink is split over two
+   rows, no pixel ranks among its window's densest, and the stroke broke into
+   dashes. A pixel is now also kept when it is a coverage ridge across the
+   stroke and three conditions hold:
+   - the ridge continues along the stroke (a corner's apex does not);
+   - it has enough ink nearby;
+   - the stroke contrasts with what it is drawn on by at least 0.15 OKLab.
+     Without this, posterized shading in 3D-style art gained 25% more nodes for
+     nothing.
+3. **Size-relative coordinate precision.** The coordinate step is at most
+   1/5000 of the image's longer side: 3 decimals below 50 px, 2 below 500 px,
+   1 below 5000 px. The old rule used 2 decimals up to 600 px, so 512–600 px
+   images and photos carried 0.01 px coordinates. This saves ~7% with no
+   measurable change (mean ΔE identical, visually identical text at 4×).
+4. **Memory** (see below). Single decode, early downscale, decoder reset,
+   scoped per-pixel buffers. Output is byte-identical (checked on all 160
+   traces).
+5. **Denoise fast path.** Interior pixels skip bounds checks. The output is
+   bit-identical (160/160) and about 10% faster.
+
+### Tried and rejected
+
+- **Underlay only where a seam would be visible.** For each shared edge, the
+  shape painted underneath was found and the worst-case seam color
+  (¼ underlying + ¼ earlier + ½ later shape) was compared with a clean edge.
+  It saved only 0.3%, because almost every sibling edge sits over a parent of
+  a different color. It also let a few faint seams through on photos. Removed.
+- **Whole-pixel underlay coordinates.** Saved 4–8% but re-opened visible
+  seams (24–47 changed pixels per 10k, ΔE up to 1.0).
+- **Recording blends for hairlines on a plain background.** This made an
+  isolated hairline visible to the thin-feature pass. It helped text
+  (typo-serif@512 0.85 → 0.73) and wordmarks but hurt line art
+  (thin-lines@512 0.27 → 0.44), QR codes and noisy flat art (salt-and-pepper
+  specks became shapes). Rejected under the no-category-regresses rule.
+
+### Memory
+
+**Method.** The isolate's live memory decides whether a Worker survives, not
+process RSS. I measured it three ways:
+
+1. Exact live memory in Node, on the production decode + trace path. Forced
+   GC runs after every pipeline stage, with synchronous ArrayBuffer sweeping
+   (`node --expose-gc --no-concurrent-array-buffer-sweeping`). It counts JS
+   heap plus ArrayBuffers and reports the peak over stages.
+2. The real Workers runtime: `wrangler dev` runs workerd. The V8 inspector
+   (`--inspector-port`) is sampled with `Runtime.getHeapUsage` every 20 ms
+   during real uploads through the API. The trace is synchronous, so samples
+   only land between async steps. These are lower bounds that include
+   uncollected garbage, and they are noisy.
+3. The benchmark's `--memory` column: child-process maxRSS growth of a
+   trace-only run (no decode). Across all 160 traces its mean change is
+   −0.05 MB with ±20 MB per-image noise. It does not show the decoder
+   savings.
+
+**Exact live peak (method 1)**, main @14a2354 → this branch:
+
+| Upload | Quick | Professional |
+|---|---|---|
+| 4 MP JPEG photo | 68.4 → **42.7 MB** (−38%) | 46.2 → **35.6 MB** (−23%) |
+| 4 MP PNG logo | 48.2 → **32.3 MB** (−33%) | 48.3 → **32.4 MB** (−33%) |
+| 600 px PNG logo (upsampled to 1.44 / 1.5 MP) | 40.1 → 39.5 MB | 40.2 → 39.6 MB |
+
+**workerd isolate (method 2, sampled lower bound, heap + ArrayBuffers)**,
+before → after: 4 MP photo Quick 102 → 81 MB, Professional 116 → 91 MB.
+4 MP logo and 600 px logo: 36–48 MB.
+
+What changed:
+
+- **One decode instead of two.** Quick decoded every upload twice: once for
+  image analysis, once for the trace. It now decodes once, analyses that
+  image, and traces it (`decodeForTrace`, `ImageAnalysisService.analyzeDecoded`).
+- **Early downscale.** The full-resolution image is reduced to the working
+  size right after decoding and released before tracing (16 MB for 4 MP).
+  traceImage's `sourceSize` keeps the SVG at the upload's dimensions.
+- **Decoder reset.** A jsquash decoder keeps its last WebAssembly instance,
+  whose memory has grown to fit the largest image decoded and never shrinks
+  (~15 MB after a 4 MP JPEG). Re-initializing the decoder after each decode
+  drops it.
+- **Scoped segmentation.** The per-pixel buffers (working image, OKLab,
+  masks, labels, region ids: ~30 MB at 1.2 MP) now live in their own scope.
+  They are garbage before curve fitting, and polygons and lattice points are
+  released after fitting. Previously everything stayed referenced until
+  traceImage returned. This was Quick's photo peak, at the fit stage.
+
+The 128 MB limit also counts uncollected garbage between GCs. The sampled
+workerd peak for a 4 MP photo in Professional is now ~91 MB, down from ~116 MB.
+Memory cannot be measured on Cloudflare itself without deploying, so a
+production check remains a pre-launch item.
+
+### Resolution: is 4 MP / 1.2 MP enough for print?
+
+Detail-heavy art was rendered at ~4 MP (what the browser sends after its
+downscale). It was traced with working caps of 1.2, 2 and 4 MP and scored
+against the vector truth at the full 4 MP size (`resstudy`, Professional
+profile):
+
+| Case (4 MP) | Working cap | ΔE×100 | Edge err (px of the 4 MP image) | Segments | KB | ms |
+|---|---:|---:|---:|---:|---:|---:|
+| typo-serif 2828×1414 | 1.2 MP | 0.58 | 0.75 | 3,136 | 73 | 1,330 |
+| | 2.0 MP | 0.43 | 0.64 | 3,337 | 73 | 1,536 |
+| | 4.0 MP | 0.19 | 0.38 | 3,454 | 65 | 2,841 |
+| logo-complex 2000² | 1.2 MP | 0.18 | 0.61 | 653 | 17 | 869 |
+| | 2.0 MP | 0.19 | 0.66 | 747 | 18 | 1,408 |
+| | 4.0 MP | 0.06 | 0.25 | 523 | 12 | 1,999 |
+| ornament 2000² | 1.2 MP | 0.21 | 0.59 | 603 | 17 | 751 |
+| | 4.0 MP | 0.05 | 0.15 | 364 | 12 | 1,795 |
+| hex-mosaic 2000² | 1.2 MP | 0.16 | 0.52 | 1,574 | 29 | 635 |
+| | 4.0 MP | 0.06 | 0.22 | 572 | 13 | 2,131 |
+
+Findings:
+
+- At 1.2 MP, a 4 MP upload's edges are placed to within ~0.5–0.75 px of the
+  4 MP image. Printed at 300 dpi that is ≤ 0.06 mm, below what the eye
+  resolves on paper.
+- Tracing at full 4 MP would halve-to-quarter that error, and gives fewer
+  nodes and smaller files. But it needs ~35 B per working pixel (~140 MB),
+  which a Worker cannot hold.
+- 2 MP buys little.
+- Conclusion: keep the 4 MP upload limit and the 1.2 MP working size. The
+  path to more detail is a lower-memory engine (tiled or streaming
+  segmentation), not larger limits; see ROADMAP Q18.
+
+### Still weak
+
+- **An isolated hairline of ≤ 1 px with no other ink nearby** can vanish.
+  This includes a single thin line on a plain background, as in a hairline
+  drawing or signature. Bilinear upsampling plus blur turns it into beads
+  whose gaps fall below the minimum coverage, and speckle cleanup then
+  removes the beads. The same line next to other strokes, or ≥ 1.5 px wide,
+  survives. The fix belongs in the upsampler (edge-directed rather than
+  bilinear).
+- Small serif text is legible but its serifs and joins still break
+  (typo-serif@512 ΔE 0.85).
+- Quick posterizes gradients by design.
+- Photos are a posterized approximation, and Professional photo SVGs are
+  large (~1 MB each).
 
 ## Real-world corpus (2026-10-03)
 
@@ -213,8 +388,8 @@ Engines:
 
 | Engine | Mean ΔE×100 | Mean bad px % | Mean edge err (px) | Mean gaps/10k | Total segments | Total KB | Total ms |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| **professional** | **0.17** | **0.46** | **0.12** | **0.0** | 3,724 | 90.5 | 21,200 |
-| **quick** | **0.29** | **0.46** | **0.11** | **0.0** | 4,575 | 113.3 | 18,323 |
+| **professional** | **0.17** | **0.46** | **0.12** | **0.0** | 3,815 | 88.4 | 25,551 |
+| **quick** | **0.29** | **0.46** | **0.11** | **0.0** | 4,666 | 111.8 | 21,504 |
 | legacy (ImageTracer) | 0.95 | 1.59 | 0.40 | 22.7 | 44,035 | 1,320.4 | 7,207 |
 | legacy Professional pipeline (removed, 22-variant corpus) | 4.37 | 13.47 | 5.95 | n/a¹ | 51,424 | 1,644.0 | 7,487 |
 
@@ -238,30 +413,30 @@ definitions. This improves gradient-mark 0.58 → 0.06, gradient-banner 1.06 →
 
 | Case | Source | Professional ΔE / edge px / segs / KB | Quick ΔE / edge px / segs / KB | Legacy ΔE / edge px / gaps / segs / KB |
 |---|---|---|---|---|
-| flat-logo | 128 | 0.14 / 0.10 / 44 / 1.0 | 0.14 / 0.10 / 44 / 1.0 | 1.29 / 0.37 / 18.8 / 397 / 9.0 |
-| flat-logo | 512 | 0.04 / 0.08 / 49 / 1.1 | 0.04 / 0.08 / 49 / 1.1 | 0.21 / 0.36 / 4.0 / 427 / 20.6 |
-| flat-logo | 512jpg | 0.12 / 0.10 / 100 / 2.2 | 0.12 / 0.10 / 95 / 2.1 | 0.81 / 0.38 / 23.4 / 4092 / 117.7 |
-| wordmark | 256 | 0.60 / 0.16 / 208 / 5.2 | 0.60 / 0.16 / 208 / 5.2 | 2.26 / 0.50 / 35.6 / 1080 / 24.7 |
-| wordmark | 768 | 0.18 / 0.18 / 331 / 6.0 | 0.20 / 0.19 / 277 / 5.9 | 1.16 / 0.41 / 9.4 / 2697 / 51.3 |
-| wordmark | 768jpg | 0.23 / 0.19 / 367 / 7.1 | 0.27 / 0.20 / 320 / 6.5 | 1.10 / 0.76 / 84.7 / 6757 / 212.1 |
+| flat-logo | 128 | 0.14 / 0.09 / 44 / 1.0 | 0.14 / 0.09 / 44 / 1.0 | 1.29 / 0.37 / 18.8 / 397 / 9.0 |
+| flat-logo | 512 | 0.04 / 0.09 / 51 / 1.0 | 0.04 / 0.09 / 51 / 1.0 | 0.21 / 0.36 / 4.0 / 427 / 20.6 |
+| flat-logo | 512jpg | 0.12 / 0.10 / 119 / 2.2 | 0.12 / 0.10 / 116 / 2.2 | 0.81 / 0.38 / 23.4 / 4092 / 117.7 |
+| wordmark | 256 | 0.59 / 0.16 / 212 / 5.3 | 0.59 / 0.16 / 212 / 5.3 | 2.26 / 0.50 / 35.6 / 1080 / 24.7 |
+| wordmark | 768 | 0.17 / 0.18 / 333 / 6.0 | 0.19 / 0.18 / 283 / 5.9 | 1.16 / 0.41 / 9.4 / 2697 / 51.3 |
+| wordmark | 768jpg | 0.22 / 0.18 / 392 / 7.5 | 0.26 / 0.20 / 333 / 6.7 | 1.10 / 0.76 / 84.7 / 6757 / 212.1 |
 | line-icon | 64 | 0.29 / 0.08 / 33 / 0.6 | 0.29 / 0.08 / 33 / 0.6 | 2.93 / 0.63 / 6.9 / 160 / 4.7 |
 | line-icon | 256 | 0.07 / 0.08 / 62 / 0.9 | 0.07 / 0.08 / 62 / 0.9 | 0.73 / 0.44 / 0.9 / 266 / 12.6 |
 | sticker | 160 | 0.06 / 0.07 / 37 / 1.2 | 0.06 / 0.07 / 37 / 1.2 | 0.26 / 0.34 / 8.6 / 418 / 17.3 |
-| sticker | 512 | 0.02 / 0.09 / 45 / 1.6 | 0.02 / 0.09 / 45 / 1.6 | 0.07 / 0.34 / 4.0 / 1131 / 53.3 |
+| sticker | 512 | 0.02 / 0.09 / 49 / 1.4 | 0.02 / 0.09 / 49 / 1.4 | 0.07 / 0.34 / 4.0 / 1131 / 53.3 |
 | fine-detail | 256 | 0.31 / 0.13 / 239 / 6.8 | 0.31 / 0.13 / 239 / 6.8 | 1.11 / 0.32 / 26.2 / 1537 / 67.8 |
-| fine-detail | 768 | 0.19 / 0.22 / 180 / 5.2 | 0.19 / 0.22 / 180 / 5.2 | 0.37 / 0.33 / 6.1 / 3182 / 139.6 |
+| fine-detail | 768 | 0.19 / 0.22 / 180 / 5.2 | 0.19 / 0.22 / 180 / 5.2 | 0.37 / 0.34 / 6.1 / 3182 / 139.6 |
 | wedges | 128 | 0.11 / 0.09 / 139 / 3.7 | 0.11 / 0.09 / 139 / 3.7 | 0.91 / 0.33 / 58.1 / 410 / 10.3 |
-| wedges | 512 | 0.03 / 0.08 / 133 / 3.8 | 0.03 / 0.08 / 133 / 3.8 | 0.56 / 0.33 / 18.3 / 1679 / 42.4 |
-| wedges | 512jpg | 0.12 / 0.15 / 382 / 11.5 | 0.12 / 0.15 / 298 / 8.9 | 0.63 / 0.45 / 19.9 / 3251 / 90.8 |
-| mascot | 200 | 0.16 / 0.11 / 99 / 3.1 | 0.16 / 0.11 / 99 / 3.1 | 0.87 / 0.34 / 60.4 / 576 / 19.3 |
-| mascot | 600 | 0.10 / 0.17 / 125 / 3.7 | 0.10 / 0.17 / 125 / 3.7 | 0.41 / 0.30 / 15.0 / 1472 / 52.0 |
-| mascot | 600jpg | 0.26 / 0.18 / 122 / 3.7 | 0.26 / 0.18 / 144 / 4.3 | 0.56 / 0.38 / 59.6 / 7923 / 218.6 |
+| wedges | 512 | 0.03 / 0.08 / 134 / 3.4 | 0.03 / 0.08 / 134 / 3.4 | 0.56 / 0.33 / 18.3 / 1679 / 42.4 |
+| wedges | 512jpg | 0.12 / 0.15 / 443 / 11.1 | 0.12 / 0.15 / 367 / 9.2 | 0.63 / 0.45 / 19.9 / 3251 / 90.8 |
+| mascot | 200 | 0.16 / 0.11 / 103 / 3.2 | 0.16 / 0.11 / 103 / 3.2 | 0.87 / 0.34 / 60.4 / 576 / 19.3 |
+| mascot | 600 | 0.10 / 0.17 / 143 / 3.5 | 0.10 / 0.17 / 143 / 3.5 | 0.41 / 0.30 / 15.0 / 1472 / 52.0 |
+| mascot | 600jpg | 0.25 / 0.17 / 151 / 3.6 | 0.25 / 0.17 / 173 / 4.0 | 0.56 / 0.38 / 59.6 / 7923 / 218.6 |
 | gradient-mark | 256 | 0.06 / 0.10 / 34 / 1.1 | 0.58 / 0.05 / 157 / 3.9 | 0.74 / 0.41 / 16.5 / 682 / 15.4 |
-| gradient-banner | 384 | 0.14 / 0.09 / 105 / 3.0 | 1.05 / 0.07 / 389 / 10.5 | 1.27 / 0.39 / 4.5 / 530 / 11.6 |
-| gradient-banner | 384jpg | 0.24 / 0.05 / 202 / 6.2 | 1.21 / 0.05 / 609 / 16.8 | 1.35 / 0.39 / 26.5 / 1026 / 31.2 |
+| gradient-banner | 384 | 0.14 / 0.08 / 107 / 3.0 | 1.05 / 0.07 / 389 / 10.5 | 1.27 / 0.39 / 4.5 / 530 / 11.6 |
+| gradient-banner | 384jpg | 0.24 / 0.05 / 202 / 6.2 | 1.22 / 0.06 / 609 / 16.8 | 1.35 / 0.39 / 26.5 / 1026 / 31.2 |
 | radial-glow | 256 | 0.04 / 0.09 / 61 / 2.0 | 0.75 / 0.10 / 266 / 6.7 | 0.69 / 0.38 / 9.3 / 1245 / 25.6 |
-| qr-like | 256 | 0.57 / 0.11 / 511 / 6.7 | 0.57 / 0.11 / 511 / 6.7 | 2.43 / 0.27 / 0.0 / 1599 / 35.8 |
-| blueprint | 512 | 0.05 / 0.06 / 51 / 1.2 | 0.05 / 0.06 / 51 / 1.2 | 0.77 / 0.39 / 0.0 / 180 / 3.1 |
+| qr-like | 256 | 0.58 / 0.11 / 431 / 5.8 | 0.58 / 0.11 / 431 / 5.8 | 2.43 / 0.27 / 0.0 / 1599 / 35.8 |
+| blueprint | 512 | 0.05 / 0.06 / 51 / 1.0 | 0.05 / 0.06 / 51 / 1.0 | 0.77 / 0.39 / 0.0 / 180 / 3.1 |
 | signature | 384 | 0.07 / 0.15 / 65 / 1.8 | 0.07 / 0.15 / 65 / 1.8 | 0.33 / 0.56 / 51.3 / 1318 / 33.8 |
 
 Resource checks (`traceImage` worst cases, Node 22): a 1600×1200 photo-like
@@ -302,3 +477,4 @@ Vectorla stands on this benchmark:
 | 2026-09-28 | + gradient corpus cases (25 variants); Professional gradient reconstruction | 0.22 (Pro) / 0.34 (Quick) | 0.15–0.16 | 0 |
 | 2026-09-28 | + JPEG chroma restoration, blend-sliver dissolve, edge labeling next to thin strokes | **0.18** (Pro) / 0.31 (Quick) | **0.12** | 0 |
 | 2026-10-03 | Real-world corpus (55 images); gradient validation, seam underlay, thin-feature labeling, blend-tint filter, memory limits | 0.17 (Pro) / 0.29 (Quick) core; 0.68 / 0.74 real-world | 0.12 / 0.13 | 0 |
+| 2026-10-03 | Optimization round: palette separation, ridge promotion for thin strokes, size-relative precision, memory (single decode, early downscale, decoder reset, scoped buffers) | 0.52 (Pro) / 0.58 (Quick), 80 images | 0.13 | 0 |

@@ -7,17 +7,20 @@ import { createUploadsRepository } from '../repositories/createUploadsRepository
 import { createConversionsRepository } from '../repositories/createConversionsRepository'
 import type { UploadsRepository } from '../repositories/UploadsRepository'
 import type { ConversionsRepository } from '../repositories/ConversionsRepository'
-import { decodeImage, type RasterDecoderWasm } from '../providers/imageDecoder'
+import { decodeForTrace, type RasterDecoderWasm } from '../providers/imageDecoder'
+import { analyzeImage, type ImageAnalysis } from '../providers/imageAnalysis'
+import { VectorlaProvider } from '../providers/VectorlaProvider'
+import type { ImageAnalysisResult } from './ImageAnalysisService'
 import type { VectorizationResult } from '../providers/VectorizationProvider'
 import { createProviderByName } from '../providers/ProviderFactory'
 import { ImageAnalysisService, createImageAnalysisService } from './ImageAnalysisService'
 import {
-  runProfessionalTrace,
+  runDecodedTracePipeline,
   PROFESSIONAL_TRACE_JOB_PRESET,
   PROFESSIONAL_TRACE_CREDIT_MULTIPLIER,
 } from '../pipeline/ProfessionalTracePipeline'
 import { CreditsService, createCreditsService, calculateRequiredCredits } from './CreditsService'
-import { sourceFormatFromMime } from '../engine/profiles'
+import { engineOptionsFor, sourceFormatFromMime } from '../engine/profiles'
 import { NotFoundError, NotImplementedError, InsufficientCreditsError, PayloadTooLargeError, UnsupportedMediaTypeError, ValidationError } from '../errors'
 
 /** Result of looking up a job's conversion — see ConversionService.getConversionByJob. */
@@ -133,9 +136,14 @@ export class ConversionService {
 
   /** Professional Trace: the engine's Professional profile, ImageTracer fallback on failure. */
   private async traceProfessional(jobId: string, upload: Upload, fileBytes: ArrayBuffer): Promise<VectorizationResult> {
-    const imageData = await decodeImage(upload.mimeType, fileBytes, this.decoderWasm)
+    // Decode once and shrink to the working size right away: the
+    // full-resolution pixels must not stay alive during the trace (memory).
+    let analysis!: ImageAnalysis
+    const decoded = await decodeForTrace(upload.mimeType, fileBytes, this.decoderWasm, engineOptionsFor('professional').maxWorkingPixels!, (full) => {
+      analysis = analyzeImage(full)
+    })
     try {
-      const pipelineResult = runProfessionalTrace(imageData, sourceFormatFromMime(upload.mimeType))
+      const pipelineResult = runDecodedTracePipeline(decoded, analysis, 'professional', sourceFormatFromMime(upload.mimeType))
       console.log(
         `[professional-trace] job "${jobId}": provider=${pipelineResult.provider} profile=${pipelineResult.tracePreset} ` +
           `colors=${pipelineResult.engine.paletteSize} paths=${pipelineResult.engine.pathCount} ` +
@@ -160,11 +168,17 @@ export class ConversionService {
    * is only used by the ImageTracer fallback.
    */
   private async traceQuick(jobId: string, jobPreset: string | null, upload: Upload, fileBytes: ArrayBuffer): Promise<VectorizationResult> {
-    const analysis = await this.imageAnalysis.analyze(upload, fileBytes)
+    // One decode serves both analysis (full resolution) and the trace
+    // (working size); the full-resolution pixels are released before tracing.
+    let analysis!: ImageAnalysisResult
+    const decoded = await decodeForTrace(upload.mimeType, fileBytes, this.decoderWasm, engineOptionsFor('quick', jobPreset).maxWorkingPixels!, (full) => {
+      analysis = this.imageAnalysis.analyzeDecoded(full)
+    })
     const legacyPreset = jobPreset ?? analysis.recommendedTracePreset
     try {
+      if (analysis.recommendedProvider === 'vectorla') return new VectorlaProvider(this.decoderWasm).vectorizeDecoded(upload, decoded, jobPreset)
       const provider = createProviderByName(analysis.recommendedProvider, this.decoderWasm)
-      return await provider.vectorize(upload, fileBytes, analysis.recommendedProvider === 'vectorla' ? jobPreset : legacyPreset)
+      return await provider.vectorize(upload, fileBytes, legacyPreset)
     } catch (error) {
       // Unimplemented providers (vision/openai) and any unexpected failure
       // of the Vectorla engine fall back to the ImageTracer engine, so a

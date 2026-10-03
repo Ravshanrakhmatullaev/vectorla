@@ -141,34 +141,59 @@ export function bilateralDenoise(image: RgbaImage, radius: number, rangeSigma: n
   const rangeLut = new Float32Array(3 * 255 * 255 + 1)
   for (let d = 0; d < rangeLut.length; d++) rangeLut[d] = Math.exp(-d / rangeDenom)
 
+  const spatialW = Float64Array.from(spatial)
+  const size = 2 * radius + 1
   for (let y = 0; y < h; y++) {
+    const yInside = y >= radius && y < h - radius
     for (let x = 0; x < w; x++) {
       const i = (y * w + x) * 4
-      const r0 = src[i] ?? 0
-      const g0 = src[i + 1] ?? 0
-      const b0 = src[i + 2] ?? 0
+      const r0 = src[i]!
+      const g0 = src[i + 1]!
+      const b0 = src[i + 2]!
       let sr = 0
       let sg = 0
       let sb = 0
       let sw = 0
-      let k = 0
-      for (let dy = -radius; dy <= radius; dy++) {
-        const ny = y + dy
-        for (let dx = -radius; dx <= radius; dx++, k++) {
-          const nx = x + dx
-          if (ny < 0 || ny >= h || nx < 0 || nx >= w) continue
-          const j = (ny * w + nx) * 4
-          const r = src[j] ?? 0
-          const g = src[j + 1] ?? 0
-          const b = src[j + 2] ?? 0
-          const dr = r - r0
-          const dg = g - g0
-          const db = b - b0
-          const weight = (spatial[k] ?? 0) * (rangeLut[dr * dr + dg * dg + db * db] ?? 0) * ((src[j + 3] ?? 0) / 255)
-          sr += r * weight
-          sg += g * weight
-          sb += b * weight
-          sw += weight
+      if (yInside && x >= radius && x < w - radius) {
+        // Interior: no bounds checks. Same taps, same order, same arithmetic
+        // as the edge path below, so the result is bit-identical.
+        for (let dy = 0; dy < size; dy++) {
+          let j = ((y + dy - radius) * w + (x - radius)) * 4
+          const row = dy * size
+          for (let dx = 0; dx < size; dx++, j += 4) {
+            const r = src[j]!
+            const g = src[j + 1]!
+            const b = src[j + 2]!
+            const dr = r - r0
+            const dg = g - g0
+            const db = b - b0
+            const weight = spatialW[row + dx]! * rangeLut[dr * dr + dg * dg + db * db]! * (src[j + 3]! / 255)
+            sr += r * weight
+            sg += g * weight
+            sb += b * weight
+            sw += weight
+          }
+        }
+      } else {
+        let k = 0
+        for (let dy = -radius; dy <= radius; dy++) {
+          const ny = y + dy
+          for (let dx = -radius; dx <= radius; dx++, k++) {
+            const nx = x + dx
+            if (ny < 0 || ny >= h || nx < 0 || nx >= w) continue
+            const j = (ny * w + nx) * 4
+            const r = src[j]!
+            const g = src[j + 1]!
+            const b = src[j + 2]!
+            const dr = r - r0
+            const dg = g - g0
+            const db = b - b0
+            const weight = spatialW[k]! * rangeLut[dr * dr + dg * dg + db * db]! * (src[j + 3]! / 255)
+            sr += r * weight
+            sg += g * weight
+            sb += b * weight
+            sw += weight
+          }
         }
       }
       if (sw > 0) {
@@ -180,7 +205,7 @@ export function bilateralDenoise(image: RgbaImage, radius: number, rangeSigma: n
         out[i + 1] = g0
         out[i + 2] = b0
       }
-      out[i + 3] = src[i + 3] ?? 0
+      out[i + 3] = src[i + 3]!
     }
   }
   return { width: w, height: h, data: out }

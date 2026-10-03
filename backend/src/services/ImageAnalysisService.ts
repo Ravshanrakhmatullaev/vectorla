@@ -90,7 +90,11 @@ export class ImageAnalysisService {
   constructor(private readonly wasm: RasterDecoderWasm) {}
 
   async analyze(upload: Upload, fileBytes: ArrayBuffer): Promise<ImageAnalysisResult> {
-    const imageData = await decodeImage(upload.mimeType, fileBytes, this.wasm)
+    return this.analyzeDecoded(await decodeImage(upload.mimeType, fileBytes, this.wasm))
+  }
+
+  /** Analysis of an image the caller already decoded (avoids a second decode). */
+  analyzeDecoded(imageData: ImageData): ImageAnalysisResult {
     const base: ImageAnalysis = analyzeImage(imageData)
 
     const imageType = toImageType(base.recommendedPreset)

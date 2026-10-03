@@ -3,6 +3,8 @@ import { assertDecodableDimensions } from './imageDimensions'
 import { init as initPngDecoder, default as decodePng } from '@jsquash/png/decode.js'
 import { init as initJpegDecoder, default as decodeJpeg } from '@jsquash/jpeg/decode.js'
 import { init as initWebpDecoder, default as decodeWebp } from '@jsquash/webp/decode.js'
+import { fitWorkingSize } from '../engine/traceImage'
+import type { RgbaImage } from '../engine/raster'
 
 export interface RasterDecoderWasm {
   png: WebAssembly.Module
@@ -30,16 +32,29 @@ export async function decodeImage(mimeType: string, fileBytes: ArrayBuffer, wasm
     }
   }
   try {
+    // Each decoder instance's WebAssembly memory grows to fit the largest
+    // image it has decoded and never shrinks, and the decoder module keeps
+    // its last instance. Re-initializing after the decode drops that
+    // instance, so ~15 MB (4 MP JPEG) is not held through the trace.
     switch (mimeType) {
-      case 'image/png':
+      case 'image/png': {
         await initPngDecoder(wasm.png)
-        return await decodePng(fileBytes)
-      case 'image/jpeg':
+        const image = await decodePng(fileBytes)
+        await initPngDecoder(wasm.png)
+        return image
+      }
+      case 'image/jpeg': {
         await initJpegDecoder(wasm.jpeg)
-        return await decodeJpeg(fileBytes)
-      case 'image/webp':
+        const image = await decodeJpeg(fileBytes)
+        await initJpegDecoder(wasm.jpeg)
+        return image
+      }
+      case 'image/webp': {
         await initWebpDecoder(wasm.webp)
-        return await decodeWebp(fileBytes)
+        const image = await decodeWebp(fileBytes)
+        await initWebpDecoder(wasm.webp)
+        return image
+      }
       default:
         throw new UnsupportedMediaTypeError(`Cannot vectorize unsupported mime type "${mimeType}"`)
     }
@@ -48,4 +63,30 @@ export async function decodeImage(mimeType: string, fileBytes: ArrayBuffer, wasm
     const reason = error instanceof Error ? error.message : String(error)
     throw new Error(`Failed to decode ${mimeType} image: ${reason}`)
   }
+}
+
+/** A decoded upload already reduced to the engine's working size. */
+export interface DecodedForTrace {
+  image: RgbaImage
+  /** The upload's real size, passed to traceImage as `sourceSize`. */
+  sourceSize: { width: number; height: number }
+}
+
+/**
+ * Decodes an upload and immediately reduces it to the engine's working size,
+ * so the full-resolution pixels (16 MB for a 4 MP image) are garbage before
+ * tracing starts instead of staying alive through it. A Worker isolate has
+ * 128 MB in total; see BENCHMARKS.md "Memory". `inspect` sees the
+ * full-resolution image first (image analysis).
+ */
+export async function decodeForTrace(
+  mimeType: string,
+  fileBytes: ArrayBuffer,
+  wasm: RasterDecoderWasm,
+  maxWorkingPixels: number,
+  inspect?: (full: ImageData) => void,
+): Promise<DecodedForTrace> {
+  const full = await decodeImage(mimeType, fileBytes, wasm)
+  inspect?.(full)
+  return { image: fitWorkingSize(full, maxWorkingPixels), sourceSize: { width: full.width, height: full.height } }
 }

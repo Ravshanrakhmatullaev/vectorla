@@ -131,7 +131,10 @@ multi-format export, batch workflows, and launch operations remain incomplete.
   stroke along edges shared with later shapes (no seams), and labeling keeps
   sub-pixel hairlines (coverage-preserving thin features).
 - Uploads are limited to 4 MP (decode memory, `config/index.ts`); the web app
-  downscales larger images in the browser first (`src/utils/fitImageForUpload.ts`). Legacy
+  downscales larger images in the browser first (`src/utils/fitImageForUpload.ts`).
+  The Worker decodes each upload once (`decodeForTrace`), shrinks it to the
+  working size immediately and resets the WASM decoder, so a 4 MP trace peaks
+  at ~36–43 MB live (BENCHMARKS.md "Optimization round"). Legacy
   preset names sent explicitly as `Job.preset` adjust engine options.
 - `ImageTracer` (`PlaceholderProvider`) is the automatic fallback if the
   engine throws; `PotraceProvider` is still available; Vision/OpenAI remain stubs.

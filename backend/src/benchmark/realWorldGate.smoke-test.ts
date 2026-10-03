@@ -14,10 +14,10 @@ function assertTrue(condition: boolean, message: string): void {
 
 // Budgets sit ~20% above the values measured in BENCHMARKS.md.
 const BUDGETS = {
-  // Measured: ΔE 0.74, edge 0.13 px, 5,069 KB in total.
-  quick: { meanDeltaE: 0.9, meanEdgeError: 0.16, totalKb: 6100 },
-  // Measured: ΔE 0.68, edge 0.13 px, 5,732 KB in total.
-  professional: { meanDeltaE: 0.82, meanEdgeError: 0.16, totalKb: 6900 },
+  // Measured: ΔE 0.71, edge 0.13 px, 4,767 KB in total.
+  quick: { meanDeltaE: 0.85, meanEdgeError: 0.16, totalKb: 5700 },
+  // Measured: ΔE 0.68, edge 0.13 px, 5,351 KB in total.
+  professional: { meanDeltaE: 0.8, meanEdgeError: 0.16, totalKb: 6400 },
 }
 
 const mean = (rows: BenchmarkRow[], pick: (r: BenchmarkRow) => number) => rows.reduce((s, r) => s + pick(r), 0) / Math.max(1, rows.length)
@@ -53,10 +53,18 @@ async function run(): Promise<void> {
     // thin-lines@256 kept 32% of its edge length before, ~95-105% now.
     const thin = find(mine, 'thin-lines', '256')
     assertTrue(thin.edgeLengthRatio >= 0.85, `${engine}: thin-lines@256 edge-length ratio ${thin.edgeLengthRatio.toFixed(2)} < 0.85 (hairlines lost)`)
-    assertTrue(thin.meanDeltaE <= 0.85, `${engine}: thin-lines@256 ΔE ${thin.meanDeltaE.toFixed(2)} exceeds 0.85`)
-    // Small italic text broken by a blend-tint palette color (was 1.03).
+    // ...and a shallow 0.75 px diagonal came out dashed (Quick 0.70 before the ridge rule, 0.49 after).
+    assertTrue(thin.meanDeltaE <= 0.62, `${engine}: thin-lines@256 ΔE ${thin.meanDeltaE.toFixed(2)} exceeds 0.62`)
+    // Small italic text: broken by a blend-tint palette color (1.03), then by
+    // split-coverage stroke pixels (0.92); 0.85 now.
     const serif = find(mine, 'typo-serif', '512')
-    assertTrue(serif.meanDeltaE <= 0.94, `${engine}: typo-serif@512 ΔE ${serif.meanDeltaE.toFixed(2)} exceeds 0.94`)
+    assertTrue(serif.meanDeltaE <= 0.9, `${engine}: typo-serif@512 ΔE ${serif.meanDeltaE.toFixed(2)} exceeds 0.9`)
+    // Quick merged a pale fill into the white background on a q40 JPEG logo
+    // (ΔE 1.60) and on a blurred emoji (0.50); palette separation keeps them.
+    const jpegLogo = find(mine, 'logo-complex', '512jpgq40')
+    assertTrue(jpegLogo.meanDeltaE <= 0.6, `${engine}: logo-complex@512jpgq40 ΔE ${jpegLogo.meanDeltaE.toFixed(2)} exceeds 0.6 (pale fill merged?)`)
+    const blurred = find(mine, 'emoji-fox', '256blur1.2')
+    assertTrue(blurred.meanDeltaE <= 0.25, `${engine}: emoji-fox@256blur1.2 ΔE ${blurred.meanDeltaE.toFixed(2)} exceeds 0.25`)
     console.log(`PASS: ${engine} — mean ΔE ${meanDeltaE.toFixed(2)}, mean edge ${meanEdge.toFixed(2)}px, ${totalKb.toFixed(0)} KB, no failures or seams`)
   }
 

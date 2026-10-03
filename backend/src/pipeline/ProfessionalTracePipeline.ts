@@ -2,6 +2,7 @@ import type { VectorizationProviderName } from '../providers/VectorizationProvid
 import type { TracePresetName } from '../providers/tracePresets'
 import { analyzeImage, type ImageAnalysis } from '../providers/imageAnalysis'
 import { traceImage, type TraceEngineStats } from '../engine/traceImage'
+import type { DecodedForTrace } from '../providers/imageDecoder'
 import { engineOptionsFor, type SourceFormat } from '../engine/profiles'
 
 /**
@@ -49,9 +50,17 @@ export interface PipelineResult {
 export type TraceMode = 'quick' | 'professional'
 
 export function runTracePipeline(imageData: ImageData, mode: TraceMode, sourceFormat: SourceFormat = 'unknown'): PipelineResult {
+  const decoded: DecodedForTrace = { image: imageData, sourceSize: { width: imageData.width, height: imageData.height } }
+  return runDecodedTracePipeline(decoded, analyzeImage(imageData), mode, sourceFormat)
+}
+
+/**
+ * The pipeline for an upload decoded with decodeForTrace: `analysis` was
+ * taken from the full-resolution image, which is no longer held.
+ */
+export function runDecodedTracePipeline(decoded: DecodedForTrace, analysis: ImageAnalysis, mode: TraceMode, sourceFormat: SourceFormat = 'unknown'): PipelineResult {
   const start = performance.now()
-  const analysis = analyzeImage(imageData)
-  const result = traceImage(imageData, { ...engineOptionsFor(mode), sourceFormat })
+  const result = traceImage(decoded.image, { ...engineOptionsFor(mode), sourceFormat, sourceSize: decoded.sourceSize })
   const stageTimings: StageTiming[] = Object.entries(result.stats.timingsMs).map(([name, durationMs]) => ({ name, durationMs, enabled: true }))
   return {
     svg: result.svg,
