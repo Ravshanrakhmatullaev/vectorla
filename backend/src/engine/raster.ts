@@ -28,7 +28,8 @@ export interface RgbaImage {
  * most one axis neighbour of its own colour, which rejects checkerboard
  * corners (two blocks touching diagonally) that look like a diagonal line in
  * a 3x3 window, and no far stronger neighbour along the line (block
- * corners). The mask is dilated by one pixel to cover the bicubic support.
+ * corners). Runs shorter than MIN_RIDGE_RUN pixels (speckles, noise) are
+ * dropped, and the mask is dilated by one pixel to cover the bicubic support.
  */
 export function ridgeMask(image: RgbaImage, threshold: number): Uint8Array {
   const { width: w, height: h, data } = image
@@ -66,17 +67,46 @@ export function ridgeMask(image: RgbaImage, threshold: number): Uint8Array {
         const dx = dirs[d]!
         const dy = dirs[d + 1]!
         if (x - dx < 0 || x + dx >= w || y - dy < 0 || y - dy >= h || y + dy < 0 || y + dy >= h) continue
-        for (let c = 0; c < 4 && !ridge; c++) {
+        for (let c = 0; c < 4; c++) {
           const v = at(x, y, c)
           const da = v - at(x - dx, y - dy, c)
           const db = v - at(x + dx, y + dy, c)
           if (da >= threshold ? db >= threshold : da <= -threshold && db <= -threshold) {
             ridge = similar(x - dx, y - dy, x + dx, y + dy) && (dx === 0 || dy === 0 || (axisTwins(x, y) <= 1 && !strongerAlong(x, y, dx, dy, c)))
+            break
           }
         }
       }
       if (ridge) raw[y * w + x] = 1
     }
+  }
+  // A hairline is a run of ridge pixels (with one-pixel breaks where it
+  // crosses between pixel rows); noise is scattered pairs. Keep only runs of
+  // at least MIN_RIDGE_RUN pixels, linked across gaps of one pixel (5x5).
+  const MIN_RIDGE_RUN = 4
+  const stack = new Int32Array(w * h)
+  const run: number[] = []
+  for (let start = 0; start < w * h; start++) {
+    if (raw[start] !== 1) continue
+    raw[start] = 2
+    stack[0] = start
+    let top = 1
+    run.length = 0
+    while (top > 0) {
+      const p = stack[--top]!
+      run.push(p)
+      const px = p % w
+      const py = (p - px) / w
+      for (let j = Math.max(0, py - 2); j <= Math.min(h - 1, py + 2); j++)
+        for (let i = Math.max(0, px - 2); i <= Math.min(w - 1, px + 2); i++) {
+          const q = j * w + i
+          if (raw[q] === 1) {
+            raw[q] = 2
+            stack[top++] = q
+          }
+        }
+    }
+    if (run.length < MIN_RIDGE_RUN) for (const p of run) raw[p] = 0
   }
   const mask = new Uint8Array(w * h)
   for (let y = 0; y < h; y++) {

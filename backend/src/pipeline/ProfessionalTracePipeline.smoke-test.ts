@@ -75,6 +75,17 @@ function run(): void {
   assertTrue(jpegTrace.svg.startsWith('<svg'), 'JPEG-hinted trace still produces an SVG')
   console.log('PASS: JPEG source hint enables edge-preserving denoise')
 
+  // 6. The caller's pixels are never used as engine scratch space: tracing
+  // the same image twice (Quick then Professional, as the benchmark does) must
+  // match tracing a fresh copy.
+  const shared = makeNoisyMark()
+  const pristine = shared.data.slice()
+  runQuickTrace(shared, 'jpeg')
+  assertTrue(shared.data.every((v, i) => v === pristine[i]), 'runTracePipeline leaves the input pixels untouched')
+  const fresh = makeNoisyMark()
+  assertEqual(runProfessionalTrace(shared, 'jpeg').svg, runProfessionalTrace(fresh, 'jpeg').svg, 'a second trace of the same image matches a fresh copy')
+  console.log('PASS: input pixels are left untouched')
+
   console.log('\nAll Professional Trace pipeline smoke tests passed.')
 }
 

@@ -1,7 +1,7 @@
 import type { VectorizationProviderName } from '../providers/VectorizationProvider'
 import type { TracePresetName } from '../providers/tracePresets'
 import { analyzeImage, type ImageAnalysis } from '../providers/imageAnalysis'
-import { traceOwnedImage, type TraceEngineStats } from '../engine/traceImage'
+import { traceImage, traceOwnedImage, type TraceEngineResult, type TraceEngineStats } from '../engine/traceImage'
 import type { DecodedForTrace } from '../providers/imageDecoder'
 import { engineOptionsFor, type SourceFormat } from '../engine/profiles'
 
@@ -49,9 +49,11 @@ export interface PipelineResult {
 
 export type TraceMode = 'quick' | 'professional'
 
+/** Traces a caller-owned image; `imageData` is left untouched. */
 export function runTracePipeline(imageData: ImageData, mode: TraceMode, sourceFormat: SourceFormat = 'unknown'): PipelineResult {
-  const decoded: DecodedForTrace = { image: imageData, sourceSize: { width: imageData.width, height: imageData.height } }
-  return runDecodedTracePipeline(decoded, analyzeImage(imageData), mode, sourceFormat)
+  const start = performance.now()
+  const analysis = analyzeImage(imageData)
+  return pipelineResult(traceImage(imageData, { ...engineOptionsFor(mode), sourceFormat }), analysis, start)
 }
 
 /**
@@ -60,7 +62,12 @@ export function runTracePipeline(imageData: ImageData, mode: TraceMode, sourceFo
  */
 export function runDecodedTracePipeline(decoded: DecodedForTrace, analysis: ImageAnalysis, mode: TraceMode, sourceFormat: SourceFormat = 'unknown'): PipelineResult {
   const start = performance.now()
-  const result = traceOwnedImage(decoded, { ...engineOptionsFor(mode), sourceFormat, sourceSize: decoded.sourceSize })
+  // The decoded image is handed over: the engine reuses its buffer and the
+  // caller's reference is cleared, so the full decode is not kept alive.
+  return pipelineResult(traceOwnedImage(decoded, { ...engineOptionsFor(mode), sourceFormat, sourceSize: decoded.sourceSize }), analysis, start)
+}
+
+function pipelineResult(result: TraceEngineResult, analysis: ImageAnalysis, start: number): PipelineResult {
   const stageTimings: StageTiming[] = Object.entries(result.stats.timingsMs).map(([name, durationMs]) => ({ name, durationMs, enabled: true }))
   return {
     svg: result.svg,
