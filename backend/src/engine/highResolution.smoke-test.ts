@@ -86,4 +86,27 @@ for (const { id, maxEdge } of HIGH_RES) {
   console.log(`PASS: ${id} at ${truth.width}x${truth.height}: edge ${d.boundaryError.toFixed(2)} px, ΔE ${d.meanDeltaE.toFixed(2)}, ${(out.svg.length / 1024).toFixed(1)} KB, ${seconds.toFixed(1)} s`)
 }
 
+// --- 3. CPU bound on long regular edges -------------------------------------
+// A 2000² black/white pattern of 6 px diagonal stripes is "flat" artwork, so
+// it is traced at full resolution; its edges are long perfect staircases.
+// The optimal-polygon search was quadratic in chain length there (63 s in
+// Quick, over a Worker's 60 s CPU limit); it is now capped (curveFit.ts
+// MAX_SEGMENT_POINTS). Measured ~7 s; the bound leaves room for slow CI.
+{
+  const n = 2000
+  const data = new Uint8ClampedArray(n * n * 4)
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      const v = ((x + y) / 6) & 1 ? 255 : 0
+      data.set([v, v, v, 255], (y * n + x) * 4)
+    }
+  }
+  const start = performance.now()
+  const out = traceImage({ width: n, height: n, data }, { ...engineOptionsFor('quick'), sourceFormat: 'png' })
+  const seconds = (performance.now() - start) / 1000
+  assertTrue(out.stats.workingWidth === n, 'diagonal stripes are traced at full resolution')
+  assertTrue(seconds < 25, `2000² diagonal stripes traced in ${seconds.toFixed(1)} s (must stay far below the 60 s CPU limit)`)
+  console.log(`PASS: 2000² diagonal stripes traced in ${seconds.toFixed(1)} s (< 25 s; was 63 s)`)
+}
+
 console.log('\nAll high-resolution and hairline smoke tests passed.')

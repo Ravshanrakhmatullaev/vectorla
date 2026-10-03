@@ -8,6 +8,9 @@ import { CreditsService } from './CreditsService'
 import { InMemoryJobsRepository } from '../repositories/InMemoryJobsRepository'
 import { InMemoryUploadsRepository } from '../repositories/InMemoryUploadsRepository'
 import { InMemoryCreditsRepository } from '../repositories/InMemoryCreditsRepository'
+import { InMemoryConversionsRepository } from '../repositories/InMemoryConversionsRepository'
+import { StorageService } from './StorageService'
+import type { R2Client } from '../integrations/r2'
 import type { QueueClient, ConversionQueueMessage } from '../integrations/queue'
 import type { Upload } from '../types'
 
@@ -144,7 +147,23 @@ async function run() {
   // Trace after Quick already finished must not stack charges.
   const creditsRepo = new InMemoryCreditsRepository()
   const creditsService = new CreditsService(creditsRepo)
-  const serviceWithCredits = new JobService(jobsRepo, uploadsRepo, queueService, creditsService)
+  const conversionsRepo = new InMemoryConversionsRepository()
+  const storedKeys = new Set<string>()
+  const fakeR2: R2Client = {
+    async put(key) {
+      storedKeys.add(key)
+    },
+    async get(key) {
+      return storedKeys.has(key) ? new ReadableStream() : null
+    },
+    async delete(key) {
+      storedKeys.delete(key)
+    },
+    async list(prefix) {
+      return [...storedKeys].filter((key) => key.startsWith(prefix))
+    },
+  }
+  const serviceWithCredits = new JobService(jobsRepo, uploadsRepo, queueService, creditsService, conversionsRepo, new StorageService(fakeR2, 'test-secret'))
 
   await seedUpload(uploadsRepo, { id: 'upload-2', userId: 'user-2' })
   await creditsService.grantMonthlyCredits('user-2', 'free')
@@ -152,6 +171,9 @@ async function run() {
   const quickJob = await serviceWithCredits.createJob({ userId: 'user-2', uploadId: 'upload-2' })
   await serviceWithCredits.markProcessing(quickJob.id)
   await creditsService.debitCredits('user-2', 1, 'Quick Trace conversion', quickJob.id)
+  const quickKey = `conversions/user-2/${quickJob.id}/output.svg`
+  await fakeR2.put(quickKey, new ArrayBuffer(1))
+  await conversionsRepo.create({ id: 'conv-quick', jobId: quickJob.id, userId: 'user-2', format: 'svg', storageKey: quickKey, fileSizeBytes: 1, downloadUrl: null, createdAt: new Date().toISOString() })
   await serviceWithCredits.markCompleted(quickJob.id)
   assertEqual((await creditsService.getBalance('user-2')).balance, 9, 'balance after the Quick Trace debit')
 
@@ -167,7 +189,9 @@ async function run() {
     10,
     "the superseded Quick Trace job's debit is refunded before the new job is created",
   )
-  console.log('PASS: createJob refunds a superseded completed job\'s debit before creating the replacement job')
+  assertEqual(await conversionsRepo.findByJobId(quickJob.id), null, "the superseded job's result row is deleted")
+  assertTrue(!storedKeys.has(quickKey), "the superseded job's stored file is deleted")
+  console.log('PASS: createJob deletes a superseded completed job\'s result and refunds its debit before creating the replacement job')
 
   // 8b. Idempotent: re-requesting with the same supersedesJobId (e.g. a
   // client retry) must not refund twice.

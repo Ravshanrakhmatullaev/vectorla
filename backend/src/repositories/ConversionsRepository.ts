@@ -9,6 +9,8 @@ export interface ConversionsRepository {
   findByUserId(userId: string): Promise<Conversion[]>
   /** Used by routes/download.ts to resolve a signed download URL's R2 key back to its Conversion row. */
   findByStorageKey(storageKey: string): Promise<Conversion | null>
+  /** Removes a superseded result's row (JobService.createJob); its stored file is deleted first. */
+  delete(id: string): Promise<void>
   /** Used by OrphanCleanupService to cross-reference DB rows against R2 — not paginated, fine for today's scale. */
   listAll(): Promise<Conversion[]>
 }

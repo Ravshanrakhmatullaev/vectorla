@@ -14,6 +14,10 @@ export class InMemoryConversionsRepository implements ConversionsRepository {
     return conversion
   }
 
+  async delete(id: string): Promise<void> {
+    this.conversionsById.delete(id)
+  }
+
   async findById(id: string): Promise<Conversion | null> {
     return this.conversionsById.get(id) ?? null
   }

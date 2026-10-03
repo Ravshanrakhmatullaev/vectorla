@@ -1,6 +1,7 @@
 import { PayloadTooLargeError, UnsupportedMediaTypeError } from '../errors'
 import { assertDecodableDimensions } from './imageDimensions'
-import { init as initPngDecoder, default as decodePng } from '@jsquash/png/decode.js'
+import { decodePngFresh } from './pngDecoder'
+import { stripJpegMetadata } from './jpegSegments'
 import { init as initJpegDecoder, default as decodeJpeg } from '@jsquash/jpeg/decode.js'
 import { init as initWebpDecoder, default as decodeWebp } from '@jsquash/webp/decode.js'
 import { fitWorkingSize, workingPixelCap, type TraceEngineOptions } from '../engine/traceImage'
@@ -36,23 +37,27 @@ export async function decodeImage(mimeType: string, fileBytes: ArrayBuffer, wasm
     // Each decoder instance's WebAssembly memory grows to fit the largest
     // image it has decoded and never shrinks, and the decoder module keeps
     // its last instance. Re-initializing after the decode drops that
-    // instance, so ~15 MB (4 MP JPEG) is not held through the trace.
+    // instance (JPEG, WebP), so ~20-50 MB (4 MP JPEG) is not held through
+    // the trace; PNG uses a fresh instance per decode instead.
     switch (mimeType) {
       case 'image/png': {
-        await initPngDecoder(wasm.png)
-        const image = await decodePng(fileBytes)
-        await initPngDecoder(wasm.png)
+        // A fresh instance per decode (pngDecoder.ts): jsquash's own PNG
+        // glue keeps one instance, so re-initializing cannot release it.
+        const image = decodePngFresh(wasm.png, fileBytes)
+        checkpoint('decoder')
         return image
       }
       case 'image/jpeg': {
         await initJpegDecoder(wasm.jpeg)
-        const image = await decodeJpeg(fileBytes)
+        const image = await decodeJpeg(stripJpegMetadata(fileBytes))
+        checkpoint('decoder')
         await initJpegDecoder(wasm.jpeg)
         return image
       }
       case 'image/webp': {
         await initWebpDecoder(wasm.webp)
         const image = await decodeWebp(fileBytes)
+        checkpoint('decoder')
         await initWebpDecoder(wasm.webp)
         return image
       }

@@ -88,9 +88,10 @@ export function useUploadFlow() {
    * Switching only makes sense once the current job is completed or failed.
    *
    * If the mode being switched away from already completed (and so was
-   * billed), its job id is passed as supersedesJobId so the backend refunds
-   * that charge before billing the new job — switching modes is never
-   * additive on top of a prior charge (see backend/API.md's POST /jobs).
+   * billed), its job id is passed as supersedesJobId so the backend deletes
+   * that result and refunds its charge before billing the new job — switching
+   * modes is never additive on top of a prior charge, and only the latest
+   * result is kept (see backend/API.md's POST /jobs).
    */
   const selectTraceMode = useCallback(
     async (mode: TraceMode) => {
@@ -106,6 +107,13 @@ export function useUploadFlow() {
         }
         const supersedesJobId = state.status === 'completed' ? state.jobId : undefined
         const job = await createJob(uploadId, mode === 'professional' ? PROFESSIONAL_TRACE_PRESET : undefined, supersedesJobId)
+        // The superseded job was refunded and its result deleted, so it must
+        // not be reused when switching back: that mode starts a new job.
+        if (supersedesJobId) {
+          for (const key of Object.keys(jobIdsRef.current) as TraceMode[]) {
+            if (jobIdsRef.current[key] === supersedesJobId) jobIdsRef.current[key] = null
+          }
+        }
         jobIdsRef.current[mode] = job.id
         applyJob(job)
       } catch (error) {

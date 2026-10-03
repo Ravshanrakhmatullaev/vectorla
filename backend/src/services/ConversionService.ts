@@ -72,8 +72,13 @@ export class ConversionService {
       return existing ? [existing] : []
     }
     // Terminal: a failed job is never reprocessed by a stale delivery (the
-    // user retries by creating a new job). Its credits were already refunded.
-    if (job.status === 'failed') return []
+    // user retries by creating a new job). Its refund is re-applied: a no-op
+    // if failJob already refunded it (at most one refund per job), and the
+    // recovery path if failJob marked it failed but the refund call failed.
+    if (job.status === 'failed') {
+      await this.credits.refundJobDebit(job.userId, job.id, `Refund: job failed (${(job.errorMessage ?? 'unknown').slice(0, 120)})`)
+      return []
+    }
 
     const upload = await this.uploads.findById(job.uploadId)
     if (!upload) {

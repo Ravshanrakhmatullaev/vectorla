@@ -6,7 +6,10 @@
 // Run with: npx tsx src/providers/imageDecoder.smoke-test.ts (from inside backend/)
 import { decodeForTrace, decodeImage } from './imageDecoder'
 import { loadDecoderWasmModules, createTestPng, createTestJpeg, createTestWebp } from '../testSupport/wasmTestFixtures'
-import { encodeTestPng } from '../testSupport/rasterEncode'
+import { encodeTestJpeg, encodeTestPng } from '../testSupport/rasterEncode'
+import { stripJpegMetadata } from './jpegSegments'
+import { PayloadTooLargeError } from '../errors'
+import { init as initJsquashPng, default as decodeJsquashPng } from '@jsquash/png/decode.js'
 
 function assertTrue(condition: boolean, message: string): void {
   if (!condition) throw new Error(message)
@@ -47,6 +50,44 @@ async function run(): Promise<void> {
   await decodeForTrace('image/png', png.slice(0), wasm, { maxWorkingPixels: 30_000, photoMaxWorkingPixels: 30_000 }, (full) => (inspected = full.width * full.height))
   assertTrue(inspected === 120_000, 'inspect callback sees the full-resolution image')
   console.log(`PASS: decodeForTrace -> ${fitted.image!.width}x${fitted.image!.height} working image, sourceSize 400x300, full image passed to inspect`)
+
+  // 3. PNG decodes on a fresh WebAssembly instance per call (pngDecoder.ts):
+  // pixels match @jsquash/png's own decoder, and no decoder memory is kept.
+  const big = new Uint8ClampedArray(1000 * 1000 * 4)
+  for (let p = 0; p < 1000 * 1000; p++) big.set([(p * 7) & 255, (p >> 10) & 255, 90, 255], p * 4)
+  const bigPng = await encodeTestPng({ width: 1000, height: 1000, data: big } as ImageData)
+  await initJsquashPng(wasm.png)
+  const reference = await decodeJsquashPng(bigPng.slice(0))
+  const fresh = await decodeImage('image/png', bigPng.slice(0), wasm)
+  assertTrue(fresh.width === reference.width && fresh.data.every((v, k) => v === reference.data[k]), 'fresh-instance PNG decode matches @jsquash/png')
+  console.log('PASS: PNG decodes on a per-call WebAssembly instance, identical to @jsquash/png (memory release: engine/memory.smoke-test.ts)')
+
+  // 4. JPEG padding: metadata never reaches the decoder, and a file far
+  // larger than its pixels justify is rejected before decoding.
+  const jpeg = await encodeTestJpeg({ width: 400, height: 300, data } as ImageData, 90)
+  const plain = new Uint8Array(jpeg)
+  const comment = new Uint8Array(65535)
+  comment.set([0xff, 0xfe, 0xff, 0xfd])
+  const padded = (segments: number) => {
+    const out = new Uint8Array(plain.length + segments * comment.length)
+    out.set(plain.subarray(0, 2))
+    for (let k = 0; k < segments; k++) out.set(comment, 2 + k * comment.length)
+    out.set(plain.subarray(2), 2 + segments * comment.length)
+    return out.buffer
+  }
+  const lightlyPadded = padded(4)
+  assertTrue(stripJpegMetadata(lightlyPadded).byteLength === plain.length, 'comment segments are stripped before decoding')
+  const viaPadded = await decodeImage('image/jpeg', lightlyPadded, wasm)
+  const viaPlain = await decodeImage('image/jpeg', jpeg.slice(0), wasm)
+  assertTrue(viaPadded.data.every((v, k) => v === viaPlain.data[k]), 'a padded JPEG decodes to the same pixels')
+  let rejected = false
+  try {
+    await decodeImage('image/jpeg', padded(40), wasm) // 2.6 MB for 400x300
+  } catch (error) {
+    rejected = error instanceof PayloadTooLargeError
+  }
+  assertTrue(rejected, 'a JPEG far larger than its pixel count is rejected with 413')
+  console.log('PASS: JPEG metadata padding is stripped before decode; oversized-for-its-pixels files are rejected')
 
   console.log('\nAll image decoder smoke tests passed.')
 }

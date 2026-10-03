@@ -95,13 +95,15 @@ async function run(): Promise<void> {
   const uploads = createUploadsRepository(env)
   const jobsRepo = createJobsRepository(env)
   const credits = new CreditsService(createCreditsRepository(env), false)
-  const jobService = new JobService(jobsRepo, uploads, new QueueService(createQueueClient(env.CONVERSION_QUEUE)), credits)
+  const storage = new StorageService(createR2Client(env.UPLOADS_BUCKET), env.DOWNLOAD_URL_SECRET)
+  const conversionsRepo = createConversionsRepository(env)
+  const jobService = new JobService(jobsRepo, uploads, new QueueService(createQueueClient(env.CONVERSION_QUEUE)), credits, conversionsRepo, storage)
   const decoderWasm = { png: env.PNG_DECODER_WASM, jpeg: env.JPEG_DECODER_WASM, webp: env.WEBP_DECODER_WASM }
   const conversions = new ConversionService(
     jobService,
     uploads,
-    new StorageService(createR2Client(env.UPLOADS_BUCKET), env.DOWNLOAD_URL_SECRET),
-    createConversionsRepository(env),
+    storage,
+    conversionsRepo,
     createImageAnalysisService(decoderWasm),
     decoderWasm,
     credits,
@@ -245,7 +247,38 @@ async function run(): Promise<void> {
     Array.from({ length: 6 }, () => jobService.createJob({ userId: 'u-sup', uploadId: supUpload, preset: 'professional', supersedesJobId: done.id })),
   )
   assertEqual(await balanceOf('u-sup'), 2, 'superseded job refunded exactly once despite 6 concurrent requests')
-  console.log('PASS: 6 concurrent superseding requests refund the prior job exactly once')
+  assertEqual(await conversionsRepo.findByJobId(done.id), null, 'the superseded (refunded) result is no longer downloadable')
+  console.log('PASS: 6 concurrent superseding requests refund the prior job exactly once and remove its result')
+
+  // 11. A refund that errors once is not lost: the message is retried, and
+  // the redelivery of the (now failed) job re-applies the refund.
+  await credits.credit('u-rf', 1, 'grant')
+  const rf = await jobService.createJob({ userId: 'u-rf', uploadId: await seedUpload('u-rf') })
+  let refundFailures = 1
+  const flakyCredits = Object.create(credits) as CreditsService
+  flakyCredits.refundJobDebit = async (...args: Parameters<CreditsService['refundJobDebit']>) => {
+    if (refundFailures-- > 0) throw new Error('Supabase RPC timeout (simulated)')
+    return credits.refundJobDebit(...args)
+  }
+  const rfConversions = new ConversionService(jobService, uploads, storage, conversionsRepo, createImageAnalysisService(decoderWasm), decoderWasm, flakyCredits)
+  const failingProcess = Object.create(rfConversions) as ConversionService
+  failingProcess.processJob = async (jobId: string) => {
+    await jobService.claimForProcessing(await jobService.getJob(jobId))
+    await credits.chargeJob('u-rf', jobId, 1, 'charged')
+    throw new Error('engine crashed (simulated)')
+  }
+  const rfLast = fakeMessage(rf.id, MAX_JOB_ATTEMPTS)
+  await handleConversionMessages([rfLast], failingProcess, jobService)
+  assertEqual((await jobService.getJob(rf.id)).status, 'failed', 'job marked failed even though its refund errored')
+  assertEqual(await balanceOf('u-rf'), 0, 'refund not yet applied')
+  assertTrue(!rfLast.acked && rfLast.retryDelay !== null, 'a terminal failure whose refund errored is retried, not acked')
+  const rfRedelivery = fakeMessage(rf.id, MAX_JOB_ATTEMPTS + 1)
+  await handleConversionMessages([rfRedelivery], rfConversions, jobService)
+  assertTrue(rfRedelivery.acked, 'redelivery of the failed job is acked')
+  assertEqual(await balanceOf('u-rf'), 1, 'redelivery applies the refund that failed')
+  await handleConversionMessages([fakeMessage(rf.id, MAX_JOB_ATTEMPTS + 2)], rfConversions, jobService)
+  assertEqual(await balanceOf('u-rf'), 1, 'further redeliveries never refund twice')
+  console.log('PASS: a refund that errors is retried via redelivery and applied exactly once')
 
   console.log('\nAll job lifecycle / queue consumer smoke tests passed.')
 }

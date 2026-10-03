@@ -50,6 +50,11 @@ export class SupabaseConversionsRepository implements ConversionsRepository {
     return mapRowToConversion(data)
   }
 
+  async delete(id: string): Promise<void> {
+    const { error } = await this.client.from('conversions').delete().eq('id', id)
+    if (error) throw new Error(`Failed to delete conversion: ${error.message}`)
+  }
+
   async findById(id: string): Promise<Conversion | null> {
     const { data, error } = await this.client.from('conversions').select().eq('id', id).maybeSingle<ConversionRow>()
     // 22P02: the id isn't a valid UUID, so no such row can exist.

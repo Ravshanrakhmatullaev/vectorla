@@ -6,6 +6,10 @@ import { createJobsRepository } from '../repositories/createJobsRepository'
 import { createUploadsRepository } from '../repositories/createUploadsRepository'
 import type { JobsRepository } from '../repositories/JobsRepository'
 import type { UploadsRepository } from '../repositories/UploadsRepository'
+import type { ConversionsRepository } from '../repositories/ConversionsRepository'
+import { createConversionsRepository } from '../repositories/createConversionsRepository'
+import { createR2Client } from '../integrations/r2'
+import { StorageService } from './StorageService'
 import { CreditsService, createCreditsService } from './CreditsService'
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError, JobLeaseHeldError } from '../errors'
 import { JOB_LEASE_MS } from '../config'
@@ -18,10 +22,11 @@ export interface CreateJobInput {
   /**
    * Phase 26: id of a completed job for the same upload that this job
    * replaces (e.g. switching Quick Trace -> Professional Trace after Quick
-   * already finished). If that job was billed, its debit is refunded before
-   * this new job is created — so re-choosing how an upload is traced is
-   * never additive on top of a prior charge. Ignored if the referenced job
-   * doesn't belong to the caller, isn't for this upload, or isn't completed.
+   * already finished). Its result is deleted (file, then row) and its debit
+   * refunded before this new job is created, so re-choosing how an upload is
+   * traced is never additive on top of a prior charge, and a refunded result
+   * can no longer be downloaded. Ignored if the referenced job doesn't
+   * belong to the caller, isn't for this upload, or isn't completed.
    */
   supersedesJobId?: string
 }
@@ -32,8 +37,12 @@ export class JobService {
     private readonly uploads: UploadsRepository,
     private readonly queueService: QueueService,
     // Optional so existing call sites (and JobService's own smoke test) that
-    // never pass a supersedesJobId don't need to wire this up.
+    // never pass a supersedesJobId don't need to wire this up. Superseding is
+    // honored only when all three are present: a refund without removing the
+    // refunded result would make that result free.
     private readonly credits?: CreditsService,
+    private readonly conversions?: ConversionsRepository,
+    private readonly storage?: StorageService,
   ) {}
 
   /**
@@ -56,7 +65,7 @@ export class JobService {
     const active = await this.repository.findActiveByUploadId(input.uploadId)
     if (active) return active
 
-    if (input.supersedesJobId && this.credits) {
+    if (input.supersedesJobId && this.credits && this.conversions && this.storage) {
       const superseded = await this.repository.findById(input.supersedesJobId)
       if (
         superseded &&
@@ -64,6 +73,14 @@ export class JobService {
         superseded.uploadId === input.uploadId &&
         superseded.status === 'completed'
       ) {
+        // Result first, refund second: if the refund fails the request
+        // fails and a retry refunds (idempotently); the reverse order could
+        // leave a refunded result still downloadable.
+        const result = await this.conversions.findByJobId(superseded.id)
+        if (result && result.userId === input.userId) {
+          await this.storage.deleteFile(result.storageKey)
+          await this.conversions.delete(result.id)
+        }
         await this.credits.refundJobDebit(input.userId, superseded.id, `Superseded by a new trace of upload "${input.uploadId}"`)
       }
     }
@@ -161,6 +178,9 @@ export class JobService {
 
   async markCompleted(jobId: string): Promise<Job> {
     const job = await this.getJob(jobId)
+    // A job the sweeper or dead-letter queue already failed (and refunded)
+    // must not flip back to completed: the user would keep the result free.
+    if (job.status === 'failed') throw new ConflictError(`Job "${jobId}" already failed — not marking it completed`)
     const now = new Date().toISOString()
     return this.repository.update(job, {
       ...job,
@@ -173,6 +193,8 @@ export class JobService {
 
   async markFailed(jobId: string, errorMessage: string): Promise<Job> {
     const job = await this.getJob(jobId)
+    // A completed job stays completed (failJob would otherwise refund a delivered result).
+    if (job.status === 'completed') throw new ConflictError(`Job "${jobId}" already completed — not marking it failed`)
     return this.repository.update(job, {
       ...job,
       status: 'failed',
@@ -190,5 +212,6 @@ export function createJobService(env: Env): JobService {
   const queueClient = createQueueClient(env.CONVERSION_QUEUE)
   const queueService = new QueueService(queueClient)
   const credits = createCreditsService(env)
-  return new JobService(repository, uploads, queueService, credits)
+  const storage = new StorageService(createR2Client(env.UPLOADS_BUCKET), env.DOWNLOAD_URL_SECRET)
+  return new JobService(repository, uploads, queueService, credits, createConversionsRepository(env), storage)
 }

@@ -96,10 +96,11 @@ value (including omitted) is unaffected.
 
 `supersedesJobId` (Phase 26): the id of an already-*completed* job for the
 same upload that this new job replaces — e.g. re-tracing an upload with
-Professional Trace after its automatic Quick Trace job already finished. If
-that job was billed, its debit is refunded before the new job is created, so
-re-choosing how an upload is traced never stacks charges on top of a prior
-one. Silently ignored if the referenced job doesn't belong to the caller,
+Professional Trace after its automatic Quick Trace job already finished. That
+job's result is deleted (stored file, then conversion row) and its debit is
+refunded before the new job is created, so re-choosing how an upload is
+traced never stacks charges on top of a prior one, and only the latest result
+is kept (a refunded result is never downloadable). Silently ignored if the referenced job doesn't belong to the caller,
 isn't for this upload, or isn't `completed` (nothing to refund).
 
 `data: Job` · `201`

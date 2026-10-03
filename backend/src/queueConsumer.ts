@@ -29,7 +29,8 @@ const RETRY_BASE_DELAY_SECONDS = 15
  *                                   take it over if that worker died
  *  - lost a concurrent claim     -> ack (the winner owns the job)
  *  - permanent error, or the
- *    last allowed attempt        -> fail terminally + refund, ack
+ *    last allowed attempt        -> fail terminally + refund, ack (retry
+ *                                   if failing/refunding itself errors)
  *  - transient error             -> back to 'queued', retry with backoff
  *
  * A Worker that dies mid-job never reaches the catch block; the runtime
@@ -60,10 +61,15 @@ export async function handleConversionMessages(
       const reason = error instanceof Error ? error.message : 'Unknown error'
       if (isPermanentJobError(error) || message.attempts >= MAX_JOB_ATTEMPTS) {
         console.error(`Job ${jobId} failed terminally after ${message.attempts} attempt(s): ${reason}`)
-        await conversions.failJob(jobId, reason).catch((failError: unknown) => {
-          console.error(`Failed to fail job ${jobId}:`, failError)
-        })
-        message.ack()
+        try {
+          await conversions.failJob(jobId, reason)
+          message.ack()
+        } catch (failError) {
+          // Not acked: the redelivery re-runs failJob, or (if the job was
+          // already marked failed) processJob re-applies the refund.
+          console.error(`Failed to fail job ${jobId}, will retry:`, failError)
+          message.retry({ delaySeconds: RETRY_BASE_DELAY_SECONDS * 2 ** (message.attempts - 1) })
+        }
         continue
       }
       console.warn(`Job ${jobId} attempt ${message.attempts} failed, will retry: ${reason}`)
@@ -78,10 +84,14 @@ export async function handleConversionMessages(
 /** Dead-letter queue: jobs whose messages exhausted every retry are failed and refunded. */
 export async function handleDeadLetters(messages: readonly ConversionMessage[], conversions: ConversionService): Promise<void> {
   for (const message of messages) {
-    await conversions
-      .failJob(message.body.jobId, 'Processing did not complete after repeated attempts')
-      .catch((error: unknown) => console.error(`Failed to fail dead-lettered job ${message.body.jobId}:`, error))
-    message.ack()
+    try {
+      await conversions.failJob(message.body.jobId, 'Processing did not complete after repeated attempts')
+      message.ack()
+    } catch (error) {
+      // Retried on the dead-letter queue itself, so the refund is not lost.
+      console.error(`Failed to fail dead-lettered job ${message.body.jobId}, will retry:`, error)
+      message.retry({ delaySeconds: 60 })
+    }
   }
 }
 

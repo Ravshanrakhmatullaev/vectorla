@@ -13,6 +13,8 @@ import { fileURLToPath } from 'node:url'
 import { traceOwnedImage } from './traceImage'
 import { engineOptionsFor } from './profiles'
 import { memoryCheckpoints } from './memoryCheckpoint'
+import { decodeImage } from '../providers/imageDecoder'
+import { loadDecoderWasmModules } from '../testSupport/wasmTestFixtures'
 
 const gc = (globalThis as { gc?: () => void }).gc
 if (!gc) {
@@ -118,5 +120,84 @@ for (const mode of ['quick', 'professional'] as const) {
   assertTrue(ph.working === '1224x816', `${mode}: 4 MP photo is reduced exactly 2x to the photo cap (got ${ph.working})`)
   assertTrue(ph.peak <= BUDGET_PHOTO_4MP_MB, `${mode}: 4 MP photo live peak ${ph.peak.toFixed(1)} MB at ${ph.where} exceeds ${BUDGET_PHOTO_4MP_MB} MB`)
   console.log(`PASS: ${mode} 4 MP photo at ${ph.working}: live peak ${ph.peak.toFixed(1)} MB (${ph.where}) <= ${BUDGET_PHOTO_4MP_MB} MB`)
+}
+/** RGBA PNG with stored (uncompressed) deflate blocks, so building it needs no PNG codec instance. */
+function storedPng(width: number, height: number, rgba: Uint8ClampedArray): ArrayBuffer {
+  const crcTable = new Int32Array(256).map((_, n) => {
+    let c = n
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1
+    return c
+  })
+  const crc32 = (bytes: Uint8Array) => {
+    let c = -1
+    for (const b of bytes) c = crcTable[(c ^ b) & 255]! ^ (c >>> 8)
+    return (c ^ -1) >>> 0
+  }
+  const raw = new Uint8Array(height * (width * 4 + 1))
+  for (let y = 0; y < height; y++) raw.set(rgba.subarray(y * width * 4, (y + 1) * width * 4), y * (width * 4 + 1) + 1)
+  const blocks = Math.ceil(raw.length / 65535)
+  const zlib = new Uint8Array(2 + raw.length + blocks * 5 + 4)
+  zlib.set([0x78, 0x01])
+  let o = 2
+  for (let k = 0; k < blocks; k++) {
+    const chunk = raw.subarray(k * 65535, Math.min(raw.length, (k + 1) * 65535))
+    zlib.set([k === blocks - 1 ? 1 : 0, chunk.length & 255, chunk.length >> 8, ~chunk.length & 255, (~chunk.length >> 8) & 255], o)
+    zlib.set(chunk, o + 5)
+    o += 5 + chunk.length
+  }
+  let a = 1
+  let b = 0
+  for (const v of raw) {
+    a = (a + v) % 65521
+    b = (b + a) % 65521
+  }
+  new DataView(zlib.buffer).setUint32(o, ((b << 16) | a) >>> 0)
+  const chunk = (type: string, data: Uint8Array) => {
+    const out = new Uint8Array(12 + data.length)
+    const view = new DataView(out.buffer)
+    view.setUint32(0, data.length)
+    out.set([...type].map((ch) => ch.charCodeAt(0)), 4)
+    out.set(data, 8)
+    view.setUint32(8 + data.length, crc32(out.subarray(4, 8 + data.length)))
+    return out
+  }
+  const ihdr = new Uint8Array(13)
+  new DataView(ihdr.buffer).setUint32(0, width)
+  new DataView(ihdr.buffer).setUint32(4, height)
+  ihdr.set([8, 6, 0, 0, 0], 8)
+  const parts = [new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib), chunk('IEND', new Uint8Array(0))]
+  const file = new Uint8Array(parts.reduce((n, p) => n + p.length, 0))
+  let at = 0
+  for (const p of parts) {
+    file.set(p, at)
+    at += p.length
+  }
+  return file.buffer
+}
+
+// Decoders: WebAssembly memory only grows, so a decoder instance that
+// outlives its decode keeps its peak for the life of the isolate (39 MB after
+// a 4 MP PNG with @jsquash/png's shared instance). Every decode must leave
+// nothing behind. WebAssembly memory is external to the JS heap, so this
+// measures process external memory.
+{
+  const wasm = await loadDecoderWasmModules()
+  const w = 2000
+  const h = 2000
+  const pixels = new Uint8ClampedArray(w * h * 4)
+  for (let p = 0; p < w * h; p++) pixels.set([(p * 7) & 255, (p >> 11) & 255, 90, 255], p * 4)
+  const png = storedPng(w, h, pixels)
+  const external = () => {
+    gc!()
+    gc!()
+    return process.memoryUsage().external / 1048576
+  }
+  // Measured from before the first decode: a shared decoder instance would
+  // keep what the first decode grew it to.
+  const before = external()
+  for (let i = 0; i < 3; i++) await decodeImage('image/png', png.slice(0), wasm)
+  const retained = external() - before
+  assertTrue(retained < 4, `4 MP PNG decodes leave decoder memory behind (${retained.toFixed(1)} MB)`)
+  console.log(`PASS: three 4 MP PNG decodes retain ${retained.toFixed(1)} MB of decoder memory (< 4 MB)`)
 }
 console.log('\nAll engine memory smoke tests passed.')

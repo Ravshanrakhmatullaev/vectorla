@@ -1,6 +1,9 @@
 import { PayloadTooLargeError, ValidationError } from '../errors'
 import { MAX_IMAGE_DIMENSION, MAX_IMAGE_PIXELS } from '../config'
 
+const LOSSY_FIXED_BYTES = 2 * 1024 * 1024
+const LOSSY_BYTES_PER_PIXEL = 3
+
 export interface ImageDimensions {
   width: number
   height: number
@@ -117,6 +120,19 @@ export function assertDecodableDimensions(bytes: ArrayBuffer | Uint8Array, mimeT
     throw new PayloadTooLargeError(
       `Image is ${width}x${height} pixels; the maximum is ${MAX_IMAGE_PIXELS / 1_000_000} megapixels and ${MAX_IMAGE_DIMENSION} px per side`,
     )
+  }
+  // A lossy file far larger than its pixels can justify is padding (metadata,
+  // trailing data), and every byte of it is copied into the decoder's memory
+  // and held by the upload path: a padded 30 MB 4 MP JPEG would push one
+  // request past a Worker's 128 MB. Real JPEG/WebP files stay well under
+  // 3 bytes per pixel (4 MP q90 4:4:4 noise: 1.55).
+  if (mimeType === 'image/jpeg' || mimeType === 'image/webp') {
+    const maxBytes = LOSSY_FIXED_BYTES + LOSSY_BYTES_PER_PIXEL * width * height
+    if (view.byteLength > maxBytes) {
+      throw new PayloadTooLargeError(
+        `File is ${(view.byteLength / 1048576).toFixed(1)} MB for a ${width}x${height} image; the maximum for that size is ${(maxBytes / 1048576).toFixed(1)} MB`,
+      )
+    }
   }
   return dimensions
 }

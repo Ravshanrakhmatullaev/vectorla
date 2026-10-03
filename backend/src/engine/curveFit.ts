@@ -147,6 +147,17 @@ class LatticePath {
  * For each i, pivk[i] is the furthest k such that the subpath i..k is
  * "straight" (Potrace calc_lon); returns lon[] after monotone clean-up.
  */
+/**
+ * Longest polygon segment considered, in lattice points. The optimal-polygon
+ * search tries every reachable start for each end point, and on a long,
+ * perfectly regular staircase (a 45° stripe edge at 4 MP) every earlier
+ * point is reachable, so the search is quadratic in chain length: a 2000²
+ * diagonal-stripe image spent > 60 s here. Capping the reach keeps it linear;
+ * a straight edge longer than this becomes collinear pieces, which
+ * mergeCollinear joins again in the output.
+ */
+const MAX_SEGMENT_POINTS = 100
+
 function calcLon(path: LatticePath): Int32Array {
   const { n, x: px, y: py, closed } = path
   const pivk = new Int32Array(n)
@@ -205,6 +216,13 @@ function calcLon(path: LatticePath): Int32Array {
       k1 = k
       if (!closed && k1 === n - 1) {
         reachedEnd = true
+        break
+      }
+      // Reach beyond MAX_SEGMENT_POINTS is never used (bestPolygon caps
+      // segments there), so stop walking: keeps long straight runs linear.
+      if ((closed ? mod(k1 - i, n) : k1 - i) > MAX_SEGMENT_POINTS) {
+        pivk[i] = closed ? mod(i + MAX_SEGMENT_POINTS + 1, n) : Math.min(n - 1, i + MAX_SEGMENT_POINTS + 1)
+        found = true
         break
       }
       k = nc[k1]!
@@ -305,7 +323,8 @@ function bestPolygonClosed(path: LatticePath, lon: Int32Array): number[] {
   for (let i = 0; i < n; i++) {
     let c = mod(lon[mod(i - 1, n)]! - 1, n)
     if (c === i) c = mod(i + 1, n)
-    clip0[i] = c < i ? n : c
+    c = c < i ? n : c
+    clip0[i] = c - i > MAX_SEGMENT_POINTS ? i + MAX_SEGMENT_POINTS : c
   }
   let j = 1
   for (let i = 0; i < n; i++) {
@@ -363,7 +382,7 @@ function bestPolygonOpen(path: LatticePath, lon: Int32Array): number[] {
     const ext = i === 0 ? lon[0]! : lon[i - 1]!
     let c = ext >= last ? last : ext - 1
     if (c <= i) c = i + 1
-    clip0[i] = c
+    clip0[i] = c - i > MAX_SEGMENT_POINTS ? i + MAX_SEGMENT_POINTS : c
   }
   // clip1[j] = smallest i whose segment can reach j (clip0 is non-decreasing).
   const clip1 = new Int32Array(n)
