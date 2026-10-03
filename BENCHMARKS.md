@@ -121,8 +121,38 @@ the diet): photo 84 → 61 MB, logo 70 → 46–47 MB.
 ¹ Four fresh-isolate runs gave 47.1 MB three times and 54.7 MB once. The
 GC before that checkpoint had not yet released one 8 MB buffer.
 
-On main the same 4 MP logo was traced at 1.2 MP. The worst case (a 4 MP
-logo at full resolution, ~63 MB without forced GC) is about half the limit.
+On main the same 4 MP logo was traced at 1.2 MP.
+
+**Correction (launch audit): decoder WebAssembly memory is not in these
+numbers.** `Runtime.getHeapUsage` does not count WebAssembly memories, so
+the table above covers the JS heap and ArrayBuffers only. Measured
+separately, by reading each decoder's memory size after a decode:
+
+| Decode | Decoder WASM memory |
+|---|---:|
+| 4 MP PNG logo (0.2 MB file) | 36–39 MB |
+| 15.5 MB 16-bit 4 MP PNG | 51 MB |
+| 0.7 MB 4 MP photo JPEG | 19 MB |
+| 6.2 MB progressive 4:4:4 4 MP JPEG | 51 MB |
+| the same JPEG padded to 30 MB with comment segments | 104 MB |
+
+Two problems followed, both fixed in the audit:
+
+- @jsquash/png keeps one decoder instance per isolate, so after one 4 MP
+  PNG its ~39 MB stayed allocated beside every later trace (worst case
+  ~63 + 39 ≈ 102 MB). PNG now decodes on a fresh instance per call
+  (`providers/pngDecoder.ts`). Three 4 MP PNG decodes now retain 0.0 MB,
+  against 33 MB before; `memory.smoke-test.ts` checks this.
+- A padded JPEG pushed the decoder past 100 MB. Metadata segments are now
+  stripped before decoding (`providers/jpegSegments.ts`), and JPEG/WebP
+  files larger than 2 MB + 3 bytes per pixel (13.4 MB at 4 MP) are rejected
+  with 413.
+
+What remains is transient during a decode: file + decoder memory + the 16 MB
+RGBA result, e.g. 6 + 51 + 16 ≈ 73 MB for a high-entropy 4 MP JPEG. It is
+released before the trace's own peak. A 25 MB 16-bit PNG, which only paid
+plans may upload, is estimated at ~110 MB at that moment in the queue
+consumer. See ROADMAP P6 on the plan size limit.
 
 **Why photos stay at 1.2 MP.** A 4 MP photo at full resolution measured
 61 MB live but up to ~129 MB without forced GC in Professional (85 MB

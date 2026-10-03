@@ -10,9 +10,9 @@ export const ALLOWED_UPLOAD_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp
 // everything, including WebAssembly memory, which never shrinks once grown.
 // Measured (Node, production decoders): decoding costs ~12 bytes per source
 // pixel (4 MP JPEG +48 MB, 12 MP +140 MB, 24 MP +280 MB) while it runs. The
-// decode is then shrunk to the 1.2 MP working size and released
-// (providers/imageDecoder.ts decodeForTrace), so a 4 MP trace peaks at
-// ~36–43 MB live (BENCHMARKS.md "Optimization round"). The web app downscales
+// decode is then reduced to the working size (artwork up to 4 MP, photos
+// 1.2 MP) and the decoder released (providers/imageDecoder.ts), so a 4 MP
+// trace peaks at ~47 MB live (BENCHMARKS.md "High-resolution engine"). The web app downscales
 // larger images in the browser before upload (src/utils/fitImageForUpload.ts),
 // so ordinary phone photos still work.
 export const MAX_IMAGE_PIXELS = 4_000_000

@@ -173,9 +173,39 @@ Legend: ✅ done · 🔜 next · ⏳ planned · 🧑 needs an owner decision, cr
   for existing users. 🧑 A recurring monthly grant for free users is a pricing
   decision and is not implemented.
 - ⏳ **P6.** Done: CSP `blob:` for previews, HSTS, and `[env.staging]` in wrangler
-  (separate Worker, bucket and queues) with a `DEPLOYMENT.md` runbook. Remaining: drop
-  the duplicate-filename unique index; constant-time HMAC compare.
-- ⏳ **P7.** Rate limiting (Workers Rate Limiting or Turnstile) and a stricter dev bypass.
+  (separate Worker, bucket and queues) with a `DEPLOYMENT.md` runbook. Constant-time
+  HMAC compare done (launch audit). Remaining: drop the duplicate-filename unique
+  index; narrow CSP `connect-src https://*.workers.dev` to the final API host and
+  replace `script-src 'unsafe-inline'` with a hash of the theme script; 🧑 decide the
+  paid-plan file size limit (a 25 MB 16-bit PNG is estimated at ~110 MB at decode
+  time in the queue consumer; ~15 MB keeps a wide margin).
+- ⏳ **P7.** Rate limiting (Workers Rate Limiting or Turnstile): still missing. Uploads
+  need no credits, so one account can store files in R2 for 30 days and spend CPU
+  on decoding without limit. The dev bypass is stricter now (launch audit): it also
+  requires a localhost request.
+- ⏳ **P11. Launch audit (2026-10-03)**, fixed on `claude/bold-newton-y6wsui`:
+  - superseding a job refunded it while its result stayed downloadable (free
+    conversions);
+  - a refund that failed once was never retried;
+  - a failed job could flip back to completed;
+  - a 2000² diagonal-stripe image took 63 s of CPU (limit 60 s);
+  - the PNG decoder kept ~39 MB per isolate;
+  - a padded JPEG pushed decoder memory past 100 MB;
+  - a sweeper error skipped retention;
+  - upload-time analysis could exceed memory on large files.
+
+  Open:
+  - orphaned R2 objects (written before a DB insert that then failed) are never
+    deleted. `OrphanCleanupService` is not wired; an R2 lifecycle rule would be
+    the backstop (🧑 production config).
+  - job error messages can include internal text (Supabase errors, R2 keys).
+  - Professional Trace falling back to ImageTracer is still billed 2×
+    (🧑 pricing decision).
+  - dense patterns over the region budget (e.g. an 8 px checkerboard at 4 MP)
+    collapse to one shape.
+  - uploads without a Content-Length header skip the pre-buffer size check. The
+    edge's 100 MB body limit is the only bound until the per-plan check after
+    buffering.
 - ✅ **P8.** CI (`.github/workflows/ci.yml`): lint and build, typecheck, `npm test`
   including the quality gate, Worker dry-run bundles, and a Postgres 16 job running
   schema + migration + credit-integrity assertions + a concurrency check.
