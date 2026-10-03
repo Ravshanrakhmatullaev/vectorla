@@ -46,7 +46,7 @@ export interface Conversion {
 // Mirrors backend/src/services/ImageAnalysisService.ts's ImageAnalysisResult (Phase 21/22).
 export type ImageType = 'photo' | 'illustration' | 'logo'
 export type EstimatedQuality = 'high' | 'medium' | 'low'
-export type VectorizationProviderName = 'placeholder' | 'potrace' | 'vision' | 'openai'
+export type VectorizationProviderName = 'vectorla' | 'placeholder' | 'potrace' | 'vision' | 'openai'
 
 export interface ImageAnalysisResult {
   width: number
@@ -78,3 +78,20 @@ export type JobConversionResult =
   | { status: 'queued' | 'processing' }
   | { status: 'completed'; conversion: Conversion | null }
   | { status: 'failed'; error: string | null }
+
+// Mirrors GET /api/v1/credits (backend/src/routes/credits.ts): userId is omitted.
+export type CreditTransactionType = 'debit' | 'credit' | 'refund'
+
+export interface CreditTransaction {
+  id: string
+  amount: number
+  type: CreditTransactionType
+  reason: string
+  jobId: string | null
+  createdAt: string
+}
+
+export interface CreditsSummary {
+  balance: number
+  transactions: CreditTransaction[]
+}

@@ -165,13 +165,21 @@ Legend: ✅ done · 🔜 next · ⏳ planned · 🧑 needs an owner decision, cr
 
 ### Tier 3: Product and SaaS (after quality and safety)
 
-- ⏳ **S1.** Honest marketing copy and pricing aligned with the backend credit model.
+- 🟡 **S1.** Honest marketing copy. Landing copy (EN/UZ/RU) now only claims what the
+  engine does: no ratings, no "AI", SVG-only output, no batch/DXF/CMYK claims, and no
+  mock workspace controls. The **Pricing section is unchanged** and still lists
+  unbuilt features and plans; it needs an owner decision.
 - ⏳ **S2.** PDF / EPS / DXF export from the engine's path model (straightforward
   now that output is clean cubic geometry); PNG re-render.
-- ⏳ **S3.** Account UI: credits, history, re-download.
+- 🟡 **S3.** Account UI. Done: credit balance in the navbar and workspace, and an
+  `/account` page with credit history (GET /credits). Still to do: re-download of
+  past conversions (GET /history).
 - ⏳ **S4.** Batch upload and ZIP download.
 - 🧑 **S5.** Stripe billing, checkout and portal. Needs account, keys and pricing decisions.
-- ⏳ **S6.** Legal pages, data retention, user deletion.
+- 🟡 **S6.** Legal. `/privacy` and `/terms` are drafts with visible "Decision needed"
+  markers (operator, contact, law, age, liability). Retention is proposed (30 days
+  for files) but **not enforced** until the owner approves. User deletion is
+  handled by email request only for now.
 
 ---
 

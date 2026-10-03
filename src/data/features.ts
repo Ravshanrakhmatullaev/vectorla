@@ -1,15 +1,15 @@
 import type { LucideIcon } from 'lucide-react'
 import {
+  Palette,
+  Spline,
+  Combine,
+  Blend,
+  Eraser,
   Sparkles,
   QrCode,
   PenTool,
   Pencil,
-  FileCheck2,
-  Scissors,
-  Layers,
-  Wand2,
-  Palette,
-  Eraser,
+  FileCode2,
 } from 'lucide-react'
 import type { FeatureId } from '@/data/i18n'
 
@@ -19,14 +19,14 @@ export interface Feature {
 }
 
 export const features: Feature[] = [
-  { id: 'aiLogoTrace', icon: Sparkles },
-  { id: 'aiQrVectorizer', icon: QrCode },
+  { id: 'multiColorTrace', icon: Palette },
+  { id: 'smoothCurves', icon: Spline },
+  { id: 'gaplessShapes', icon: Combine },
+  { id: 'gradients', icon: Blend },
+  { id: 'jpegCleanup', icon: Eraser },
+  { id: 'professionalTrace', icon: Sparkles },
+  { id: 'qrPixelArt', icon: QrCode },
   { id: 'signatureToSvg', icon: PenTool },
   { id: 'sketchToVector', icon: Pencil },
-  { id: 'printReadySvg', icon: FileCheck2 },
-  { id: 'cncLaserDxfExport', icon: Scissors },
-  { id: 'batchVectorization', icon: Layers },
-  { id: 'svgOptimizer', icon: Wand2 },
-  { id: 'colorReduction', icon: Palette },
-  { id: 'backgroundCleanup', icon: Eraser },
+  { id: 'editableSvg', icon: FileCode2 },
 ]

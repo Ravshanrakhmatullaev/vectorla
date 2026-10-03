@@ -13,37 +13,25 @@ export const languageOptions: LanguageOption[] = [
   { code: 'ru', label: 'RU' },
 ]
 
-export type NavId = 'features' | 'useCases' | 'pricing' | 'api' | 'docs'
+export type NavId = 'features' | 'useCases' | 'pricing' | 'faq'
 
 export type TrustBadgeId =
   | 'browserBased'
-  | 'printReady'
   | 'svgExport'
   | 'privateProcessing'
   | 'fastPreview'
 
-export type WorkspacePresetId = 'logo' | 'signature' | 'sketch' | 'icon' | 'qrCode' | 'blueprint'
-
-export type WorkspaceSettingId = 'colors' | 'detail' | 'smoothness' | 'noiseRemoval' | 'curvePrecision'
-
-export type PrintChecklistId =
-  | 'cmyk'
-  | 'cleanPaths'
-  | 'transparentBackground'
-  | 'cutLine'
-  | 'reducedNodes'
-
 export type FeatureId =
-  | 'aiLogoTrace'
-  | 'aiQrVectorizer'
+  | 'multiColorTrace'
+  | 'smoothCurves'
+  | 'gaplessShapes'
+  | 'gradients'
+  | 'jpegCleanup'
+  | 'professionalTrace'
+  | 'qrPixelArt'
   | 'signatureToSvg'
   | 'sketchToVector'
-  | 'printReadySvg'
-  | 'cncLaserDxfExport'
-  | 'batchVectorization'
-  | 'svgOptimizer'
-  | 'colorReduction'
-  | 'backgroundCleanup'
+  | 'editableSvg'
 
 export type UseCaseId =
   | 'designers'
@@ -67,7 +55,7 @@ export type FaqId =
   | 'batchProcessing'
   | 'apiAccess'
 
-export type FooterColumnId = 'product' | 'resources' | 'company' | 'legal'
+export type FooterColumnId = 'product' | 'legal'
 
 interface TextItem {
   title: string
@@ -98,8 +86,8 @@ export interface Translation {
     features: string
     useCases: string
     pricing: string
-    api: string
-    docs: string
+    faq: string
+    account: string
     signIn: string
     startFree: string
     openMenu: string
@@ -144,8 +132,6 @@ export interface Translation {
     title: string
     description: string
     primaryCta: string
-    secondaryCta: string
-    rating: string
     dragDropTitle: string
     dragDropSubtitle: string
     browseFiles: string
@@ -168,15 +154,6 @@ export interface Translation {
     description: string
     windowUrl: string
     uploadImage: string
-    presetsLabel: string
-    recentFilesLabel: string
-    settingsLabel: string
-    presets: Record<WorkspacePresetId, string>
-    settings: Record<WorkspaceSettingId, string>
-    presetPrefix: string
-    livePreview: string
-    printReadyMode: string
-    printChecklist: Record<PrintChecklistId, string>
     exportAs: string
     dropTitle: string
     dropSubtitle: string
@@ -219,7 +196,6 @@ export interface Translation {
       professionalTraceDescription: string
       qualityImprovement: Record<EstimatedQuality, string>
       professionalTraceNote: string
-      creditsSuffix: string
     }
   }
   features: {
@@ -246,6 +222,41 @@ export interface Translation {
     title: string
     items: Record<FaqId, FaqItemText>
   }
+  credits: {
+    /** Plural forms of "credit": one (1), few (RU 2-4), many (everything else). */
+    unit: { one: string; few: string; many: string }
+    navLabel: string
+    pageTitle: string
+    pageDescription: string
+    balanceLabel: string
+    costsTitle: string
+    costQuick: string
+    costProfessional: string
+    costRefund: string
+    historyTitle: string
+    historyLatest: string
+    historyEmpty: string
+    historyEmptyHint: string
+    loadError: string
+    retry: string
+    signInTitle: string
+    signInDescription: string
+    signIn: string
+    notConfigured: string
+    types: { credit: string; debit: string; refund: string }
+    /** Friendly descriptions for ledger entries (the backend's reason text is internal). */
+    reasons: { trace: string; refund: string; signup: string }
+    panelTitle: string
+    panelSignedOut: string
+    viewHistory: string
+    backHome: string
+  }
+  legal: {
+    privacy: string
+    terms: string
+    englishOnly: string
+    backHome: string
+  }
   footer: {
     tagline: string
     columns: Record<FooterColumnId, FooterColumnText>
@@ -259,8 +270,8 @@ export const translations: Record<Language, Translation> = {
       features: 'Features',
       useCases: 'Use Cases',
       pricing: 'Pricing',
-      api: 'API',
-      docs: 'Docs',
+      faq: 'FAQ',
+      account: 'Credits',
       signIn: 'Sign in',
       startFree: 'Start free',
       openMenu: 'Open menu',
@@ -301,16 +312,14 @@ export const translations: Record<Language, Translation> = {
       loading: 'Loading',
     },
     hero: {
-      badge: 'AI Print-Ready Vector Platform',
-      title: 'Transform any image into perfect vectors.',
+      badge: 'Raster-to-vector tracing',
+      title: 'Turn images into clean, editable vectors.',
       description:
-        'AI-powered vectorization built for designers, print shops, CNC, laser cutting, stickers, logos and production-ready graphics.',
-      primaryCta: 'Upload Image',
-      secondaryCta: 'Watch Demo',
-      rating: 'Rated 4.9/5 by 2,000+ creators',
-      dragDropTitle: 'Drag & drop your image',
-      dragDropSubtitle: 'or click to browse — PNG, JPG, SVG up to 10MB',
-      browseFiles: 'Browse files',
+        'Vectorla traces logos, icons, illustrations and scans into SVG with smooth curves, sharp corners and exact colors, ready to edit, scale and print.',
+      primaryCta: 'Try it with your image',
+      dragDropTitle: 'Trace your own image',
+      dragDropSubtitle: 'PNG, JPG or WebP · up to 5 MB',
+      browseFiles: 'Go to the workspace',
       workflow: {
         upload: 'Upload',
         trace: 'Trace',
@@ -318,62 +327,34 @@ export const translations: Record<Language, Translation> = {
       },
       original: 'Original',
       vectorized: 'Vectorized',
-      dragHint: 'Drag the handle to compare — upload your own image to try it live.',
+      dragHint:
+        'Drag the handle to compare. This is an illustration; try your own image in the workspace below.',
     },
     compatibleWith: {
       title: 'Compatible with',
     },
     trustBadges: {
-      browserBased: 'Browser-based',
-      printReady: 'Print-ready',
-      svgExport: 'SVG export',
-      privateProcessing: 'Private processing',
-      fastPreview: 'Fast preview',
+      browserBased: 'Works in your browser',
+      svgExport: 'SVG output',
+      privateProcessing: 'Files private to your account',
+      fastPreview: 'Usually done in seconds',
     },
     workspace: {
       eyebrow: 'Workspace',
-      title: 'A workspace built for production, not toy demos',
+      title: 'Try it on your own image',
       description:
-        'Every control a print professional expects — presets, precision settings, and print-ready validation in one place.',
-      windowUrl: 'app.vectorla.app/workspace',
+        'Upload a PNG, JPG or WebP. Vectorla analyzes it, traces it and gives you an SVG to download.',
+      windowUrl: 'vectorla.app',
       uploadImage: 'Upload image',
-      presetsLabel: 'Presets',
-      recentFilesLabel: 'Recent files',
-      settingsLabel: 'Vector settings',
-      presets: {
-        logo: 'Logo',
-        signature: 'Signature',
-        sketch: 'Sketch',
-        icon: 'Icon',
-        qrCode: 'QR Code',
-        blueprint: 'Blueprint',
-      },
-      settings: {
-        colors: 'Colors',
-        detail: 'Detail',
-        smoothness: 'Smoothness',
-        noiseRemoval: 'Noise removal',
-        curvePrecision: 'Curve precision',
-      },
-      presetPrefix: 'Preset: ',
-      livePreview: 'Live preview',
-      printReadyMode: 'Print-ready mode',
-      printChecklist: {
-        cmyk: 'CMYK-ready',
-        cleanPaths: 'Clean paths',
-        transparentBackground: 'Transparent background',
-        cutLine: 'Cut line included',
-        reducedNodes: 'Reduced nodes',
-      },
-      exportAs: 'Export as:',
+      exportAs: 'Output:',
       dropTitle: 'Drop your image to vectorize',
-      dropSubtitle: 'or click to browse — PNG, JPG, SVG up to 10MB',
+      dropSubtitle: 'or click to browse — PNG, JPG or WebP, up to 5 MB',
       browseFiles: 'Browse files',
       newImage: 'Upload another image',
       previewModeBadge: 'Preview Mode',
       previewModeMessage:
-        'This is a frontend preview. Real AI vectorization will be connected in the next version.',
-      exportDisabledNote: 'Available after AI processing is connected.',
+        'Preview mode: this site is not connected to the tracing service, so images are not uploaded or processed.',
+      exportDisabledNote: 'Your SVG can be downloaded here when tracing finishes.',
       statusUploading: 'Uploading…',
       statusQueued: 'Queued — waiting to start',
       statusProcessing: 'Vectorizing your image…',
@@ -394,16 +375,16 @@ export const translations: Record<Language, Translation> = {
         providerLabel: 'Engine',
         imageTypes: { photo: 'Photo', illustration: 'Illustration', logo: 'Logo' },
         qualityLevels: { high: 'High', medium: 'Medium', low: 'Low' },
-        providers: { placeholder: 'ImageTracer', potrace: 'Potrace', vision: 'Professional AI', openai: 'Professional AI' },
+        providers: { vectorla: 'Vectorla', placeholder: 'ImageTracer', potrace: 'Potrace', vision: 'External engine', openai: 'External engine' },
         badges: {
           bestForLogos: 'Best for logos',
-          bestForPhotos: 'Best for photos',
-          printReady: 'Print ready',
-          aiRecommended: 'AI recommended',
+          bestForPhotos: 'Photos trace as stylized art',
+          printReady: 'Traces cleanly',
+          aiRecommended: 'Professional Trace recommended',
         },
         recommendedBadge: 'Recommended',
         quickTraceTitle: 'Quick Trace',
-        quickTraceDescription: 'Fast · 1 credit · our free tracing engine',
+        quickTraceDescription: 'Fast, for most images',
         professionalTraceTitle: 'Professional Trace ⭐',
         professionalTraceDescription: 'Highest quality · full preprocessing pipeline',
         qualityImprovement: {
@@ -412,95 +393,91 @@ export const translations: Record<Language, Translation> = {
           low: 'Major quality improvement expected',
         },
         professionalTraceNote: 'Professional Trace runs extra preprocessing (noise reduction, background cleanup, contrast, color, edges) for a cleaner result — it takes a little longer.',
-        creditsSuffix: 'credits',
       },
     },
     features: {
       eyebrow: 'Features',
-      title: 'Everything a production pipeline needs',
-      description:
-        'Not just tracing — a full toolkit for turning raster images into usable, print-ready vectors.',
+      title: 'What the tracing engine does',
+      description: 'Vectorla is built for one job: turning raster images into clean, accurate vector shapes.',
       items: {
-        aiLogoTrace: {
-          title: 'AI Logo Trace',
+        multiColorTrace: {
+          title: 'Multi-color tracing',
           description:
-            'Clean, print-ready logo vectorization tuned for flat colors and sharp edges.',
+            'Logos and illustrations are split into their real colors and traced as separate, editable shapes.',
         },
-        aiQrVectorizer: {
-          title: 'AI QR Vectorizer',
+        smoothCurves: {
+          title: 'Smooth curves, sharp corners',
           description:
-            'Perfectly scannable QR codes converted to crisp, infinitely scalable vectors.',
+            'Curves become smooth Bézier paths, while real corners stay crisp instead of being rounded off.',
+        },
+        gaplessShapes: {
+          title: 'No gaps between colors',
+          description:
+            'Neighboring shapes share the same edge, so there are no hairline gaps or overlaps between colors.',
+        },
+        gradients: {
+          title: 'Gradient reconstruction',
+          description:
+            'Linear and radial gradients are rebuilt as real SVG gradients instead of dozens of color bands.',
+        },
+        jpegCleanup: {
+          title: 'JPEG cleanup',
+          description:
+            'Compression artifacts and color fringes around edges are filtered out before tracing.',
+        },
+        professionalTrace: {
+          title: 'Professional Trace',
+          description:
+            'An optional mode with extra preprocessing (noise reduction, background cleanup, contrast and edge enhancement) for difficult images.',
+        },
+        qrPixelArt: {
+          title: 'QR codes and pixel art',
+          description: 'Square, grid-aligned shapes are traced with straight edges and square corners.',
         },
         signatureToSvg: {
-          title: 'Signature to SVG',
-          description: 'Turn a scanned signature into a smooth, single-color vector stroke.',
+          title: 'Signatures and line art',
+          description: 'Scanned signatures and ink drawings become smooth single-color vector shapes.',
         },
         sketchToVector: {
-          title: 'Sketch to Vector',
+          title: 'Sketches and scans',
+          description: 'Hand-drawn artwork keeps its character, with small specks and noise removed.',
+        },
+        editableSvg: {
+          title: 'Standard, editable SVG',
           description:
-            'Preserve the hand-drawn character of sketches while cleaning up stray noise.',
-        },
-        printReadySvg: {
-          title: 'Print-Ready SVG',
-          description: 'Output validated for CMYK workflows, clean paths, and production print.',
-        },
-        cncLaserDxfExport: {
-          title: 'CNC / Laser DXF Export',
-          description: 'Export cut-ready DXF files for laser cutters and CNC machines.',
-        },
-        batchVectorization: {
-          title: 'Batch Vectorization',
-          description:
-            'Process entire folders of images in one queue, download results as a single archive.',
-        },
-        svgOptimizer: {
-          title: 'SVG Optimizer',
-          description:
-            'Merge redundant paths and reduce node count without losing visual fidelity.',
-        },
-        colorReduction: {
-          title: 'Color Reduction',
-          description:
-            'Control exact color counts for cleaner separations and simpler print jobs.',
-        },
-        backgroundCleanup: {
-          title: 'Background Cleanup',
-          description: 'Automatically detect and remove background noise before tracing.',
+            'Results are plain SVG files that open in Illustrator, Figma, Inkscape, CorelDRAW and other vector editors.',
         },
       },
     },
     useCases: {
       eyebrow: 'Use Cases',
-      title: 'Built for people who ship physical output',
-      description:
-        'From screen to production — Vectorla is designed around real workflows, not just pretty demos.',
+      title: 'Who it is for',
+      description: 'Anyone who needs a clean vector version of a raster image.',
       items: {
         designers: {
           title: 'Designers',
-          description:
-            'Turn raster references and rough concepts into editable, layered vector artwork.',
+          description: 'Turn raster references, old logos and rough concepts into editable vector artwork.',
         },
         printShops: {
           title: 'Print Shops',
-          description:
-            'Prepare production-ready files with clean paths and predictable output every time.',
+          description: 'Rebuild customer-supplied logos as clean vectors that print sharply at any size.',
         },
         advertisingAgencies: {
           title: 'Advertising Agencies',
-          description: 'Convert client logos and assets quickly without waiting on a designer.',
+          description: 'Convert client logos and assets quickly without redrawing them by hand.',
         },
         cncLaserCutting: {
           title: 'CNC & Laser Cutting',
-          description: 'Export precise DXF cut lines straight from a photo or scanned drawing.',
+          description:
+            'Trace drawings and logos to SVG outlines for cutting or CAM software that accepts SVG.',
         },
         stickerProduction: {
           title: 'Sticker Production',
-          description:
-            'Generate clean cut-contours ready for die-cut or kiss-cut sticker printing.',
+          description: 'Turn sticker artwork into crisp vectors that scale cleanly to any size.',
         },
         uvPrinting: {
           title: 'UV Printing',
-          description: 'Get crisp vector layers suited for UV printers and textured substrates.',
+          description: 'Get crisp vector artwork for UV printers instead of blurry, pixelated sources.',
         },
         dtfTextilePrinting: {
           title: 'DTF / Textile Printing',
@@ -508,12 +485,12 @@ export const translations: Record<Language, Translation> = {
         },
         logoCleanup: {
           title: 'Logo Cleanup',
-          description:
-            'Rebuild a low-resolution or damaged logo into a crisp, scalable master file.',
+          description: 'Rebuild a low-resolution or damaged logo into a crisp, scalable master file.',
         },
         qrCodeVectorization: {
           title: 'QR Code Vectorization',
-          description: 'Guarantee scannability at any print size with true vector QR codes.',
+          description:
+            'Rebuild QR codes as clean vector squares for sharp printing at any size. Always test-scan before printing.',
         },
       },
     },
@@ -566,58 +543,94 @@ export const translations: Record<Language, Translation> = {
         isFree: {
           question: 'Is Vectorla free?',
           answer:
-            'Yes. The Free plan includes 5 conversions a month with SVG export and basic presets, no credit card required. Pro and Business plans unlock unlimited conversions and production features.',
+            'New accounts get 10 free credits. A Quick Trace uses 1 credit and a Professional Trace uses 2. If a trace fails, its credits are refunded automatically.',
         },
         uploadedToServer: {
-          question: 'Are files uploaded to a server?',
+          question: 'Are my files uploaded to a server?',
           answer:
-            'Core tracing runs in your browser. Some advanced AI features in future releases will use secure, encrypted processing — and we will always be explicit about what leaves your device.',
+            'Yes. To trace an image, Vectorla uploads it to our servers, processes it there, and stores the original and the resulting SVG with your account. Only you can access them, while signed in. See the Privacy Policy for details.',
         },
         canExportSvg: {
-          question: 'Can I export SVG?',
+          question: 'Which formats can I download?',
           answer:
-            'Yes, SVG export is available on every plan. Pro and Business plans add PDF, DXF, and EPS export for production workflows.',
+            'SVG. It opens in Illustrator, Figma, Inkscape, CorelDRAW and most other vector editors. PDF, EPS and DXF export are not available yet.',
         },
         goodForPrinting: {
           question: 'Is it good for printing?',
           answer:
-            'Vectorla’s Print-Ready Mode checks resolution, flattens colors sensibly, and produces clean, reduced-node paths suited for CMYK print production — not just decorative web SVGs.',
+            "Vectorla produces clean vector shapes with exact colors that scale to any size. It does not convert colors to CMYK or check files against a printer's specifications, so review the file in your design software before sending it to print.",
         },
         cncLaserCutting: {
           question: 'Can I use it for CNC or laser cutting?',
           answer:
-            'Yes. Vectorla can export DXF cut lines generated directly from your traced image, ready to bring into CAM or cutting software.',
+            'You can import the SVG into cutting or CAM software that accepts SVG. Vectorla does not export DXF or generate dedicated cut lines yet.',
         },
         batchProcessing: {
-          question: 'Does it support batch processing?',
-          answer:
-            'Pro and Business plans include batch processing — upload a folder of images and export every result as a single archive.',
+          question: 'Can I upload many images at once?',
+          answer: 'Not yet. Images are traced one at a time.',
         },
         apiAccess: {
-          question: 'Will there be API access?',
-          answer:
-            'API access is planned for the Business plan, so you can integrate Vectorla directly into your own production pipeline.',
+          question: 'Is there an API?',
+          answer: 'A public API is not available yet.',
         },
       },
     },
+    credits: {
+      unit: {
+        one: 'credit',
+        few: 'credits',
+        many: 'credits',
+      },
+      navLabel: 'Credits',
+      pageTitle: 'Credits',
+      pageDescription: 'Your current balance and every credit added to or used from your account.',
+      balanceLabel: 'Available balance',
+      costsTitle: 'How credits are used',
+      costQuick: 'Quick Trace uses 1 credit per image.',
+      costProfessional: 'Professional Trace uses 2 credits per image.',
+      costRefund: 'If a trace fails, its credits are refunded automatically.',
+      historyTitle: 'Credit history',
+      historyLatest: 'Showing your {count} most recent entries.',
+      historyEmpty: 'No credit activity yet',
+      historyEmptyHint: 'Credits you receive and use will appear here.',
+      loadError: 'Could not load your credits. Check your connection and try again.',
+      retry: 'Try again',
+      signInTitle: 'Sign in to see your credits',
+      signInDescription: 'Your balance and credit history appear here once you are signed in.',
+      signIn: 'Sign in',
+      notConfigured:
+        'Credits are not available in this preview because it is not connected to the Vectorla service.',
+      types: {
+        credit: 'Added',
+        debit: 'Used',
+        refund: 'Refunded',
+      },
+      reasons: {
+        trace: 'Image traced',
+        refund: 'Refund for a failed trace',
+        signup: 'Free signup credits',
+      },
+      panelTitle: 'Your credits',
+      panelSignedOut: 'Sign in to trace your own images. New accounts get 10 free credits.',
+      viewHistory: 'View credit history',
+      backHome: 'Back to Vectorla',
+    },
+    legal: {
+      privacy: 'Privacy Policy',
+      terms: 'Terms of Service',
+      englishOnly: '',
+      backHome: 'Back to Vectorla',
+    },
     footer: {
-      tagline: 'The AI print-ready vector platform for designers, print shops, and production teams.',
+      tagline: 'Precise raster-to-vector tracing for designers, print shops and makers.',
       columns: {
         product: {
           title: 'Product',
-          links: ['Features', 'Use Cases', 'Pricing', 'Changelog'],
-        },
-        resources: {
-          title: 'Resources',
-          links: ['Docs', 'API Reference', 'Guides', 'Support'],
-        },
-        company: {
-          title: 'Company',
-          links: ['About', 'Blog', 'Careers', 'Contact'],
+          links: ['Features', 'Use Cases', 'Pricing', 'FAQ'],
         },
         legal: {
           title: 'Legal',
-          links: ['Privacy Policy', 'Terms of Service', 'Security'],
+          links: ['Privacy Policy', 'Terms of Service'],
         },
       },
       copyright: '© {year} Vectorla. All rights reserved.',
@@ -628,8 +641,8 @@ export const translations: Record<Language, Translation> = {
       features: 'Imkoniyatlar',
       useCases: 'Foydalanish holatlari',
       pricing: 'Narxlar',
-      api: 'API',
-      docs: 'Hujjatlar',
+      faq: 'Savollar',
+      account: 'Kreditlar',
       signIn: 'Kirish',
       startFree: 'Bepul boshlash',
       openMenu: 'Menyuni ochish',
@@ -670,79 +683,49 @@ export const translations: Record<Language, Translation> = {
       loading: 'Yuklanmoqda',
     },
     hero: {
-      badge: 'AI asosidagi bosmaga tayyor vektor platforma',
-      title: "Har qanday tasvirni mukammal vektorga aylantiring.",
+      badge: 'Rastrdan vektorga trassirovka',
+      title: 'Tasvirlarni toza, tahrirlanadigan vektorlarga aylantiring.',
       description:
-        "Dizaynerlar, bosmaxonalar, CNC, lazer kesish, stikerlar, logotiplar va ishlab chiqarishga tayyor grafikalar uchun AI asosidagi vektorlashtirish.",
-      primaryCta: 'Rasm yuklash',
-      secondaryCta: "Demoni ko'rish",
-      rating: "2,000+ ijodkor tomonidan 4.9/5 baholangan",
-      dragDropTitle: 'Rasmingizni shu yerga tashlang',
-      dragDropSubtitle: "yoki tanlash uchun bosing — PNG, JPG, SVG, 10MB gacha",
-      browseFiles: 'Fayl tanlash',
+        'Vectorla logotiplar, ikonkalar, illyustratsiyalar va skanlarni silliq egri chiziqlar, o‘tkir burchaklar va aniq ranglarga ega SVG fayllarga aylantiradi — tahrirlash, kattalashtirish va chop etishga tayyor.',
+      primaryCta: 'O‘z rasmingizda sinab ko‘ring',
+      dragDropTitle: 'O‘z rasmingizni trassirovka qiling',
+      dragDropSubtitle: 'PNG, JPG yoki WebP · 5 MB gacha',
+      browseFiles: 'Ish maydoniga o‘tish',
       workflow: {
         upload: 'Yuklash',
-        trace: 'Chizish',
+        trace: 'Trassirovka',
         export: 'Eksport',
       },
       original: 'Original',
       vectorized: 'Vektorlashtirilgan',
-      dragHint: "Solishtirish uchun dastakni suring — jonli sinab ko'rish uchun o'z tasviringizni yuklang.",
+      dragHint:
+        'Solishtirish uchun dastakni suring. Bu namunaviy rasm — o‘z tasviringizni quyidagi ish maydonida sinab ko‘ring.',
     },
     compatibleWith: {
       title: 'Bilan mos keladi',
     },
     trustBadges: {
-      browserBased: 'Brauzer orqali',
-      printReady: 'Bosmaga tayyor',
-      svgExport: 'SVG eksport',
-      privateProcessing: 'Maxfiy qayta ishlash',
-      fastPreview: "Tezkor ko'rib chiqish",
+      browserBased: 'Brauzerda ishlaydi',
+      svgExport: 'SVG natija',
+      privateProcessing: 'Fayllar faqat sizning hisobingizda',
+      fastPreview: 'Odatda bir necha soniyada',
     },
     workspace: {
       eyebrow: 'Ish maydoni',
-      title: "O'yinchoq demolar uchun emas, ishlab chiqarish uchun yaratilgan ish maydoni",
+      title: 'O‘z rasmingizda sinab ko‘ring',
       description:
-        "Bosma sohasi mutaxassisi kutadigan barcha boshqaruvlar — presetlar, aniq sozlamalar va bosmaga tayyorlikni tekshirish bir joyda.",
-      windowUrl: 'app.vectorla.app/workspace',
+        'PNG, JPG yoki WebP yuklang. Vectorla uni tahlil qiladi, trassirovka qiladi va yuklab olish uchun SVG beradi.',
+      windowUrl: 'vectorla.app',
       uploadImage: 'Rasm yuklash',
-      presetsLabel: 'Presetlar',
-      recentFilesLabel: "So'nggi fayllar",
-      settingsLabel: 'Vektor sozlamalari',
-      presets: {
-        logo: 'Logotip',
-        signature: 'Imzo',
-        sketch: 'Eskiz',
-        icon: 'Ikonka',
-        qrCode: 'QR kod',
-        blueprint: 'Chizma',
-      },
-      settings: {
-        colors: 'Ranglar',
-        detail: 'Detal',
-        smoothness: 'Silliqlik',
-        noiseRemoval: 'Shovqinni olib tashlash',
-        curvePrecision: "Egri chiziq aniqligi",
-      },
-      presetPrefix: 'Preset: ',
-      livePreview: "Jonli ko'rish",
-      printReadyMode: 'Bosmaga tayyor rejim',
-      printChecklist: {
-        cmyk: 'CMYK uchun tayyor',
-        cleanPaths: "Toza yo'llar",
-        transparentBackground: 'Shaffof fon',
-        cutLine: 'Kesish chizig\'i mavjud',
-        reducedNodes: 'Kamaytirilgan tugunlar',
-      },
-      exportAs: 'Quyidagi formatda eksport:',
+      exportAs: 'Natija:',
       dropTitle: 'Vektorlashtirish uchun rasmni tashlang',
-      dropSubtitle: "yoki tanlash uchun bosing — PNG, JPG, SVG, 10MB gacha",
+      dropSubtitle: 'yoki tanlash uchun bosing — PNG, JPG yoki WebP, 5 MB gacha',
       browseFiles: 'Fayl tanlash',
       newImage: 'Boshqa rasm yuklash',
       previewModeBadge: 'Ko\'rib chiqish rejimi',
       previewModeMessage:
-        "Bu frontend ko'rib chiqish (preview). Haqiqiy AI vektorlashtirish keyingi versiyada ulanadi.",
-      exportDisabledNote: 'AI qayta ishlash ulangandan keyin mavjud bo\'ladi.',
+        'Ko‘rib chiqish rejimi: bu sayt trassirovka xizmatiga ulanmagan, shuning uchun rasmlar yuklanmaydi va qayta ishlanmaydi.',
+      exportDisabledNote: 'Trassirovka tugagach, SVG faylni shu yerdan yuklab olishingiz mumkin.',
       statusUploading: 'Yuklanmoqda…',
       statusQueued: 'Navbatda — boshlanishini kutmoqda',
       statusProcessing: 'Rasm vektorlashtirilmoqda…',
@@ -763,16 +746,16 @@ export const translations: Record<Language, Translation> = {
         providerLabel: 'Dvigatel',
         imageTypes: { photo: 'Foto', illustration: 'Illyustratsiya', logo: 'Logotip' },
         qualityLevels: { high: 'Yuqori', medium: "O'rtacha", low: 'Past' },
-        providers: { placeholder: 'ImageTracer', potrace: 'Potrace', vision: 'Professional AI', openai: 'Professional AI' },
+        providers: { vectorla: 'Vectorla', placeholder: 'ImageTracer', potrace: 'Potrace', vision: 'Tashqi dvigatel', openai: 'Tashqi dvigatel' },
         badges: {
           bestForLogos: 'Logotiplar uchun eng yaxshi',
-          bestForPhotos: 'Fotolar uchun eng yaxshi',
-          printReady: 'Bosishga tayyor',
-          aiRecommended: 'AI tavsiya etadi',
+          bestForPhotos: 'Fotosuratlar stilizatsiyalangan ko‘rinishda chiqadi',
+          printReady: 'Toza trassirovka qilinadi',
+          aiRecommended: 'Professional Trace tavsiya etiladi',
         },
         recommendedBadge: 'Tavsiya etiladi',
         quickTraceTitle: 'Tezkor trace',
-        quickTraceDescription: 'Tez · 1 kredit · bizning bepul trace dvigatelimiz',
+        quickTraceDescription: 'Tez, ko‘pchilik rasmlar uchun',
         professionalTraceTitle: 'Professional Trace ⭐',
         professionalTraceDescription: 'Eng yuqori sifat · to‘liq qayta ishlash pipeline',
         qualityImprovement: {
@@ -781,115 +764,112 @@ export const translations: Record<Language, Translation> = {
           low: 'Sifat sezilarli darajada oshadi',
         },
         professionalTraceNote: "Professional Trace qo'shimcha qayta ishlashni bajaradi (shovqinni kamaytirish, fonni tozalash, kontrast, rang, chetlarni) — bu biroz ko'proq vaqt oladi.",
-        creditsSuffix: 'kredit',
       },
     },
     features: {
       eyebrow: 'Imkoniyatlar',
-      title: "Ishlab chiqarish jarayoni uchun kerak bo'lgan hamma narsa",
+      title: 'Trassirovka dvigateli nimalar qiladi',
       description:
-        "Shunchaki chizib chiqish emas — rastr tasvirlarni foydali, bosmaga tayyor vektorlarga aylantirish uchun to'liq vositalar to'plami.",
+        'Vectorla bitta vazifa uchun yaratilgan: rastr tasvirlarni toza va aniq vektor shakllarga aylantirish.',
       items: {
-        aiLogoTrace: {
-          title: 'AI logotip chizish',
+        multiColorTrace: {
+          title: 'Ko‘p rangli trassirovka',
           description:
-            "Tekis ranglar va aniq chegaralar uchun moslashtirilgan toza, bosmaga tayyor logotip vektorlashtirish.",
+            'Logotip va illyustratsiyalar haqiqiy ranglariga ajratiladi va alohida, tahrirlanadigan shakllar sifatida trassirovka qilinadi.',
         },
-        aiQrVectorizer: {
-          title: 'AI QR vektorlashtiruvchi',
+        smoothCurves: {
+          title: 'Silliq egri chiziqlar, o‘tkir burchaklar',
           description:
-            "Mukammal skanerlanadigan QR kodlar aniq, cheksiz masshtablanadigan vektorlarga aylantiriladi.",
+            'Egri chiziqlar silliq Bezye yo‘llariga aylanadi, haqiqiy burchaklar esa yumaloqlanmasdan o‘tkir qoladi.',
+        },
+        gaplessShapes: {
+          title: 'Ranglar orasida bo‘shliq yo‘q',
+          description:
+            'Qo‘shni shakllar bitta umumiy chegaraga ega, shuning uchun ranglar orasida ingichka bo‘shliq yoki ustma-ust tushish bo‘lmaydi.',
+        },
+        gradients: {
+          title: 'Gradientlarni tiklash',
+          description:
+            'Chiziqli va radial gradientlar o‘nlab rang chiziqlari o‘rniga haqiqiy SVG gradientlari sifatida qayta quriladi.',
+        },
+        jpegCleanup: {
+          title: 'JPEG tozalash',
+          description:
+            'Siqish artefaktlari va chekkalardagi rangli hoshiyalar trassirovkadan oldin filtrlanadi.',
+        },
+        professionalTrace: {
+          title: 'Professional Trace',
+          description:
+            'Murakkab tasvirlar uchun qo‘shimcha oldindan ishlov berish (shovqinni kamaytirish, fonni tozalash, kontrast va chekkalarni kuchaytirish) bilan ixtiyoriy rejim.',
+        },
+        qrPixelArt: {
+          title: 'QR kodlar va piksel-art',
+          description:
+            'Kvadrat, to‘rga tekislangan shakllar to‘g‘ri qirralar va to‘g‘ri burchaklar bilan trassirovka qilinadi.',
         },
         signatureToSvg: {
-          title: 'Imzodan SVG ga',
-          description: "Skanerlangan imzoni silliq, bir rangli vektor chizig'iga aylantiring.",
+          title: 'Imzolar va chiziqli rasmlar',
+          description:
+            'Skanerlangan imzolar va siyoh chizmalari silliq bir rangli vektor shakllarga aylanadi.',
         },
         sketchToVector: {
-          title: 'Eskizdan vektorga',
+          title: 'Eskizlar va skanlar',
           description:
-            "Ortiqcha shovqinni tozalab, eskizning qo'lda chizilgan xarakterini saqlab qoladi.",
+            'Qo‘lda chizilgan ishlar o‘z xarakterini saqlaydi, mayda dog‘lar va shovqin esa olib tashlanadi.',
         },
-        printReadySvg: {
-          title: 'Bosmaga tayyor SVG',
+        editableSvg: {
+          title: 'Standart, tahrirlanadigan SVG',
           description:
-            "CMYK jarayonlari, toza yo'llar va ishlab chiqarish bosmasi uchun tekshirilgan natija.",
-        },
-        cncLaserDxfExport: {
-          title: 'CNC / Lazer uchun DXF eksport',
-          description:
-            "Lazer kesish va CNC mashinalari uchun kesishga tayyor DXF fayllarni eksport qiling.",
-        },
-        batchVectorization: {
-          title: 'Ommaviy vektorlashtirish',
-          description:
-            "Butun rasm papkalarini bitta navbatda qayta ishlang, natijalarni yagona arxiv sifatida yuklab oling.",
-        },
-        svgOptimizer: {
-          title: 'SVG optimallashtiruvchi',
-          description:
-            "Vizual sifatni yo'qotmasdan ortiqcha yo'llarni birlashtiring va tugunlar sonini kamaytiring.",
-        },
-        colorReduction: {
-          title: 'Ranglarni kamaytirish',
-          description:
-            "Tozaroq ajratish va soddaroq bosma ishlari uchun aniq rang sonini boshqaring.",
-        },
-        backgroundCleanup: {
-          title: 'Fonni tozalash',
-          description: "Chizishdan oldin fon shovqinini avtomatik aniqlang va olib tashlang.",
+            'Natijalar Illustrator, Figma, Inkscape, CorelDRAW va boshqa vektor muharrirlarida ochiladigan oddiy SVG fayllardir.',
         },
       },
     },
     useCases: {
       eyebrow: 'Foydalanish holatlari',
-      title: "Jismoniy mahsulot ishlab chiqaradigan odamlar uchun yaratilgan",
-      description:
-        "Ekrandan ishlab chiqarishgacha — Vectorla shunchaki chiroyli demolar uchun emas, balki haqiqiy ish jarayonlari uchun yaratilgan.",
+      title: 'Kimlar uchun',
+      description: 'Rastr tasvirning toza vektor versiyasi kerak bo‘lgan har bir kishi uchun.',
       items: {
         designers: {
           title: 'Dizaynerlar',
           description:
-            "Rastr namunalari va dastlabki g'oyalarni tahrirlanadigan, qatlamli vektor asarlarga aylantiring.",
+            'Rastr namunalar, eski logotiplar va qoralama g‘oyalarni tahrirlanadigan vektor grafikaga aylantiring.',
         },
         printShops: {
           title: 'Bosmaxonalar',
           description:
-            "Har safar toza yo'llar va bashorat qilinadigan natija bilan ishlab chiqarishga tayyor fayllarni tayyorlang.",
+            'Mijozlar yuborgan logotiplarni istalgan o‘lchamda aniq chop etiladigan toza vektorlarga aylantiring.',
         },
         advertisingAgencies: {
           title: 'Reklama agentliklari',
-          description:
-            "Dizaynerni kutmasdan mijoz logotiplari va materiallarini tezda o'giring.",
+          description: 'Mijoz logotiplari va materiallarini qo‘lda qayta chizmasdan tezda aylantiring.',
         },
         cncLaserCutting: {
           title: 'CNC va lazer kesish',
           description:
-            "Foto yoki skanerlangan chizmadan to'g'ridan-to'g'ri aniq DXF kesish chiziqlarini eksport qiling.",
+            'Chizmalar va logotiplarni SVG qabul qiladigan kesish yoki CAM dasturlari uchun SVG konturlarga aylantiring.',
         },
         stickerProduction: {
           title: 'Stiker ishlab chiqarish',
           description:
-            "Die-cut yoki kiss-cut stiker bosmasi uchun tayyor toza kesish konturlarini yarating.",
+            'Stiker dizaynlarini istalgan o‘lchamga toza kattalashadigan aniq vektorlarga aylantiring.',
         },
         uvPrinting: {
           title: 'UV bosma',
-          description:
-            "UV printerlar va relyefli materiallar uchun mos aniq vektor qatlamlarini oling.",
+          description: 'Xira, pikselli manbalar o‘rniga UV printerlar uchun aniq vektor grafika oling.',
         },
         dtfTextilePrinting: {
-          title: 'DTF / Tekstil bosma',
-          description:
-            "To'g'ridan-to'g'ri plyonkaga va tekstil transfer jarayonlari uchun asarlarni vektorlashtiring.",
+          title: 'DTF / tekstil bosma',
+          description: 'DTF va tekstilga ko‘chirish jarayonlari uchun dizaynlarni vektorlashtiring.',
         },
         logoCleanup: {
           title: 'Logotipni tozalash',
           description:
-            "Past sifatli yoki shikastlangan logotipni aniq, masshtablanadigan asosiy faylga qayta tiklang.",
+            'Past sifatli yoki shikastlangan logotipni aniq, kattalashtiriladigan asosiy faylga aylantiring.',
         },
         qrCodeVectorization: {
           title: 'QR kodni vektorlashtirish',
           description:
-            "Haqiqiy vektor QR kodlar bilan istalgan bosma o'lchamda skanerlanishini kafolatlang.",
+            'QR kodlarni istalgan o‘lchamda aniq chop etish uchun toza vektor kvadratlarga aylantiring. Chop etishdan oldin albatta skanerlab tekshiring.',
         },
       },
     },
@@ -938,65 +918,100 @@ export const translations: Record<Language, Translation> = {
       },
     },
     faq: {
-      eyebrow: 'Savol-javob',
-      title: "Tez-tez so'raladigan savollar",
+      eyebrow: 'Savollar',
+      title: 'Ko‘p beriladigan savollar',
       items: {
         isFree: {
           question: 'Vectorla bepulmi?',
           answer:
-            "Ha. Bepul tarif oyiga 5 ta konvertatsiya, SVG eksport va oddiy presetlarni o'z ichiga oladi, kredit karta talab qilinmaydi. Pro va Biznes tariflari cheksiz konvertatsiya va ishlab chiqarish imkoniyatlarini ochadi.",
+            'Yangi hisoblarga 10 ta bepul kredit beriladi. Quick Trace 1 kredit, Professional Trace esa 2 kredit sarflaydi. Trassirovka muvaffaqiyatsiz bo‘lsa, kreditlar avtomatik qaytariladi.',
         },
         uploadedToServer: {
-          question: 'Fayllar serverga yuklanadimi?',
+          question: 'Fayllarim serverga yuklanadimi?',
           answer:
-            "Asosiy chizish brauzeringizda amalga oshiriladi. Kelajakdagi versiyalardagi ba'zi ilg'or AI funksiyalari xavfsiz, shifrlangan qayta ishlashdan foydalanadi — va biz qurilmangizdan nima chiqishi haqida har doim aniq ma'lumot beramiz.",
+            'Ha. Tasvirni trassirovka qilish uchun Vectorla uni serverlarimizga yuklaydi, u yerda qayta ishlaydi va asl fayl hamda olingan SVG’ni hisobingizda saqlaydi. Ularga faqat siz, tizimga kirgan holda kira olasiz. Batafsil ma’lumot Maxfiylik siyosatida.',
         },
         canExportSvg: {
-          question: 'SVG eksport qila olamanmi?',
+          question: 'Qaysi formatlarda yuklab olsa bo‘ladi?',
           answer:
-            "Ha, SVG eksport barcha tariflarda mavjud. Pro va Biznes tariflari ishlab chiqarish jarayonlari uchun PDF, DXF va EPS eksportni qo'shadi.",
+            'SVG. U Illustrator, Figma, Inkscape, CorelDRAW va boshqa ko‘plab vektor muharrirlarida ochiladi. PDF, EPS va DXF eksporti hozircha mavjud emas.',
         },
         goodForPrinting: {
-          question: 'Bosma uchun yaxshimi?',
+          question: 'Bosma uchun yaroqlimi?',
           answer:
-            "Vectorla'ning bosmaga tayyor rejimi aniqlikni tekshiradi, ranglarni oqilona tekislaydi va CMYK bosma ishlab chiqarishga mos, toza, kamaytirilgan tugunli yo'llarni yaratadi — shunchaki bezak uchun veb-SVG emas.",
+            'Vectorla istalgan o‘lchamga kattalashadigan, aniq rangli toza vektor shakllar yaratadi. U ranglarni CMYK’ga o‘tkazmaydi va faylni bosmaxona talablariga tekshirmaydi, shuning uchun chop etishdan oldin faylni dizayn dasturingizda ko‘rib chiqing.',
         },
         cncLaserCutting: {
-          question: 'Uni CNC yoki lazer kesish uchun ishlata olamanmi?',
+          question: 'CNC yoki lazer kesish uchun ishlatsa bo‘ladimi?',
           answer:
-            "Ha. Vectorla chizilgan tasviringizdan to'g'ridan-to'g'ri yaratilgan DXF kesish chiziqlarini eksport qila oladi, ular CAM yoki kesish dasturiga kiritishga tayyor.",
+            'SVG faylni SVG qabul qiladigan kesish yoki CAM dasturiga import qilishingiz mumkin. Vectorla hozircha DXF eksport qilmaydi va maxsus kesish chiziqlarini yaratmaydi.',
         },
         batchProcessing: {
-          question: 'Ommaviy qayta ishlashni qo’llab-quvvatlaydimi?',
-          answer:
-            "Pro va Biznes tariflari ommaviy qayta ishlashni o'z ichiga oladi — rasmlar papkasini yuklang va har bir natijani yagona arxiv sifatida eksport qiling.",
+          question: 'Bir vaqtda ko‘p rasm yuklasa bo‘ladimi?',
+          answer: 'Hozircha yo‘q. Rasmlar bittadan trassirovka qilinadi.',
         },
         apiAccess: {
-          question: 'API kirish huquqi bo’ladimi?',
-          answer:
-            "API kirish huquqi Biznes tarifi uchun rejalashtirilgan, shunda Vectorla'ni o'z ishlab chiqarish jarayoningizga to'g'ridan-to'g'ri integratsiya qila olasiz.",
+          question: 'API bormi?',
+          answer: 'Ochiq API hozircha mavjud emas.',
         },
       },
     },
+    credits: {
+      unit: {
+        one: 'kredit',
+        few: 'kredit',
+        many: 'kredit',
+      },
+      navLabel: 'Kreditlar',
+      pageTitle: 'Kreditlar',
+      pageDescription: 'Joriy balansingiz va hisobingizga qo‘shilgan yoki sarflangan har bir kredit.',
+      balanceLabel: 'Mavjud balans',
+      costsTitle: 'Kreditlar qanday sarflanadi',
+      costQuick: 'Quick Trace har bir rasm uchun 1 kredit sarflaydi.',
+      costProfessional: 'Professional Trace har bir rasm uchun 2 kredit sarflaydi.',
+      costRefund: 'Trassirovka muvaffaqiyatsiz bo‘lsa, kreditlar avtomatik qaytariladi.',
+      historyTitle: 'Kreditlar tarixi',
+      historyLatest: 'Oxirgi {count} ta yozuv ko‘rsatilmoqda.',
+      historyEmpty: 'Hozircha kredit harakatlari yo‘q',
+      historyEmptyHint: 'Olingan va sarflangan kreditlar shu yerda ko‘rinadi.',
+      loadError: 'Kreditlarni yuklab bo‘lmadi. Internet aloqasini tekshirib, qayta urinib ko‘ring.',
+      retry: 'Qayta urinish',
+      signInTitle: 'Kreditlarni ko‘rish uchun tizimga kiring',
+      signInDescription: 'Tizimga kirganingizdan so‘ng balans va kreditlar tarixi shu yerda ko‘rinadi.',
+      signIn: 'Kirish',
+      notConfigured: 'Bu ko‘rib chiqish versiyasi Vectorla xizmatiga ulanmagani uchun kreditlar mavjud emas.',
+      types: {
+        credit: 'Qo‘shildi',
+        debit: 'Sarflandi',
+        refund: 'Qaytarildi',
+      },
+      reasons: {
+        trace: 'Rasm trassirovka qilindi',
+        refund: 'Muvaffaqiyatsiz trassirovka uchun qaytarildi',
+        signup: 'Ro‘yxatdan o‘tish uchun bepul kreditlar',
+      },
+      panelTitle: 'Kreditlaringiz',
+      panelSignedOut:
+        'O‘z rasmlaringizni trassirovka qilish uchun tizimga kiring. Yangi hisoblarga 10 ta bepul kredit beriladi.',
+      viewHistory: 'Kreditlar tarixini ko‘rish',
+      backHome: 'Vectorla’ga qaytish',
+    },
+    legal: {
+      privacy: 'Maxfiylik siyosati',
+      terms: 'Foydalanish shartlari',
+      englishOnly: 'Bu hujjat hozircha faqat ingliz tilida mavjud.',
+      backHome: 'Vectorla’ga qaytish',
+    },
     footer: {
-      tagline:
-        "Dizaynerlar, bosmaxonalar va ishlab chiqarish jamoalari uchun AI asosidagi bosmaga tayyor vektor platforma.",
+      tagline: 'Dizaynerlar, bosmaxonalar va ijodkorlar uchun aniq rastrdan vektorga trassirovka.',
       columns: {
         product: {
           title: 'Mahsulot',
-          links: ['Imkoniyatlar', 'Foydalanish holatlari', 'Narxlar', "O'zgarishlar tarixi"],
-        },
-        resources: {
-          title: 'Resurslar',
-          links: ['Hujjatlar', "API ma'lumotnomasi", "Qo'llanmalar", "Qo'llab-quvvatlash"],
-        },
-        company: {
-          title: 'Kompaniya',
-          links: ['Biz haqimizda', 'Blog', 'Karyera', 'Aloqa'],
+          links: ['Imkoniyatlar', 'Foydalanish holatlari', 'Narxlar', 'Savollar'],
         },
         legal: {
           title: 'Huquqiy',
-          links: ['Maxfiylik siyosati', 'Foydalanish shartlari', 'Xavfsizlik'],
+          links: ['Maxfiylik siyosati', 'Foydalanish shartlari'],
         },
       },
       copyright: '© {year} Vectorla. Barcha huquqlar himoyalangan.',
@@ -1007,8 +1022,8 @@ export const translations: Record<Language, Translation> = {
       features: 'Возможности',
       useCases: 'Варианты использования',
       pricing: 'Тарифы',
-      api: 'API',
-      docs: 'Документация',
+      faq: 'Вопросы',
+      account: 'Кредиты',
       signIn: 'Войти',
       startFree: 'Начать бесплатно',
       openMenu: 'Открыть меню',
@@ -1049,16 +1064,14 @@ export const translations: Record<Language, Translation> = {
       loading: 'Загрузка',
     },
     hero: {
-      badge: 'Платформа для векторизации на основе ИИ',
-      title: 'Превратите любое изображение в идеальный вектор.',
+      badge: 'Трассировка растра в вектор',
+      title: 'Превращайте изображения в чистые редактируемые векторы.',
       description:
-        'Векторизация на основе ИИ для дизайнеров, типографий, ЧПУ, лазерной резки, стикеров, логотипов и графики, готовой к печати.',
-      primaryCta: 'Загрузить изображение',
-      secondaryCta: 'Смотреть демо',
-      rating: 'Оценка 4,9/5 от 2 000+ авторов',
-      dragDropTitle: 'Перетащите изображение сюда',
-      dragDropSubtitle: 'или нажмите, чтобы выбрать файл — PNG, JPG, SVG до 10 МБ',
-      browseFiles: 'Выбрать файл',
+        'Vectorla трассирует логотипы, иконки, иллюстрации и сканы в SVG с плавными кривыми, острыми углами и точными цветами — готово к редактированию, масштабированию и печати.',
+      primaryCta: 'Попробовать на своём изображении',
+      dragDropTitle: 'Трассируйте своё изображение',
+      dragDropSubtitle: 'PNG, JPG или WebP · до 5 МБ',
+      browseFiles: 'Перейти в рабочую область',
       workflow: {
         upload: 'Загрузка',
         trace: 'Трассировка',
@@ -1067,62 +1080,33 @@ export const translations: Record<Language, Translation> = {
       original: 'Оригинал',
       vectorized: 'Вектор',
       dragHint:
-        'Перетащите ползунок для сравнения — загрузите своё изображение, чтобы попробовать вживую.',
+        'Перетащите ползунок для сравнения. Это иллюстрация — попробуйте своё изображение в рабочей области ниже.',
     },
     compatibleWith: {
       title: 'Совместимо с',
     },
     trustBadges: {
       browserBased: 'Работает в браузере',
-      printReady: 'Готово к печати',
-      svgExport: 'Экспорт в SVG',
-      privateProcessing: 'Приватная обработка',
-      fastPreview: 'Быстрый предпросмотр',
+      svgExport: 'Результат в SVG',
+      privateProcessing: 'Файлы доступны только вам',
+      fastPreview: 'Обычно за секунды',
     },
     workspace: {
       eyebrow: 'Рабочая область',
-      title: 'Рабочая область для реального производства, а не для демо-игрушек',
+      title: 'Попробуйте на своём изображении',
       description:
-        'Все инструменты, которые нужны специалисту печати — пресеты, точные настройки и проверка готовности к печати в одном месте.',
-      windowUrl: 'app.vectorla.app/workspace',
+        'Загрузите PNG, JPG или WebP. Vectorla проанализирует его, выполнит трассировку и выдаст SVG для скачивания.',
+      windowUrl: 'vectorla.app',
       uploadImage: 'Загрузить изображение',
-      presetsLabel: 'Пресеты',
-      recentFilesLabel: 'Недавние файлы',
-      settingsLabel: 'Настройки вектора',
-      presets: {
-        logo: 'Логотип',
-        signature: 'Подпись',
-        sketch: 'Эскиз',
-        icon: 'Иконка',
-        qrCode: 'QR-код',
-        blueprint: 'Чертёж',
-      },
-      settings: {
-        colors: 'Цвета',
-        detail: 'Детализация',
-        smoothness: 'Сглаживание',
-        noiseRemoval: 'Удаление шума',
-        curvePrecision: 'Точность кривых',
-      },
-      presetPrefix: 'Пресет: ',
-      livePreview: 'Живой просмотр',
-      printReadyMode: 'Режим готовности к печати',
-      printChecklist: {
-        cmyk: 'Готово к CMYK',
-        cleanPaths: 'Чистые контуры',
-        transparentBackground: 'Прозрачный фон',
-        cutLine: 'Линия реза включена',
-        reducedNodes: 'Уменьшено число узлов',
-      },
-      exportAs: 'Экспорт в формате:',
+      exportAs: 'Результат:',
       dropTitle: 'Перетащите изображение для векторизации',
-      dropSubtitle: 'или нажмите, чтобы выбрать файл — PNG, JPG, SVG до 10 МБ',
+      dropSubtitle: 'или нажмите, чтобы выбрать — PNG, JPG или WebP, до 5 МБ',
       browseFiles: 'Выбрать файл',
       newImage: 'Загрузить другое изображение',
       previewModeBadge: 'Режим предпросмотра',
       previewModeMessage:
-        'Это предпросмотр интерфейса. Реальная AI-векторизация будет подключена в следующей версии.',
-      exportDisabledNote: 'Станет доступно после подключения AI-обработки.',
+        'Режим предпросмотра: сайт не подключён к сервису трассировки, поэтому изображения не загружаются и не обрабатываются.',
+      exportDisabledNote: 'Когда трассировка завершится, SVG можно будет скачать здесь.',
       statusUploading: 'Загрузка…',
       statusQueued: 'В очереди — ожидает начала',
       statusProcessing: 'Векторизация изображения…',
@@ -1143,16 +1127,16 @@ export const translations: Record<Language, Translation> = {
         providerLabel: 'Движок',
         imageTypes: { photo: 'Фото', illustration: 'Иллюстрация', logo: 'Логотип' },
         qualityLevels: { high: 'Высокое', medium: 'Среднее', low: 'Низкое' },
-        providers: { placeholder: 'ImageTracer', potrace: 'Potrace', vision: 'Профессиональный ИИ', openai: 'Профессиональный ИИ' },
+        providers: { vectorla: 'Vectorla', placeholder: 'ImageTracer', potrace: 'Potrace', vision: 'Внешний движок', openai: 'Внешний движок' },
         badges: {
           bestForLogos: 'Лучше для логотипов',
-          bestForPhotos: 'Лучше для фото',
-          printReady: 'Готово к печати',
-          aiRecommended: 'Рекомендовано ИИ',
+          bestForPhotos: 'Фото получится стилизованным',
+          printReady: 'Хорошо трассируется',
+          aiRecommended: 'Рекомендуется Professional Trace',
         },
         recommendedBadge: 'Рекомендуется',
         quickTraceTitle: 'Быстрая трассировка',
-        quickTraceDescription: 'Быстро · 1 кредит · наш бесплатный движок трассировки',
+        quickTraceDescription: 'Быстро, для большинства изображений',
         professionalTraceTitle: 'Профессиональная трассировка ⭐',
         professionalTraceDescription: 'Максимальное качество · полный конвейер обработки',
         qualityImprovement: {
@@ -1161,108 +1145,110 @@ export const translations: Record<Language, Translation> = {
           low: 'Ожидается значительное улучшение качества',
         },
         professionalTraceNote: 'Профессиональная трассировка выполняет дополнительную обработку (шумоподавление, очистка фона, контраст, цвет, края) — это займёт немного больше времени.',
-        creditsSuffix: 'кредитов',
       },
     },
     features: {
       eyebrow: 'Возможности',
-      title: 'Всё необходимое для производственного процесса',
+      title: 'Что умеет движок трассировки',
       description:
-        'Не просто трассировка — полный набор инструментов для превращения растровых изображений в готовые к печати векторы.',
+        'Vectorla создан для одной задачи: превращать растровые изображения в чистые и точные векторные формы.',
       items: {
-        aiLogoTrace: {
-          title: 'Трассировка логотипа с ИИ',
+        multiColorTrace: {
+          title: 'Многоцветная трассировка',
           description:
-            'Чистая, готовая к печати векторизация логотипа для плоских цветов и чётких краёв.',
+            'Логотипы и иллюстрации разделяются на реальные цвета и трассируются в отдельные редактируемые формы.',
         },
-        aiQrVectorizer: {
-          title: 'Векторизация QR-кодов с ИИ',
+        smoothCurves: {
+          title: 'Плавные кривые, острые углы',
           description:
-            'Идеально сканируемые QR-коды превращаются в чёткие, бесконечно масштабируемые векторы.',
+            'Кривые становятся плавными кривыми Безье, а настоящие углы остаются острыми, а не скруглёнными.',
+        },
+        gaplessShapes: {
+          title: 'Без зазоров между цветами',
+          description:
+            'Соседние формы имеют общую границу, поэтому между цветами нет тонких щелей и наложений.',
+        },
+        gradients: {
+          title: 'Восстановление градиентов',
+          description:
+            'Линейные и радиальные градиенты воссоздаются как настоящие SVG-градиенты, а не десятки цветных полос.',
+        },
+        jpegCleanup: {
+          title: 'Очистка JPEG',
+          description: 'Артефакты сжатия и цветная кайма по краям отфильтровываются перед трассировкой.',
+        },
+        professionalTrace: {
+          title: 'Professional Trace',
+          description:
+            'Дополнительный режим с предобработкой (шумоподавление, очистка фона, контраст и усиление краёв) для сложных изображений.',
+        },
+        qrPixelArt: {
+          title: 'QR-коды и пиксель-арт',
+          description:
+            'Квадратные формы, выровненные по сетке, трассируются с прямыми краями и прямыми углами.',
         },
         signatureToSvg: {
-          title: 'Подпись в SVG',
-          description: 'Превратите отсканированную подпись в плавный одноцветный векторный штрих.',
+          title: 'Подписи и линейные рисунки',
+          description:
+            'Отсканированные подписи и рисунки тушью становятся плавными одноцветными векторными формами.',
         },
         sketchToVector: {
-          title: 'Эскиз в вектор',
-          description: 'Сохраняет рукописный характер эскиза, убирая лишний шум.',
+          title: 'Эскизы и сканы',
+          description: 'Рисунки от руки сохраняют характер, а мелкие точки и шум удаляются.',
         },
-        printReadySvg: {
-          title: 'SVG, готовый к печати',
+        editableSvg: {
+          title: 'Стандартный редактируемый SVG',
           description:
-            'Результат проверен для CMYK-процессов, чистых контуров и производственной печати.',
-        },
-        cncLaserDxfExport: {
-          title: 'Экспорт DXF для ЧПУ / лазера',
-          description: 'Экспортируйте готовые к резке DXF-файлы для лазерных и ЧПУ-станков.',
-        },
-        batchVectorization: {
-          title: 'Пакетная векторизация',
-          description:
-            'Обрабатывайте целые папки изображений в одной очереди, скачивайте результат единым архивом.',
-        },
-        svgOptimizer: {
-          title: 'Оптимизатор SVG',
-          description:
-            'Объединяет лишние контуры и уменьшает число узлов без потери качества изображения.',
-        },
-        colorReduction: {
-          title: 'Уменьшение цветов',
-          description:
-            'Контролируйте точное количество цветов для более чистого разделения и упрощения печати.',
-        },
-        backgroundCleanup: {
-          title: 'Очистка фона',
-          description: 'Автоматически определяет и удаляет шум фона перед трассировкой.',
+            'Результат — обычный SVG, который открывается в Illustrator, Figma, Inkscape, CorelDRAW и других векторных редакторах.',
         },
       },
     },
     useCases: {
       eyebrow: 'Варианты использования',
-      title: 'Создано для тех, кто производит физический продукт',
-      description:
-        'От экрана до производства — Vectorla создана для реальных рабочих процессов, а не просто для красивых демо.',
+      title: 'Для кого это',
+      description: 'Для всех, кому нужна чистая векторная версия растрового изображения.',
       items: {
         designers: {
           title: 'Дизайнеры',
           description:
-            'Превращайте растровые референсы и черновые идеи в редактируемую, слоистую векторную графику.',
+            'Превращайте растровые референсы, старые логотипы и черновые идеи в редактируемую векторную графику.',
         },
         printShops: {
           title: 'Типографии',
           description:
-            'Готовьте файлы для производства с чистыми контурами и предсказуемым результатом каждый раз.',
+            'Восстанавливайте логотипы клиентов в чистые векторы, которые чётко печатаются в любом размере.',
         },
         advertisingAgencies: {
           title: 'Рекламные агентства',
-          description: 'Быстро конвертируйте логотипы и материалы клиентов, не дожидаясь дизайнера.',
+          description: 'Быстро конвертируйте логотипы и материалы клиентов без ручной отрисовки.',
         },
         cncLaserCutting: {
           title: 'ЧПУ и лазерная резка',
-          description: 'Экспортируйте точные линии реза DXF прямо из фото или отсканированного рисунка.',
+          description:
+            'Трассируйте чертежи и логотипы в SVG-контуры для программ резки или CAM, которые принимают SVG.',
         },
         stickerProduction: {
           title: 'Производство стикеров',
-          description:
-            'Создавайте чистые контуры реза, готовые для вырубки или контурной резки стикеров.',
+          description: 'Превращайте макеты стикеров в чёткие векторы, которые масштабируются без потерь.',
         },
         uvPrinting: {
           title: 'УФ-печать',
-          description: 'Получайте чёткие векторные слои, подходящие для УФ-принтеров и текстурных материалов.',
+          description:
+            'Получайте чёткую векторную графику для УФ-принтеров вместо размытых пиксельных исходников.',
         },
         dtfTextilePrinting: {
-          title: 'DTF / текстильная печать',
-          description: 'Векторизуйте изображения для прямой печати на плёнку и текстильного переноса.',
+          title: 'DTF / печать на текстиле',
+          description: 'Векторизуйте макеты для DTF и переноса на текстиль.',
         },
         logoCleanup: {
-          title: 'Восстановление логотипа',
+          title: 'Восстановление логотипов',
           description:
-            'Восстановите логотип низкого качества или повреждённый логотип в чёткий масштабируемый мастер-файл.',
+            'Превратите логотип низкого качества или повреждённый логотип в чёткий масштабируемый мастер-файл.',
         },
         qrCodeVectorization: {
           title: 'Векторизация QR-кодов',
-          description: 'Гарантируйте сканируемость при любом размере печати с настоящими векторными QR-кодами.',
+          description:
+            'Воссоздавайте QR-коды из чистых векторных квадратов для чёткой печати в любом размере. Перед печатью обязательно проверьте сканирование.',
         },
       },
     },
@@ -1310,65 +1296,100 @@ export const translations: Record<Language, Translation> = {
       },
     },
     faq: {
-      eyebrow: 'Вопросы и ответы',
-      title: 'Часто задаваемые вопросы',
+      eyebrow: 'Вопросы',
+      title: 'Частые вопросы',
       items: {
         isFree: {
-          question: 'Vectorla бесплатна?',
+          question: 'Vectorla бесплатный?',
           answer:
-            'Да. Бесплатный тариф включает 5 конвертаций в месяц с экспортом в SVG и базовыми пресетами, банковская карта не требуется. Тарифы Pro и Business открывают неограниченные конвертации и производственные функции.',
+            'Новые аккаунты получают 10 бесплатных кредитов. Quick Trace расходует 1 кредит, Professional Trace — 2. Если трассировка не удалась, кредиты возвращаются автоматически.',
         },
         uploadedToServer: {
-          question: 'Файлы загружаются на сервер?',
+          question: 'Загружаются ли мои файлы на сервер?',
           answer:
-            'Основная трассировка выполняется в вашем браузере. Некоторые продвинутые ИИ-функции в будущих версиях будут использовать защищённую, зашифрованную обработку — и мы всегда будем чётко сообщать, что покидает ваше устройство.',
+            'Да. Чтобы выполнить трассировку, Vectorla загружает изображение на наши серверы, обрабатывает его там и хранит оригинал и полученный SVG в вашем аккаунте. Доступ к ним есть только у вас после входа. Подробнее — в Политике конфиденциальности.',
         },
         canExportSvg: {
-          question: 'Могу ли я экспортировать в SVG?',
+          question: 'В каких форматах можно скачать результат?',
           answer:
-            'Да, экспорт в SVG доступен на любом тарифе. Тарифы Pro и Business добавляют экспорт в PDF, DXF и EPS для производственных процессов.',
+            'В SVG. Он открывается в Illustrator, Figma, Inkscape, CorelDRAW и большинстве других векторных редакторов. Экспорт в PDF, EPS и DXF пока недоступен.',
         },
         goodForPrinting: {
           question: 'Подходит ли это для печати?',
           answer:
-            'Режим готовности к печати Vectorla проверяет разрешение, разумно уплощает цвета и создаёт чистые контуры с уменьшенным числом узлов, подходящие для CMYK-печати, а не просто декоративные веб-SVG.',
+            'Vectorla создаёт чистые векторные формы с точными цветами, которые масштабируются до любого размера. Сервис не переводит цвета в CMYK и не проверяет файл на требования типографии, поэтому перед печатью проверьте файл в своём графическом редакторе.',
         },
         cncLaserCutting: {
-          question: 'Могу ли я использовать это для ЧПУ или лазерной резки?',
+          question: 'Можно ли использовать для ЧПУ или лазерной резки?',
           answer:
-            'Да. Vectorla может экспортировать линии реза DXF, созданные прямо из вашего трассированного изображения, готовые для загрузки в CAM или программу резки.',
+            'SVG можно импортировать в программы резки или CAM, которые принимают SVG. Vectorla пока не экспортирует DXF и не создаёт отдельные линии реза.',
         },
         batchProcessing: {
-          question: 'Поддерживается ли пакетная обработка?',
-          answer:
-            'Тарифы Pro и Business включают пакетную обработку — загрузите папку с изображениями и экспортируйте каждый результат в виде единого архива.',
+          question: 'Можно ли загрузить много изображений сразу?',
+          answer: 'Пока нет. Изображения трассируются по одному.',
         },
         apiAccess: {
-          question: 'Будет ли доступ к API?',
-          answer:
-            'Доступ к API запланирован для тарифа Business, чтобы вы могли интегрировать Vectorla прямо в свой производственный процесс.',
+          question: 'Есть ли API?',
+          answer: 'Публичный API пока недоступен.',
         },
       },
     },
+    credits: {
+      unit: {
+        one: 'кредит',
+        few: 'кредита',
+        many: 'кредитов',
+      },
+      navLabel: 'Кредиты',
+      pageTitle: 'Кредиты',
+      pageDescription: 'Ваш текущий баланс и все начисления и списания кредитов.',
+      balanceLabel: 'Доступный баланс',
+      costsTitle: 'Как расходуются кредиты',
+      costQuick: 'Quick Trace расходует 1 кредит за изображение.',
+      costProfessional: 'Professional Trace расходует 2 кредита за изображение.',
+      costRefund: 'Если трассировка не удалась, кредиты возвращаются автоматически.',
+      historyTitle: 'История кредитов',
+      historyLatest: 'Показаны последние записи: {count}.',
+      historyEmpty: 'Операций с кредитами пока нет',
+      historyEmptyHint: 'Здесь появятся полученные и потраченные кредиты.',
+      loadError: 'Не удалось загрузить кредиты. Проверьте подключение и попробуйте снова.',
+      retry: 'Повторить',
+      signInTitle: 'Войдите, чтобы увидеть кредиты',
+      signInDescription: 'После входа здесь появятся баланс и история кредитов.',
+      signIn: 'Войти',
+      notConfigured: 'Кредиты недоступны в этой демо-версии, так как она не подключена к сервису Vectorla.',
+      types: {
+        credit: 'Начислено',
+        debit: 'Списано',
+        refund: 'Возвращено',
+      },
+      reasons: {
+        trace: 'Трассировка изображения',
+        refund: 'Возврат за неудачную трассировку',
+        signup: 'Бесплатные кредиты за регистрацию',
+      },
+      panelTitle: 'Ваши кредиты',
+      panelSignedOut:
+        'Войдите, чтобы трассировать свои изображения. Новые аккаунты получают 10 бесплатных кредитов.',
+      viewHistory: 'История кредитов',
+      backHome: 'Вернуться в Vectorla',
+    },
+    legal: {
+      privacy: 'Политика конфиденциальности',
+      terms: 'Условия использования',
+      englishOnly: 'Этот документ пока доступен только на английском языке.',
+      backHome: 'Вернуться в Vectorla',
+    },
     footer: {
-      tagline:
-        'Платформа для векторизации на основе ИИ для дизайнеров, типографий и производственных команд.',
+      tagline: 'Точная трассировка растра в вектор для дизайнеров, типографий и мастеров.',
       columns: {
         product: {
           title: 'Продукт',
-          links: ['Возможности', 'Варианты использования', 'Тарифы', 'Журнал изменений'],
-        },
-        resources: {
-          title: 'Ресурсы',
-          links: ['Документация', 'Справочник API', 'Руководства', 'Поддержка'],
-        },
-        company: {
-          title: 'Компания',
-          links: ['О нас', 'Блог', 'Вакансии', 'Контакты'],
+          links: ['Возможности', 'Варианты использования', 'Тарифы', 'Вопросы'],
         },
         legal: {
           title: 'Правовая информация',
-          links: ['Политика конфиденциальности', 'Условия использования', 'Безопасность'],
+          links: ['Политика конфиденциальности', 'Условия использования'],
         },
       },
       copyright: '© {year} Vectorla. Все права защищены.',

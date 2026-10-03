@@ -1,8 +1,15 @@
 import { LogoMark } from '@/components/LogoMark'
+import { Link } from '@/components/ui/Link'
 import { useLanguage } from '@/lib/language'
 import type { FooterColumnId } from '@/data/i18n'
 
-const columnIds: FooterColumnId[] = ['product', 'resources', 'company', 'legal']
+const columnIds: FooterColumnId[] = ['product', 'legal']
+
+// Same order as the link labels in t.footer.columns.
+const columnHrefs: Record<FooterColumnId, string[]> = {
+  product: ['/#features', '/#use-cases', '/#pricing', '/#faq'],
+  legal: ['/privacy', '/terms'],
+}
 
 export function Footer() {
   const { t } = useLanguage()
@@ -10,8 +17,8 @@ export function Footer() {
   return (
     <footer className="border-t border-[var(--border)] px-5 py-14 sm:px-8">
       <div className="mx-auto max-w-6xl">
-        <div className="grid grid-cols-2 gap-8 sm:grid-cols-3 lg:grid-cols-5">
-          <div className="col-span-2 sm:col-span-3 lg:col-span-1">
+        <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
+          <div className="col-span-2 sm:col-span-1">
             <div className="flex items-center gap-2">
               <LogoMark size={26} />
               <span className="font-[family-name:var(--font-display)] text-base font-bold text-[var(--ink)]">
@@ -29,14 +36,14 @@ export function Footer() {
                   {column.title}
                 </h2>
                 <ul className="mt-3 flex flex-col gap-2.5">
-                  {column.links.map((link) => (
+                  {column.links.map((link, index) => (
                     <li key={link}>
-                      <a
-                        href="#"
+                      <Link
+                        href={columnHrefs[id][index] ?? '/'}
                         className="text-sm text-[var(--ink-muted)] transition-colors hover:text-[var(--ink)]"
                       >
                         {link}
-                      </a>
+                      </Link>
                     </li>
                   ))}
                 </ul>

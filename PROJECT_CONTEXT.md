@@ -361,4 +361,9 @@ See `ROADMAP.md` for the full prioritized list. In short:
 1. Vector quality: gradient reconstruction (Q3) and lossy-source quality (Q4).
 2. Production safety: decompression-bomb guard, stuck-job recovery, queue
    configuration, credit integrity, free-credit grant (P1–P5).
-3. Then SaaS work: honest copy, export formats, account UI, billing.
+3. Then SaaS work: honest copy (done except Pricing), account UI (credits done),
+   legal drafts (awaiting owner decisions), export formats, billing.
+
+Frontend routes: `/` (landing + workspace), `/account` (credits), `/privacy`,
+`/terms`. These use a minimal History-API router (`src/lib/router.tsx`);
+Cloudflare Pages' SPA fallback serves `index.html` for deep links.

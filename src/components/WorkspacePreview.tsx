@@ -2,10 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   UploadCloud,
-  Clock,
-  Printer,
   CheckCircle2,
-  SlidersHorizontal,
   Eye,
   Info,
   RefreshCcw,
@@ -19,12 +16,16 @@ import {
   Image as ImageIcon,
   Camera,
   Palette,
+  ArrowRight,
 } from 'lucide-react'
 import { SectionHeading } from '@/components/ui/SectionHeading'
 import { Button } from '@/components/ui/Button'
 import { BeforeAfterArt } from '@/components/BeforeAfterArt'
-import { workspaceSettings, workspacePresets, recentFiles, exportFormats, printChecklist } from '@/data/workspace'
+import { Link } from '@/components/ui/Link'
 import { useLanguage } from '@/lib/language'
+import { useCredits } from '@/lib/useCredits'
+import { requestAuthDialog } from '@/lib/authDialogEvents'
+import { formatCredits } from '@/utils/formatCredits'
 import { useCompareSlider } from '@/hooks/useCompareSlider'
 import { useDropzone } from '@/hooks/useDropzone'
 import { useUploadFlow } from '@/hooks/useUploadFlow'
@@ -57,12 +58,12 @@ function formatEstimatedTime(ms: number): string {
  * src/hooks/useUploadFlow.ts).
  */
 export function WorkspacePreview() {
-  const [activePreset, setActivePreset] = useState<(typeof workspacePresets)[number]>('logo')
-  const [printReady, setPrintReady] = useState(true)
   const [showDemo, setShowDemo] = useState(false)
   const { splitPct, containerHandlers, onHandleKeyDown } = useCompareSlider(55)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
+  const credits = useCredits()
+  const { refresh: refreshCredits } = credits
   const { state: uploadState, analysis, traceMode: selectedMode, upload, retry, reset, selectTraceMode } = useUploadFlow()
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [vectorizedUrl, setVectorizedUrl] = useState<string | null>(null)
@@ -105,6 +106,11 @@ export function WorkspacePreview() {
     fetchedConversionIdRef.current = conversion.id
     if (conversion.downloadUrl) void fetchResult(conversion.downloadUrl)
   }, [uploadState, fetchResult])
+
+  // A finished or failed job changes the balance (a charge, or a refund).
+  useEffect(() => {
+    if (uploadState.status === 'completed' || uploadState.status === 'failed') refreshCredits()
+  }, [uploadState.status, refreshCredits])
 
   function handleFiles(files: FileList | null) {
     const file = files?.[0]
@@ -169,7 +175,7 @@ export function WorkspacePreview() {
   const ImageTypeIcon = analysis ? IMAGE_TYPE_ICONS[analysis.imageType] : ImageIcon
 
   return (
-    <section className="px-5 py-20 sm:px-8">
+    <section id="workspace" className="scroll-mt-20 px-5 py-20 sm:px-8">
       <SectionHeading
         eyebrow={t.workspace.eyebrow}
         title={t.workspace.title}
@@ -210,62 +216,14 @@ export function WorkspacePreview() {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept="image/png,image/jpeg,image/webp"
             className="hidden"
             onChange={(e) => handleFiles(e.target.files)}
           />
 
-          <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr_260px]">
-            {/* Left panel: presets + recent files */}
-            <div className="order-3 border-b border-[var(--border)] p-4 lg:order-1 lg:border-b-0 lg:border-r">
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-[var(--border-strong)] bg-[var(--bg-subtle)] px-3 py-4 text-xs font-semibold text-[var(--ink-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
-              >
-                <UploadCloud size={16} />
-                {t.workspace.uploadImage}
-              </button>
-
-              <p className="mb-2 mt-5 text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
-                {t.workspace.presetsLabel}
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {workspacePresets.map((preset) => (
-                  <button
-                    key={preset}
-                    onClick={() => setActivePreset(preset)}
-                    aria-pressed={activePreset === preset}
-                    className={cn(
-                      'rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
-                      activePreset === preset
-                        ? 'bg-[var(--accent)] text-white'
-                        : 'bg-[var(--bg-muted)] text-[var(--ink-muted)] hover:text-[var(--ink)]',
-                    )}
-                  >
-                    {t.workspace.presets[preset]}
-                  </button>
-                ))}
-              </div>
-
-              <p className="mb-2 mt-5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
-                <Clock size={11} /> {t.workspace.recentFilesLabel}
-              </p>
-              <div className="flex flex-col gap-1">
-                {recentFiles.map((file) => (
-                  <button
-                    key={file}
-                    onClick={backendConfigured ? undefined : () => setShowDemo(true)}
-                    disabled={backendConfigured}
-                    className="truncate rounded-md px-2 py-1.5 text-left text-xs text-[var(--ink-muted)] transition-colors hover:bg-[var(--bg-muted)] hover:text-[var(--ink)] disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    {file}
-                  </button>
-                ))}
-              </div>
-            </div>
-
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px]">
             {/* Center panel: upload / before-after preview */}
-            <div className="order-1 flex flex-col border-b border-[var(--border)] p-4 lg:order-2 lg:border-b-0 lg:border-r">
+            <div className="flex flex-col border-b border-[var(--border)] p-4 lg:border-b-0 lg:border-r">
               <div
                 className="relative flex-1 select-none overflow-hidden rounded-xl bg-[var(--bg-subtle)]"
                 style={{ minHeight: 280 }}
@@ -514,7 +472,7 @@ export function WorkspacePreview() {
                       </div>
                       <p className="mt-0.5 text-[11px] text-[var(--ink-faint)]">{t.workspace.analysis.quickTraceDescription}</p>
                       <p className="mt-1 text-[11px] font-medium text-[var(--ink-muted)]">
-                        1 {t.workspace.analysis.creditsSuffix}
+                        {formatCredits(1, language, t.credits.unit)}
                       </p>
                     </button>
 
@@ -540,7 +498,7 @@ export function WorkspacePreview() {
                       </div>
                       <p className="mt-0.5 text-[11px] text-[var(--ink-faint)]">{t.workspace.analysis.professionalTraceDescription}</p>
                       <p className="mt-1 text-[11px] font-medium text-[var(--ink-muted)]">
-                        {PROFESSIONAL_TRACE_CREDITS} {t.workspace.analysis.creditsSuffix}
+                        {formatCredits(PROFESSIONAL_TRACE_CREDITS, language, t.credits.unit)}
                       </p>
                       <p className="mt-0.5 text-[11px] text-[var(--accent)]">
                         {t.workspace.analysis.qualityImprovement[analysis.estimatedQuality]}
@@ -557,11 +515,7 @@ export function WorkspacePreview() {
                 </div>
               )}
 
-              <div className="mt-3 flex items-center justify-between gap-2 text-xs text-[var(--ink-faint)]">
-                <span>
-                  {t.workspace.presetPrefix}
-                  {t.workspace.presets[activePreset]}
-                </span>
+              <div className="mt-3 flex items-center justify-end gap-2 text-xs text-[var(--ink-faint)]">
                 {isActive && (
                   <button
                     type="button"
@@ -575,93 +529,73 @@ export function WorkspacePreview() {
               </div>
             </div>
 
-            {/* Right panel: settings + print-ready checklist */}
-            <div className="order-2 p-4 lg:order-3">
-              <p className="mb-3 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
-                <SlidersHorizontal size={11} /> {t.workspace.settingsLabel}
+            {/* Right panel: the signed-in user's credits */}
+            <aside className="p-4" aria-labelledby="workspace-credits-title">
+              <p
+                id="workspace-credits-title"
+                className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]"
+              >
+                {t.credits.panelTitle}
               </p>
-              <div className="flex flex-col gap-4">
-                {workspaceSettings.map((setting) => (
-                  <div key={setting.id}>
-                    <div className="mb-1.5 flex items-center justify-between text-xs">
-                      <span className="text-[var(--ink-muted)]">{t.workspace.settings[setting.id]}</span>
-                      <span className="font-mono font-medium text-[var(--accent)]">
-                        {setting.value}
-                        {setting.unit ?? ''}
-                      </span>
-                    </div>
-                    <div aria-hidden="true" className="h-1.5 rounded-full bg-[var(--bg-muted)]">
-                      <div
-                        className="h-1.5 rounded-full bg-[var(--accent)]"
-                        style={{ width: `${setting.value}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <label className="mt-5 flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] px-3 py-2.5 text-xs font-medium text-[var(--ink)]">
-                <span className="flex items-center gap-1.5">
-                  <Printer size={13} className="text-[var(--accent)]" />
-                  {t.workspace.printReadyMode}
-                </span>
-                <button
-                  onClick={() => setPrintReady((v) => !v)}
-                  className={cn(
-                    'relative h-5 w-9 rounded-full transition-colors',
-                    printReady ? 'bg-[var(--accent)]' : 'bg-[var(--border-strong)]',
-                  )}
-                  aria-pressed={printReady}
-                >
-                  <span
-                    className={cn(
-                      'absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform',
-                      printReady ? 'translate-x-4' : 'translate-x-0.5',
-                    )}
-                  />
-                </button>
-              </label>
-              <div className="mt-3 flex flex-col gap-1.5">
-                {printChecklist.map((id) => (
-                  <div
-                    key={id}
-                    className={cn(
-                      'flex items-center gap-1.5 text-[11px] transition-opacity',
-                      printReady ? 'text-[var(--ink-muted)] opacity-100' : 'text-[var(--ink-faint)] opacity-50',
-                    )}
+              {credits.status === 'ready' && credits.balance !== null ? (
+                <>
+                  <p className="font-[family-name:var(--font-display)] text-2xl font-bold text-[var(--ink)]">
+                    {formatCredits(credits.balance, language, t.credits.unit)}
+                  </p>
+                  <ul className="mt-3 flex flex-col gap-1.5 text-xs text-[var(--ink-muted)]">
+                    <li>{t.credits.costQuick}</li>
+                    <li>{t.credits.costProfessional}</li>
+                    <li>{t.credits.costRefund}</li>
+                  </ul>
+                  <Link
+                    href="/account"
+                    className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-[var(--accent)] hover:text-[var(--accent-hover)]"
                   >
-                    <CheckCircle2
-                      size={13}
-                      className={printReady ? 'text-[var(--accent)]' : 'text-[var(--ink-faint)]'}
-                    />
-                    {t.workspace.printChecklist[id]}
-                  </div>
-                ))}
-              </div>
-            </div>
+                    {t.credits.viewHistory}
+                    <ArrowRight size={12} />
+                  </Link>
+                </>
+              ) : credits.status === 'loading' ? (
+                <div aria-busy="true" aria-label={t.common.loading} className="flex flex-col gap-2">
+                  <div className="h-7 w-24 animate-pulse rounded-md bg-[var(--bg-muted)]" />
+                  <div className="h-3 w-full animate-pulse rounded bg-[var(--bg-muted)]" />
+                  <div className="h-3 w-4/5 animate-pulse rounded bg-[var(--bg-muted)]" />
+                </div>
+              ) : credits.status === 'error' ? (
+                <div className="flex flex-col items-start gap-2 text-xs text-[var(--ink-muted)]">
+                  <p>{t.credits.loadError}</p>
+                  <Button variant="secondary" size="sm" onClick={credits.refresh}>
+                    <RefreshCcw size={12} />
+                    {t.credits.retry}
+                  </Button>
+                </div>
+              ) : credits.status === 'signed-out' ? (
+                <div className="flex flex-col items-start gap-3 text-xs text-[var(--ink-muted)]">
+                  <p>{t.credits.panelSignedOut}</p>
+                  <Button size="sm" onClick={() => requestAuthDialog('sign-in')}>
+                    {t.credits.signIn}
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-xs text-[var(--ink-muted)]">{t.credits.notConfigured}</p>
+              )}
+            </aside>
           </div>
 
-          {/* Bottom export bar */}
+          {/* Bottom output bar: SVG is the only format the engine produces */}
           <div className="flex flex-col gap-2 border-t border-[var(--border)] px-4 py-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <span className="text-xs text-[var(--ink-faint)]">{t.workspace.exportAs}</span>
-              <div className="flex flex-wrap gap-2">
-                {exportFormats.map((format) => {
-                  const isReady = completedFormat === format && Boolean(vectorizedUrl)
-                  return (
-                    <Button
-                      key={format}
-                      variant="secondary"
-                      size="sm"
-                      disabled={!isReady}
-                      title={isReady ? undefined : t.workspace.exportDisabledNote}
-                      onClick={isReady ? triggerDownload : undefined}
-                    >
-                      {format}
-                    </Button>
-                  )
-                })}
-              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={!(isCompleted && vectorizedUrl)}
+                title={isCompleted && vectorizedUrl ? undefined : t.workspace.exportDisabledNote}
+                onClick={isCompleted && vectorizedUrl ? triggerDownload : undefined}
+              >
+                <Download size={14} />
+                SVG
+              </Button>
             </div>
             {!isCompleted && (
               <p className="text-right text-[11px] text-[var(--ink-faint)]">{t.workspace.exportDisabledNote}</p>

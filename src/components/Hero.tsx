@@ -1,19 +1,18 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { UploadCloud, Play, Wand2, Download, Star } from 'lucide-react'
-import { Button } from '@/components/ui/Button'
+import { UploadCloud, Wand2, Download, ArrowRight } from 'lucide-react'
+import { Link } from '@/components/ui/Link'
 import { BeforeAfterArt } from '@/components/BeforeAfterArt'
 import { trustBadges } from '@/data/trustBadges'
 import { useLanguage } from '@/lib/language'
 import { useCompareSlider } from '@/hooks/useCompareSlider'
-import { useDropzone } from '@/hooks/useDropzone'
 import { cn } from '@/utils/cn'
 
-const exportBadges = ['SVG', 'EPS', 'PDF', 'AI', 'DXF']
+// The real upload lives in the workspace section; the hero links to it.
+const WORKSPACE_HREF = '/#workspace'
 
 export function Hero() {
   const { splitPct, containerHandlers, onHandleKeyDown } = useCompareSlider(52)
-  const { isDragOver, dropzoneHandlers } = useDropzone()
   const [activeStep, setActiveStep] = useState(0)
   const { t } = useLanguage()
 
@@ -62,35 +61,13 @@ export function Hero() {
             </p>
 
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3 lg:justify-start">
-              <Button size="lg">
+              <Link
+                href={WORKSPACE_HREF}
+                className="inline-flex items-center justify-center gap-2.5 rounded-xl bg-[var(--accent)] px-6 py-3.5 text-base font-semibold text-white shadow-sm transition-all duration-150 hover:bg-[var(--accent-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] active:scale-[0.98]"
+              >
                 <UploadCloud size={18} />
                 {t.hero.primaryCta}
-              </Button>
-              <Button variant="secondary" size="lg">
-                <Play size={16} />
-                {t.hero.secondaryCta}
-              </Button>
-            </div>
-
-            {/* trust rating */}
-            <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center lg:justify-start">
-              <div aria-hidden="true" className="flex -space-x-2.5">
-                {['#6D28D9', '#9F75F0', '#4C1D95', '#C9BBEE'].map((color, index) => (
-                  <span
-                    key={color}
-                    className="h-8 w-8 rounded-full border-2 border-[var(--bg)]"
-                    style={{ backgroundColor: color, zIndex: 4 - index }}
-                  />
-                ))}
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="flex items-center gap-0.5 text-[var(--accent)]" aria-hidden="true">
-                  {Array.from({ length: 5 }).map((_, index) => (
-                    <Star key={index} size={15} fill="currentColor" strokeWidth={0} />
-                  ))}
-                </div>
-                <span className="text-sm font-semibold text-[var(--ink)]">{t.hero.rating}</span>
-              </div>
+              </Link>
             </div>
 
             <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 lg:justify-start">
@@ -107,22 +84,18 @@ export function Hero() {
           <div className="relative">
             <div className="relative rounded-3xl border border-white/40 bg-white/60 p-5 shadow-2xl shadow-black/10 backdrop-blur-xl dark:border-white/10 dark:bg-white/5 sm:p-6">
               {/* drag & drop area */}
-              <div
-                {...dropzoneHandlers}
-                className={cn(
-                  'flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed px-4 py-7 text-center transition-colors',
-                  isDragOver
-                    ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
-                    : 'border-[var(--border-strong)] bg-[var(--bg-subtle)]/60',
-                )}
+              <Link
+                href={WORKSPACE_HREF}
+                className="group flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[var(--border-strong)] bg-[var(--bg-subtle)]/60 px-4 py-7 text-center transition-colors hover:border-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
               >
                 <UploadCloud className="text-[var(--accent)]" size={26} />
-                <p className="text-sm font-semibold text-[var(--ink)]">{t.hero.dragDropTitle}</p>
-                <p className="text-xs text-[var(--ink-faint)]">{t.hero.dragDropSubtitle}</p>
-                <Button variant="secondary" size="sm" className="mt-1">
+                <span className="text-sm font-semibold text-[var(--ink)]">{t.hero.dragDropTitle}</span>
+                <span className="text-xs text-[var(--ink-faint)]">{t.hero.dragDropSubtitle}</span>
+                <span className="mt-1 inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-muted)] px-3.5 py-2 text-sm font-semibold text-[var(--ink)] transition-colors group-hover:bg-[var(--border)]">
                   {t.hero.browseFiles}
-                </Button>
-              </div>
+                  <ArrowRight size={14} />
+                </span>
+              </Link>
 
               {/* animated vectorization workflow */}
               <div className="relative mt-6 flex items-center justify-between px-3">
@@ -212,16 +185,11 @@ export function Hero() {
               </div>
               <p className="mt-2 text-center text-[11px] text-[var(--ink-faint)]">{t.hero.dragHint}</p>
 
-              {/* export badges */}
-              <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-                {exportBadges.map((format) => (
-                  <span
-                    key={format}
-                    className="rounded-full border border-[var(--border)] bg-[var(--bg)] px-3 py-1 text-[11px] font-semibold text-[var(--ink-muted)]"
-                  >
-                    {format}
-                  </span>
-                ))}
+              {/* output format — SVG is the only format the engine produces today */}
+              <div className="mt-5 flex justify-center">
+                <span className="rounded-full border border-[var(--border)] bg-[var(--bg)] px-3 py-1 text-[11px] font-semibold text-[var(--ink-muted)]">
+                  SVG
+                </span>
               </div>
             </div>
           </div>

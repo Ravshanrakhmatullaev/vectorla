@@ -6,9 +6,8 @@ export interface NavLink {
 }
 
 export const navLinks: NavLink[] = [
-  { id: 'features', href: '#features' },
-  { id: 'useCases', href: '#use-cases' },
-  { id: 'pricing', href: '#pricing' },
-  { id: 'api', href: '#api' },
-  { id: 'docs', href: '#docs' },
+  { id: 'features', href: '/#features' },
+  { id: 'useCases', href: '/#use-cases' },
+  { id: 'pricing', href: '/#pricing' },
+  { id: 'faq', href: '/#faq' },
 ]

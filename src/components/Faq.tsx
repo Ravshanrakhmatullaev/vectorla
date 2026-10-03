@@ -10,7 +10,7 @@ export function Faq() {
   const { t } = useLanguage()
 
   return (
-    <section id="docs" className="bg-[var(--bg-subtle)] px-5 py-20 sm:px-8">
+    <section id="faq" className="bg-[var(--bg-subtle)] px-5 py-20 sm:px-8">
       <SectionHeading eyebrow={t.faq.eyebrow} title={t.faq.title} />
 
       <div className="mx-auto mt-10 max-w-2xl">
