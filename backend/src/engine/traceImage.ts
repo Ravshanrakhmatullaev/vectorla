@@ -335,7 +335,7 @@ function traceWith(source: { image: RgbaImage | null }, overrides: Partial<Trace
     if (upscale > 1) {
       const base = image
       image = gaussianBlur(options.upscaleFilter === 'bicubic' ? upscaleBicubic(base, upscale) : upscaleBilinear(base, upscale), options.upscaleBlur * upscale)
-      if (options.upscaleFilter === 'ridge') restoreRidges(image, base, upscale, ridgeMask(base, options.ridgeThreshold))
+      if (options.upscaleFilter === 'ridge' && flatFraction(base) >= PHOTO_FLAT_FRACTION) restoreRidges(image, base, upscale, ridgeMask(base, options.ridgeThreshold))
     }
     else if (lossy) image = gaussianBlur(image, 0.5, spare)
     spare = undefined
