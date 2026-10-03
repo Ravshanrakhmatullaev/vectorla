@@ -47,6 +47,10 @@ export function TermsOfService() {
             you.
           </li>
           <li>
+            Uploaded images and generated files are deleted automatically 30 days after upload. Download any results you
+            want to keep before then.
+          </li>
+          <li>
             Only upload images you have the right to use. Converting a logo or artwork does not give you rights in it;
             respecting trademarks and copyrights is your responsibility.
           </li>

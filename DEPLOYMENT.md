@@ -105,6 +105,15 @@ Before staging is used from a browser, set `CORS_EXTRA_ORIGINS` in
 origin, e.g. `https://staging.<pages-project>.pages.dev`. Only exact
 `https://` origins are accepted, with no wildcards.
 
+### Data retention (stated in the Privacy Policy)
+
+- The 15-minute cron deletes uploads and their results 30 days after upload
+  (`UPLOAD_RETENTION_DAYS`, `backend/src/services/RetentionService.ts`).
+- Request logs must be kept for **no longer than 30 days**. Cloudflare's own
+  Workers log retention is shorter than that. Do not add a log drain or
+  observability setting that keeps logs longer without updating the Privacy
+  Policy first.
+
 ## 5. Deploy the frontend (Cloudflare Pages)
 
 - Build command: `npm run build` · output: `dist`

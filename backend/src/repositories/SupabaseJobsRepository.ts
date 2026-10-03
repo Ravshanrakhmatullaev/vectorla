@@ -110,6 +110,12 @@ export class SupabaseJobsRepository implements JobsRepository {
     return data ? mapRowToJob(data) : null
   }
 
+  async findByUploadId(uploadId: string): Promise<Job[]> {
+    const { data, error } = await this.client.from('jobs').select().eq('upload_id', uploadId).returns<JobRow[]>()
+    if (error) throw new Error(`Failed to list jobs for upload: ${error.message}`)
+    return (data ?? []).map(mapRowToJob)
+  }
+
   async findStale(status: 'queued' | 'processing', before: string, limit: number): Promise<Job[]> {
     const { data, error } = await this.client
       .from('jobs')

@@ -6,6 +6,7 @@ import { createJobService } from './services/JobService'
 import { createConversionService } from './services/ConversionService'
 import { NotFoundError } from './errors'
 import { isDeadLetterQueue, handleConversionMessages, handleDeadLetters, sweepStaleJobs } from './queueConsumer'
+import { createRetentionService } from './services/RetentionService'
 import { mapErrorToResponse } from './api/response'
 import { handlePreflight, applyCors } from './api/cors'
 import { logRequest } from './api/logging'
@@ -137,11 +138,16 @@ export default {
     await handleConversionMessages(batch.messages, conversionService, createJobService(env))
   },
 
-  // Cron trigger (wrangler.toml [triggers]): fail + refund jobs stuck past any real run.
+  // Cron trigger (wrangler.toml [triggers]): fail + refund jobs stuck past any
+  // real run, then delete uploads and results past the retention period.
   async scheduled(_controller: ScheduledController, rawEnv: Env): Promise<void> {
     const env = await withWasmModules(rawEnv)
     assertRequiredBackendSecrets(env)
     const swept = await sweepStaleJobs(createConversionService(env), createJobService(env))
     if (swept > 0) console.warn(`Stale-job sweep failed and refunded ${swept} job(s)`)
+    const retention = await createRetentionService(env).purgeExpired()
+    if (retention.purged > 0 || retention.skipped > 0) {
+      console.log(`Retention: purged ${retention.purged} expired upload(s), ${retention.skipped} left for a later run`)
+    }
   },
 } satisfies ExportedHandler<Env, ConversionQueueMessage>

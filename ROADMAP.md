@@ -165,10 +165,10 @@ Legend: ✅ done · 🔜 next · ⏳ planned · 🧑 needs an owner decision, cr
 
 ### Tier 3: Product and SaaS (after quality and safety)
 
-- 🟡 **S1.** Honest marketing copy. Landing copy (EN/UZ/RU) now only claims what the
+- ✅ **S1.** Honest marketing copy. Landing copy (EN/UZ/RU) now only claims what the
   engine does: no ratings, no "AI", SVG-only output, no batch/DXF/CMYK claims, and no
-  mock workspace controls. The **Pricing section is unchanged** and still lists
-  unbuilt features and plans; it needs an owner decision.
+  mock workspace controls. Pricing shows the free 10 credits; paid plans are marked
+  "Coming soon", with no price or features.
 - ⏳ **S2.** PDF / EPS / DXF export from the engine's path model (straightforward
   now that output is clean cubic geometry); PNG re-render.
 - 🟡 **S3.** Account UI. Done: credit balance in the navbar and workspace, and an
@@ -176,10 +176,11 @@ Legend: ✅ done · 🔜 next · ⏳ planned · 🧑 needs an owner decision, cr
   past conversions (GET /history).
 - ⏳ **S4.** Batch upload and ZIP download.
 - 🧑 **S5.** Stripe billing, checkout and portal. Needs account, keys and pricing decisions.
-- 🟡 **S6.** Legal. `/privacy` and `/terms` are drafts with visible "Decision needed"
-  markers (operator, contact, law, age, liability). Retention is proposed (30 days
-  for files) but **not enforced** until the owner approves. User deletion is
-  handled by email request only for now.
+- 🟡 **S6.** Legal. `/privacy` and `/terms` are English-only drafts with visible
+  "Decision needed" markers (operator, contacts, law and courts, age, liability,
+  email provider). Retention is enforced: uploads and results are deleted 30 days
+  after upload by the cron (`RetentionService`); request logs are kept 30 days or
+  less. User deletion is handled by email request only for now.
 
 ---
 

@@ -37,4 +37,15 @@ export class InMemoryUploadsRepository implements UploadsRepository {
   async listAll(): Promise<Upload[]> {
     return Array.from(this.uploadsById.values())
   }
+
+  async findCreatedBefore(before: string, limit: number): Promise<Upload[]> {
+    return Array.from(this.uploadsById.values())
+      .filter((upload) => upload.createdAt < before)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .slice(0, limit)
+  }
+
+  async delete(id: string): Promise<void> {
+    this.uploadsById.delete(id)
+  }
 }

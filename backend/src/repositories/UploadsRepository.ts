@@ -7,4 +7,11 @@ export interface UploadsRepository {
   findByUserAndFilename(userId: string, fileName: string): Promise<Upload | null>
   /** Used by OrphanCleanupService to cross-reference DB rows against R2 — not paginated, fine for today's scale. */
   listAll(): Promise<Upload[]>
+  /** Oldest first: uploads created before `before` (ISO timestamp). */
+  findCreatedBefore(before: string, limit: number): Promise<Upload[]>
+  /**
+   * Deletes the upload row. In Supabase this cascades to its jobs and
+   * conversions (schema.sql); credit ledger rows survive with job_id = null.
+   */
+  delete(id: string): Promise<void>
 }

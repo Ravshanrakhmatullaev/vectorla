@@ -16,8 +16,6 @@ async function hmacHex(secret: string, message: string): Promise<string> {
     .join('')
 }
 
-// TODO(backend): deleteFile still needs a real implementation — not needed
-// until upload/conversion deletion is built.
 export class StorageService {
   constructor(
     private readonly r2: R2Client,
@@ -66,7 +64,8 @@ export class StorageService {
     return { valid: validSignature && !expired, expired, key }
   }
 
-  async deleteFile(_key: string): Promise<void> {
-    throw new Error('Not implemented')
+  /** Idempotent: deleting a key that no longer exists is not an error (R2 semantics). */
+  async deleteFile(key: string): Promise<void> {
+    await this.r2.delete(key)
   }
 }

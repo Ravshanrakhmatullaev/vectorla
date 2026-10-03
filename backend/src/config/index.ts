@@ -36,6 +36,15 @@ export const STALE_QUEUED_JOB_MS = 60 * 60 * 1000
 // supabase/migrations/0002_credit_integrity.sql) — keep the two in sync.
 export const FREE_SIGNUP_CREDITS = 10
 
+/**
+ * Uploaded images and every result traced from them are deleted this long
+ * after upload (owner decision; stated in the Privacy Policy, src/pages/legal).
+ * Enforced by the scheduled RetentionService.
+ */
+export const UPLOAD_RETENTION_DAYS = 30
+/** Uploads purged per cron run; the cron runs every 15 minutes, so a backlog drains quickly. */
+export const RETENTION_PURGE_BATCH_SIZE = 50
+
 /** Content-Type to send when streaming a conversion's file — see routes/download.ts. */
 export const EXPORT_FORMAT_MIME_TYPES: Record<ExportFormat, string> = {
   svg: 'image/svg+xml',

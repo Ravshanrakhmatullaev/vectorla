@@ -1,12 +1,19 @@
 import { Check } from 'lucide-react'
 import { SectionHeading } from '@/components/ui/SectionHeading'
 import { Button } from '@/components/ui/Button'
+import { Link } from '@/components/ui/Link'
 import { pricingPlans } from '@/data/pricing'
 import { useLanguage } from '@/lib/language'
+import { useAuth } from '@/lib/useAuth'
+import { requestAuthDialog } from '@/lib/authDialogEvents'
 import { cn } from '@/utils/cn'
+
+const CTA_CLASSES =
+  'mt-6 inline-flex w-full items-center justify-center rounded-xl px-5 py-2.5 text-sm font-semibold transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] active:scale-[0.98]'
 
 export function Pricing() {
   const { t } = useLanguage()
+  const { user } = useAuth()
 
   return (
     <section id="pricing" className="px-5 py-20 sm:px-8">
@@ -16,7 +23,7 @@ export function Pricing() {
         description={t.pricing.description}
       />
 
-      <div className="mx-auto mt-12 grid max-w-5xl grid-cols-1 gap-5 sm:grid-cols-3">
+      <div className="mx-auto mt-12 grid max-w-3xl grid-cols-1 gap-5 sm:grid-cols-2">
         {pricingPlans.map((plan) => {
           const text = t.pricing.plans[plan.id]
           return (
@@ -29,38 +36,43 @@ export function Pricing() {
                   : 'border-[var(--border)] bg-[var(--bg-elevated)]',
               )}
             >
-              {plan.highlighted && (
-                <span className="mb-3 inline-block w-fit rounded-full bg-[var(--accent)] px-2.5 py-1 text-[11px] font-semibold text-white">
-                  {t.pricing.mostPopular}
-                </span>
-              )}
               <h3 className="text-lg font-semibold text-[var(--ink)]">{text.name}</h3>
-              <div className="mt-2 flex items-baseline gap-1">
-                <span className="font-[family-name:var(--font-display)] text-3xl font-bold text-[var(--ink)]">
-                  {text.price}
-                </span>
-                {text.period && (
-                  <span className="text-sm text-[var(--ink-muted)]">{text.period}</span>
+              <p
+                className={cn(
+                  'mt-2 font-[family-name:var(--font-display)] font-bold',
+                  plan.comingSoon ? 'text-xl text-[var(--ink-muted)]' : 'text-3xl text-[var(--ink)]',
                 )}
-              </div>
+              >
+                {text.price}
+              </p>
               <p className="mt-2 text-sm text-[var(--ink-muted)]">{text.description}</p>
 
-              <ul className="mt-5 flex flex-1 flex-col gap-2.5">
-                {text.features.map((feature) => (
-                  <li key={feature} className="flex items-start gap-2 text-sm text-[var(--ink)]">
-                    <Check size={16} className="mt-0.5 flex-none text-[var(--accent)]" />
-                    {feature}
-                  </li>
-                ))}
-              </ul>
+              {text.features.length > 0 && (
+                <ul className="mt-5 flex flex-col gap-2.5">
+                  {text.features.map((feature) => (
+                    <li key={feature} className="flex items-start gap-2 text-sm text-[var(--ink)]">
+                      <Check size={16} className="mt-0.5 flex-none text-[var(--accent)]" />
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+              )}
 
-              <Button
-                variant={plan.highlighted ? 'primary' : 'secondary'}
-                size="md"
-                className="mt-6 w-full"
-              >
-                {text.cta}
-              </Button>
+              <div className="mt-auto">
+                {plan.comingSoon ? (
+                  <Button variant="secondary" size="md" className="mt-6 w-full" disabled>
+                    {text.cta}
+                  </Button>
+                ) : user ? (
+                  <Link href="/#workspace" className={cn(CTA_CLASSES, 'bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]')}>
+                    {t.hero.primaryCta}
+                  </Link>
+                ) : (
+                  <Button size="md" className="mt-6 w-full" onClick={() => requestAuthDialog('sign-up')}>
+                    {text.cta}
+                  </Button>
+                )}
+              </div>
             </div>
           )
         })}

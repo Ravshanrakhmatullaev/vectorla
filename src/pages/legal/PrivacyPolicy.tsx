@@ -81,18 +81,20 @@ export function PrivacyPolicy() {
       </LegalSection>
 
       <LegalSection title="How long we keep it">
-        <p>
-          <strong>Today:</strong> uploaded images and generated SVG files are kept until you ask us to delete them or
-          your account is deleted. Nothing is deleted automatically yet.
-        </p>
-        <p>
-          <strong>Proposed (not yet active):</strong> uploaded images and generated files would be deleted
-          automatically <Decision>retention period, proposed 30 days after upload</Decision>. Account data would be
-          kept while your account exists; credit records{' '}
-          <Decision>retention period for credit records, e.g. as long as the account exists</Decision>; server
-          request logs <Decision>log retention period</Decision>. This section will be updated when automatic deletion
-          is switched on.
-        </p>
+        <ul>
+          <li>
+            <strong>Uploaded images and generated files:</strong> deleted automatically 30 days after the image was
+            uploaded. Deletion runs on a schedule, so a file can remain for a short time after the 30 days have passed.
+            You can ask us to delete them sooner.
+          </li>
+          <li>
+            <strong>Server request logs:</strong> kept for no longer than 30 days.
+          </li>
+          <li>
+            <strong>Account data and credit records:</strong> kept while your account exists, and deleted when your
+            account is deleted.
+          </li>
+        </ul>
       </LegalSection>
 
       <LegalSection title="Your choices and rights">

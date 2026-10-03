@@ -44,7 +44,7 @@ export type UseCaseId =
   | 'logoCleanup'
   | 'qrCodeVectorization'
 
-export type PricingPlanId = 'free' | 'pro' | 'business'
+export type PricingPlanId = 'free' | 'paid'
 
 export type FaqId =
   | 'isFree'
@@ -65,7 +65,6 @@ interface TextItem {
 interface PricingPlanText {
   name: string
   price: string
-  period?: string
   description: string
   features: string[]
   cta: string
@@ -214,7 +213,6 @@ export interface Translation {
     eyebrow: string
     title: string
     description: string
-    mostPopular: string
     plans: Record<PricingPlanId, PricingPlanText>
   }
   faq: {
@@ -496,43 +494,23 @@ export const translations: Record<Language, Translation> = {
     },
     pricing: {
       eyebrow: 'Pricing',
-      title: 'Simple pricing that scales with you',
-      description: 'Start free. Upgrade when you need batch processing and production-grade export.',
-      mostPopular: 'Most popular',
+      title: 'Start free',
+      description: 'Every new account gets 10 free credits. Paid plans are coming soon.',
       plans: {
         free: {
           name: 'Free',
           price: '$0',
-          description: 'Try Vectorla on real projects before you commit.',
-          features: ['5 conversions / month', 'SVG export', 'Basic presets'],
+          description: 'Everything Vectorla does today, free to try.',
+          features: ['10 free credits when you sign up', 'Quick Trace: 1 credit per image', 'Professional Trace: 2 credits per image', 'SVG download', 'Credits back automatically if a trace fails'],
           cta: 'Start free',
         },
-        pro: {
-          name: 'Pro',
-          price: '$19',
-          period: '/month',
-          description: 'For designers and shops running conversions every day.',
-          features: [
-            'Unlimited conversions',
-            'Batch processing',
-            'SVG / PDF / DXF / EPS export',
-            'Print-ready mode',
-            'Priority processing',
-          ],
-          cta: 'Start Pro trial',
-        },
-        business: {
-          name: 'Business',
-          price: 'Custom',
-          description: 'For teams and agencies with shared workspaces and API needs.',
-          features: [
-            'Team workspace',
-            'API access',
-            'Brand presets',
-            'Advanced export',
-            'Dedicated support',
-          ],
-          cta: 'Talk to sales',
+        paid: {
+          name: 'Paid plans',
+          price: 'Coming soon',
+          description:
+            'Plans with more credits are planned. Prices and features are not set yet, and nothing is for sale today.',
+          features: [],
+          cta: 'Coming soon',
         },
       },
     },
@@ -548,7 +526,7 @@ export const translations: Record<Language, Translation> = {
         uploadedToServer: {
           question: 'Are my files uploaded to a server?',
           answer:
-            'Yes. To trace an image, Vectorla uploads it to our servers, processes it there, and stores the original and the resulting SVG with your account. Only you can access them, while signed in. See the Privacy Policy for details.',
+            'Yes. To trace an image, Vectorla uploads it to our servers, processes it there, and stores the original and the resulting SVG with your account. Only you can access them, while signed in. Both are deleted automatically 30 days after upload. See the Privacy Policy for details.',
         },
         canExportSvg: {
           question: 'Which formats can I download?',
@@ -875,45 +853,23 @@ export const translations: Record<Language, Translation> = {
     },
     pricing: {
       eyebrow: 'Narxlar',
-      title: "Siz bilan birga o'sadigan sodda narxlar",
-      description:
-        "Bepul boshlang. Ommaviy qayta ishlash va ishlab chiqarish darajasidagi eksport kerak bo'lganda tarifni oshiring.",
-      mostPopular: 'Eng ommabop',
+      title: 'Bepul boshlang',
+      description: 'Har bir yangi hisobga 10 ta bepul kredit beriladi. Pullik tariflar tez orada.',
       plans: {
         free: {
           name: 'Bepul',
           price: '$0',
-          description: "Qaror qabul qilishdan oldin Vectorla'ni haqiqiy loyihalarda sinab ko'ring.",
-          features: ['Oyiga 5 ta konvertatsiya', 'SVG eksport', 'Oddiy presetlar'],
+          description: 'Vectorla’ning bugungi barcha imkoniyatlarini bepul sinab ko‘ring.',
+          features: ['Ro‘yxatdan o‘tganda 10 ta bepul kredit', 'Quick Trace: har bir rasm uchun 1 kredit', 'Professional Trace: har bir rasm uchun 2 kredit', 'SVG yuklab olish', 'Trassirovka muvaffaqiyatsiz bo‘lsa, kreditlar avtomatik qaytariladi'],
           cta: 'Bepul boshlash',
         },
-        pro: {
-          name: 'Pro',
-          price: '$19',
-          period: '/oy',
-          description: 'Har kuni konvertatsiya qiladigan dizayner va do’konlar uchun.',
-          features: [
-            'Cheksiz konvertatsiyalar',
-            'Ommaviy qayta ishlash',
-            'SVG / PDF / DXF / EPS eksport',
-            'Bosmaga tayyor rejim',
-            'Ustuvor qayta ishlash',
-          ],
-          cta: 'Pro sinovini boshlash',
-        },
-        business: {
-          name: 'Biznes',
-          price: 'Individual',
+        paid: {
+          name: 'Pullik tariflar',
+          price: 'Tez orada',
           description:
-            "Umumiy ish maydoni va API talab qiladigan jamoalar va agentliklar uchun.",
-          features: [
-            'Jamoaviy ish maydoni',
-            'API kirish huquqi',
-            'Brend presetlari',
-            'Kengaytirilgan eksport',
-            "Maxsus qo'llab-quvvatlash",
-          ],
-          cta: "Sotuvlar bilan bog'lanish",
+            'Ko‘proq kreditli tariflar rejalashtirilgan. Narxlar va imkoniyatlar hali belgilanmagan, hozircha hech narsa sotilmaydi.',
+          features: [],
+          cta: 'Tez orada',
         },
       },
     },
@@ -929,7 +885,7 @@ export const translations: Record<Language, Translation> = {
         uploadedToServer: {
           question: 'Fayllarim serverga yuklanadimi?',
           answer:
-            'Ha. Tasvirni trassirovka qilish uchun Vectorla uni serverlarimizga yuklaydi, u yerda qayta ishlaydi va asl fayl hamda olingan SVG’ni hisobingizda saqlaydi. Ularga faqat siz, tizimga kirgan holda kira olasiz. Batafsil ma’lumot Maxfiylik siyosatida.',
+            'Ha. Tasvirni trassirovka qilish uchun Vectorla uni serverlarimizga yuklaydi, u yerda qayta ishlaydi va asl fayl hamda olingan SVG’ni hisobingizda saqlaydi. Ularga faqat siz, tizimga kirgan holda kira olasiz. Ikkalasi ham yuklangandan 30 kun o‘tgach avtomatik o‘chiriladi. Batafsil ma’lumot Maxfiylik siyosatida.',
         },
         canExportSvg: {
           question: 'Qaysi formatlarda yuklab olsa bo‘ladi?',
@@ -1254,44 +1210,23 @@ export const translations: Record<Language, Translation> = {
     },
     pricing: {
       eyebrow: 'Тарифы',
-      title: 'Простые тарифы, которые растут вместе с вами',
-      description:
-        'Начните бесплатно. Перейдите на платный тариф, когда понадобится пакетная обработка и экспорт производственного уровня.',
-      mostPopular: 'Самый популярный',
+      title: 'Начните бесплатно',
+      description: 'Каждый новый аккаунт получает 10 бесплатных кредитов. Платные тарифы скоро появятся.',
       plans: {
         free: {
-          name: 'Бесплатный',
+          name: 'Бесплатно',
           price: '$0',
-          description: 'Попробуйте Vectorla на реальных проектах перед тем, как принять решение.',
-          features: ['5 конвертаций в месяц', 'Экспорт в SVG', 'Базовые пресеты'],
+          description: 'Всё, что Vectorla умеет сегодня, — бесплатно для пробы.',
+          features: ['10 бесплатных кредитов при регистрации', 'Quick Trace: 1 кредит за изображение', 'Professional Trace: 2 кредита за изображение', 'Скачивание в SVG', 'Кредиты возвращаются автоматически, если трассировка не удалась'],
           cta: 'Начать бесплатно',
         },
-        pro: {
-          name: 'Pro',
-          price: '$19',
-          period: '/мес',
-          description: 'Для дизайнеров и студий, которые конвертируют изображения каждый день.',
-          features: [
-            'Неограниченные конвертации',
-            'Пакетная обработка',
-            'Экспорт SVG / PDF / DXF / EPS',
-            'Режим готовности к печати',
-            'Приоритетная обработка',
-          ],
-          cta: 'Начать пробный период Pro',
-        },
-        business: {
-          name: 'Business',
-          price: 'Индивидуально',
-          description: 'Для команд и агентств с общими рабочими пространствами и потребностью в API.',
-          features: [
-            'Командное рабочее пространство',
-            'Доступ к API',
-            'Брендовые пресеты',
-            'Расширенный экспорт',
-            'Выделенная поддержка',
-          ],
-          cta: 'Связаться с отделом продаж',
+        paid: {
+          name: 'Платные тарифы',
+          price: 'Скоро',
+          description:
+            'Планируются тарифы с большим количеством кредитов. Цены и возможности ещё не определены, сейчас ничего не продаётся.',
+          features: [],
+          cta: 'Скоро',
         },
       },
     },
@@ -1307,7 +1242,7 @@ export const translations: Record<Language, Translation> = {
         uploadedToServer: {
           question: 'Загружаются ли мои файлы на сервер?',
           answer:
-            'Да. Чтобы выполнить трассировку, Vectorla загружает изображение на наши серверы, обрабатывает его там и хранит оригинал и полученный SVG в вашем аккаунте. Доступ к ним есть только у вас после входа. Подробнее — в Политике конфиденциальности.',
+            'Да. Чтобы выполнить трассировку, Vectorla загружает изображение на наши серверы, обрабатывает его там и хранит оригинал и полученный SVG в вашем аккаунте. Доступ к ним есть только у вас после входа. Оба файла автоматически удаляются через 30 дней после загрузки. Подробнее — в Политике конфиденциальности.',
         },
         canExportSvg: {
           question: 'В каких форматах можно скачать результат?',

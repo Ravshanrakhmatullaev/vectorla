@@ -84,4 +84,21 @@ export class SupabaseUploadsRepository implements UploadsRepository {
     if (error) throw new Error(`Failed to list uploads: ${error.message}`)
     return (data ?? []).map(mapRowToUpload)
   }
+
+  async findCreatedBefore(before: string, limit: number): Promise<Upload[]> {
+    const { data, error } = await this.client
+      .from('uploads')
+      .select()
+      .lt('created_at', before)
+      .order('created_at', { ascending: true })
+      .limit(limit)
+      .returns<UploadRow[]>()
+    if (error) throw new Error(`Failed to list expired uploads: ${error.message}`)
+    return (data ?? []).map(mapRowToUpload)
+  }
+
+  async delete(id: string): Promise<void> {
+    const { error } = await this.client.from('uploads').delete().eq('id', id)
+    if (error) throw new Error(`Failed to delete upload: ${error.message}`)
+  }
 }
