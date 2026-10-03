@@ -2,7 +2,7 @@ import type { Env } from '../env'
 import type { AuthenticatedUser } from '../services/AuthService'
 import { createAuthService } from '../services/AuthService'
 import { UnauthorizedError } from '../errors'
-import { isLocalDevelopment } from '../env'
+import { isLocalDevelopment, isLocalRequest } from '../env'
 
 const BEARER_PATTERN = /^Bearer\s+(.+)$/i
 
@@ -29,7 +29,7 @@ export async function requireAuth(request: Request, env: Env): Promise<Authentic
     return authService.verifyToken(match[1] ?? '')
   }
 
-  if (isLocalDevelopment(env)) {
+  if (isLocalDevelopment(env) && isLocalRequest(request)) {
     const testUserId = request.headers.get('X-Test-User-Id')
     if (testUserId) return { userId: testUserId }
   }

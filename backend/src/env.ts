@@ -48,6 +48,18 @@ export function isLocalDevelopment(env: Env): boolean {
   return env.ENVIRONMENT === 'development'
 }
 
+/**
+ * Second guard for the development-only identity and credit shortcuts
+ * (requireAuth's X-Test-User-Id, the dev credit-grant route): besides
+ * ENVIRONMENT === 'development', the request itself must address this
+ * machine. A deployed Worker misconfigured with ENVIRONMENT=development
+ * still serves a public hostname, so the shortcuts stay closed there.
+ */
+export function isLocalRequest(request: Request): boolean {
+  const host = new URL(request.url).hostname
+  return host === 'localhost' || host === '127.0.0.1' || host === '[::1]'
+}
+
 const REQUIRED_BACKEND_SECRETS = [
   'SUPABASE_URL',
   'SUPABASE_SERVICE_ROLE_KEY',

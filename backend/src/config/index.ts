@@ -23,6 +23,16 @@ export const MAX_IMAGE_DIMENSION = 12_000
 // holding the file in memory (see ROADMAP P6 on plan size limits).
 export const MAX_UPLOAD_BODY_BYTES = 30 * 1024 * 1024
 
+/**
+ * Largest upload whose image analysis is computed in the upload request
+ * itself (a best-effort preview; the queue consumer always analyses). That
+ * request already holds the body twice (form data and an ArrayBuffer copy),
+ * and decoding adds the decoder's WebAssembly memory (~51 MB for a 15.5 MB
+ * 16-bit 4 MP PNG) plus the 16 MB RGBA result, which for a 25 MB file
+ * would exceed a Worker's 128 MB.
+ */
+export const UPLOAD_ANALYSIS_MAX_BYTES = 8 * 1024 * 1024
+
 // --- Job processing (see ConversionService.processJob / index.ts queue()) ---
 // A 'processing' job belongs to the delivery that claimed it for this long;
 // a later delivery may take it over once the lease expires (Worker crashed,

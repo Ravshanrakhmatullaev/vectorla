@@ -145,11 +145,26 @@ export default {
   async scheduled(_controller: ScheduledController, rawEnv: Env): Promise<void> {
     const env = await withWasmModules(rawEnv)
     assertRequiredBackendSecrets(env)
-    const swept = await sweepStaleJobs(createConversionService(env), createJobService(env))
-    if (swept > 0) console.warn(`Stale-job sweep failed and refunded ${swept} job(s)`)
-    const retention = await createRetentionService(env).purgeExpired()
-    if (retention.purged > 0 || retention.skipped > 0) {
-      console.log(`Retention: purged ${retention.purged} expired upload(s), ${retention.skipped} left for a later run`)
+    // Independent duties: a failing sweep must not skip retention (or the
+    // reverse). Any failure is rethrown afterwards so the cron run is
+    // reported as failed.
+    const failures: unknown[] = []
+    try {
+      const swept = await sweepStaleJobs(createConversionService(env), createJobService(env))
+      if (swept > 0) console.warn(`Stale-job sweep failed and refunded ${swept} job(s)`)
+    } catch (error) {
+      console.error('Stale-job sweep failed:', error)
+      failures.push(error)
     }
+    try {
+      const retention = await createRetentionService(env).purgeExpired()
+      if (retention.purged > 0 || retention.skipped > 0) {
+        console.log(`Retention: purged ${retention.purged} expired upload(s), ${retention.skipped} left for a later run`)
+      }
+    } catch (error) {
+      console.error('Retention purge failed:', error)
+      failures.push(error)
+    }
+    if (failures.length > 0) throw failures[0]
   },
 } satisfies ExportedHandler<Env, ConversionQueueMessage>

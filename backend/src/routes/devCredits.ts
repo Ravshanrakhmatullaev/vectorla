@@ -2,7 +2,7 @@ import type { Env } from '../env'
 import { createCreditsService } from '../services/CreditsService'
 import { jsonSuccess, jsonError, mapErrorToResponse } from '../api/response'
 import { NotFoundError } from '../errors'
-import { isLocalDevelopment } from '../env'
+import { isLocalDevelopment, isLocalRequest } from '../env'
 
 interface DevCreditsGrantBody {
   userId?: unknown
@@ -20,7 +20,7 @@ interface DevCreditsGrantBody {
  * bypass is scoped (see middleware/requireAuth.ts).
  */
 export async function handleDevCreditsGrantRoute(request: Request, env: Env, requestId: string): Promise<Response> {
-  if (!isLocalDevelopment(env)) {
+  if (!isLocalDevelopment(env) || !isLocalRequest(request)) {
     return mapErrorToResponse(new NotFoundError('No route for "/api/v1/dev/credits/grant"'), requestId)
   }
   if (request.method !== 'POST') {

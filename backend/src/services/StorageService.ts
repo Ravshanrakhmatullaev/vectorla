@@ -16,6 +16,14 @@ async function hmacHex(secret: string, message: string): Promise<string> {
     .join('')
 }
 
+/** Compares two hex strings without an early exit, so timing reveals nothing about a near-miss signature. */
+function constantTimeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let diff = 0
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return diff === 0
+}
+
 export class StorageService {
   constructor(
     private readonly r2: R2Client,
@@ -59,7 +67,7 @@ export class StorageService {
 
     const expiresAt = Number(exp)
     const expected = await hmacHex(this.downloadUrlSecret, `${key}:${expiresAt}`)
-    const validSignature = expected === sig
+    const validSignature = constantTimeEqual(expected, sig)
     const expired = Math.floor(Date.now() / 1000) > expiresAt
     return { valid: validSignature && !expired, expired, key }
   }

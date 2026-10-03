@@ -97,6 +97,15 @@ async function run() {
   assertEqual(bypassed.userId, 'dev-user', 'the X-Test-User-Id bypass returns that id')
   console.log('PASS: requireAuth honors the X-Test-User-Id bypass in development')
 
+  // 5b. ...but only for a request addressed to this machine: a deployed Worker
+  // misconfigured with ENVIRONMENT=development serves a public hostname.
+  await assertRejects(
+    () => requireAuth(new Request('https://api.example.com/api/jobs', { headers: { 'X-Test-User-Id': 'dev-user' } }), devEnv),
+    /Missing Authorization header/,
+    'bypass on a public hostname',
+  )
+  console.log('PASS: requireAuth ignores X-Test-User-Id on a non-local hostname, even in development')
+
   // 6. requireAuth — the bypass never activates in staging or production
   for (const environment of ['staging', 'production'] as const) {
     const lockedEnv = createFakeEnv(environment)

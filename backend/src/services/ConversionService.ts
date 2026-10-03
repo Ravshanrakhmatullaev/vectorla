@@ -1,4 +1,4 @@
-import type { Conversion, JobStatus, Upload } from '../types'
+import type { Conversion, JobStatus, Upload, Job } from '../types'
 import type { Env } from '../env'
 import { JobService, createJobService } from './JobService'
 import { StorageService } from './StorageService'
@@ -133,7 +133,15 @@ export class ConversionService {
    * once — a no-op if it was never charged or already refunded).
    */
   async failJob(jobId: string, reason: string): Promise<void> {
-    const job = await this.jobs.getJob(jobId)
+    let job: Job
+    try {
+      job = await this.jobs.getJob(jobId)
+    } catch (error) {
+      // No such job (e.g. purged by retention): nothing to fail or refund, and
+      // the message must not be retried forever.
+      if (error instanceof NotFoundError) return
+      throw error
+    }
     if (job.status === 'completed') return
     if (job.status !== 'failed') await this.jobs.markFailed(jobId, reason)
     await this.credits.refundJobDebit(job.userId, jobId, `Refund: job failed (${reason.slice(0, 120)})`)

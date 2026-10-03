@@ -6,7 +6,7 @@ import { createProfileService } from '../services/ProfileService'
 import { requireAuth } from '../middleware/requireAuth'
 import { jsonSuccess, jsonError, mapErrorToResponse } from '../api/response'
 import { UnauthorizedError } from '../errors'
-import { MAX_UPLOAD_BODY_BYTES } from '../config'
+import { MAX_UPLOAD_BODY_BYTES, UPLOAD_ANALYSIS_MAX_BYTES } from '../config'
 
 /** POST /api/v1/uploads is implemented. GET/DELETE /api/v1/uploads/:id are not yet (see UploadService). */
 export async function handleUploadsRoute(request: Request, env: Env, requestId: string): Promise<Response> {
@@ -73,16 +73,20 @@ export async function handleUploadsRoute(request: Request, env: Env, requestId: 
     // but a truncated/corrupt-past-the-header file can still fail to decode;
     // that's exactly the kind of error the queue consumer already handles
     // gracefully (markFailed) when processJob decodes the same file for real.
+    // Skipped for large files (UPLOAD_ANALYSIS_MAX_BYTES): the decode would
+    // not fit in this request's memory next to two copies of the body.
     let analysis = null
-    try {
-      const imageAnalysisService = createImageAnalysisService({
-        png: env.PNG_DECODER_WASM,
-        jpeg: env.JPEG_DECODER_WASM,
-        webp: env.WEBP_DECODER_WASM,
-      })
-      analysis = await imageAnalysisService.analyze(upload, buffer)
-    } catch (error) {
-      console.error(`[${requestId}] Upload-time image analysis failed for upload "${upload.id}" — continuing without it:`, error)
+    if (buffer.byteLength <= UPLOAD_ANALYSIS_MAX_BYTES) {
+      try {
+        const imageAnalysisService = createImageAnalysisService({
+          png: env.PNG_DECODER_WASM,
+          jpeg: env.JPEG_DECODER_WASM,
+          webp: env.WEBP_DECODER_WASM,
+        })
+        analysis = await imageAnalysisService.analyze(upload, buffer)
+      } catch (error) {
+        console.error(`[${requestId}] Upload-time image analysis failed for upload "${upload.id}" — continuing without it:`, error)
+      }
     }
 
     return jsonSuccess({ upload, job, analysis }, 201, requestId)
