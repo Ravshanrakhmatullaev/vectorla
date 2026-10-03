@@ -5,37 +5,41 @@
  *  - Quick Trace: a 32-color palette; colors stay flat (good for print and cutting).
  *  - Professional Trace: a 64-color palette, a finer color-merge distance and
  *    gradient reconstruction (smooth ramps become real SVG gradients).
- *  Both share the same working-resolution cap (memory-bound, see below).
+ *  Both share the same working-resolution caps (memory-bound, see below).
  */
 import type { TraceEngineOptions } from './traceImage'
 
 /**
- * Working-resolution cap for both modes. Peak live memory is ~35 bytes per
- * working pixel (measured with forced GC), and a Worker has 128 MB in total,
- * so 1.2 MP keeps a trace near 40 MB. It still allows 2x super-sampling of
- * 512 px uploads and 4x of 256 px ones; on the 80-image benchmark it matches
- * the previous 1.5 MP (Quick) and 2 MP (Professional) caps within 0.004 ΔE.
+ * Working-resolution caps for both modes (memory-bound; BENCHMARKS.md
+ * "High-resolution engine"). Measured inside workerd (the Workers runtime)
+ * with a forced GC at every engine checkpoint, the exact live peak of a
+ * 4 MP upload traced at full resolution is ≤ 61 MB (photo) / 46 MB (logo),
+ * under half of a Worker's 128 MB. Artwork is traced at up to 4 MP — every
+ * upload the API accepts, at full resolution. Photo-like images (see
+ * workingPixelCap) stay at 1.2 MP: posterized photos gain nothing from more
+ * pixels, while their region count, SVG size, time and garbage grow with it.
+ * Larger images are reduced by a whole factor (exact k×k blocks).
  */
-export const MAX_WORKING_PIXELS = 1_200_000
+export const MAX_WORKING_PIXELS = 4_000_000
+export const PHOTO_MAX_WORKING_PIXELS = 1_200_000
 
 /**
- * Auto-upsampling caps (small images only). A source small enough to be
- * upsampled costs a few MB to decode, so the trace itself may use more of the
- * budget than MAX_WORKING_PIXELS allows: these are the caps both modes used
- * before the 1.2 MP working limit (Professional at 2 MP measured ~66 MB live),
- * and they keep e.g. a 600 px logo at 2x and a 768x256 wordmark at 3x.
+ * Auto-upsampling caps (small images only): a 600 px logo at 2x, a 768x256
+ * wordmark at 3x (Professional). Upsampled working sizes stay ≤ 2 MP.
  */
 export const QUICK_MAX_UPSCALED_PIXELS = 1_500_000
 export const PROFESSIONAL_MAX_UPSCALED_PIXELS = 2_000_000
 
 export const QUICK_ENGINE_OPTIONS: Partial<TraceEngineOptions> = {
   maxWorkingPixels: MAX_WORKING_PIXELS,
+  photoMaxWorkingPixels: PHOTO_MAX_WORKING_PIXELS,
   maxUpscaledPixels: QUICK_MAX_UPSCALED_PIXELS,
   maxColors: 32,
 }
 
 export const PROFESSIONAL_ENGINE_OPTIONS: Partial<TraceEngineOptions> = {
   maxWorkingPixels: MAX_WORKING_PIXELS,
+  photoMaxWorkingPixels: PHOTO_MAX_WORKING_PIXELS,
   maxUpscaledPixels: PROFESSIONAL_MAX_UPSCALED_PIXELS,
   maxColors: 64,
   mergeDistance: 0.045,
@@ -74,4 +78,9 @@ export function engineOptionsFor(mode: 'quick' | 'professional', preset?: string
   const base = mode === 'professional' ? PROFESSIONAL_ENGINE_OPTIONS : QUICK_ENGINE_OPTIONS
   const adjustment = preset ? PRESET_ADJUSTMENTS[preset] : undefined
   return { ...base, ...adjustment }
+}
+
+/** The working-size caps of a profile, for decodeForTrace. */
+export function workingCaps(options: Partial<TraceEngineOptions>): Pick<TraceEngineOptions, 'maxWorkingPixels' | 'photoMaxWorkingPixels'> {
+  return { maxWorkingPixels: options.maxWorkingPixels ?? MAX_WORKING_PIXELS, photoMaxWorkingPixels: options.photoMaxWorkingPixels ?? PHOTO_MAX_WORKING_PIXELS }
 }

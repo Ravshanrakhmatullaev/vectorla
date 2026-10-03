@@ -37,16 +37,16 @@ async function run(): Promise<void> {
   const data = new Uint8ClampedArray(w * h * 4)
   for (let p = 0; p < w * h; p++) data.set(p % w < 200 ? [200, 40, 40, 255] : [40, 40, 200, 255], p * 4)
   const png = await encodeTestPng({ width: w, height: h, data } as ImageData)
-  const fitted = await decodeForTrace('image/png', png.slice(0), wasm, 30_000)
+  const fitted = await decodeForTrace('image/png', png.slice(0), wasm, { maxWorkingPixels: 30_000, photoMaxWorkingPixels: 30_000 })
   assertTrue(fitted.sourceSize.width === 400 && fitted.sourceSize.height === 300, 'sourceSize is the upload size')
-  assertTrue(fitted.image.width * fitted.image.height <= 30_000, `working image within the cap (${fitted.image.width}x${fitted.image.height})`)
-  assertTrue(Math.abs(fitted.image.width / fitted.image.height - 4 / 3) < 0.02, 'aspect ratio kept')
-  const small = await decodeForTrace('image/png', png.slice(0), wasm, 1_000_000)
-  assertTrue(small.image.width === 400 && small.image.height === 300, 'images under the cap are not resampled')
+  assertTrue(fitted.image!.width * fitted.image!.height <= 30_000, `working image within the cap (${fitted.image!.width}x${fitted.image!.height})`)
+  assertTrue(Math.abs(fitted.image!.width / fitted.image!.height - 4 / 3) < 0.02, 'aspect ratio kept')
+  const small = await decodeForTrace('image/png', png.slice(0), wasm, { maxWorkingPixels: 1_000_000, photoMaxWorkingPixels: 1_000_000 })
+  assertTrue(small.image!.width === 400 && small.image!.height === 300, 'images under the cap are not resampled')
   let inspected = 0
-  await decodeForTrace('image/png', png.slice(0), wasm, 30_000, (full) => (inspected = full.width * full.height))
+  await decodeForTrace('image/png', png.slice(0), wasm, { maxWorkingPixels: 30_000, photoMaxWorkingPixels: 30_000 }, (full) => (inspected = full.width * full.height))
   assertTrue(inspected === 120_000, 'inspect callback sees the full-resolution image')
-  console.log(`PASS: decodeForTrace -> ${fitted.image.width}x${fitted.image.height} working image, sourceSize 400x300, full image passed to inspect`)
+  console.log(`PASS: decodeForTrace -> ${fitted.image!.width}x${fitted.image!.height} working image, sourceSize 400x300, full image passed to inspect`)
 
   console.log('\nAll image decoder smoke tests passed.')
 }

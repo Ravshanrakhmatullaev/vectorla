@@ -1,7 +1,7 @@
 import type { VectorizationProviderName } from '../providers/VectorizationProvider'
 import type { TracePresetName } from '../providers/tracePresets'
 import { analyzeImage, type ImageAnalysis } from '../providers/imageAnalysis'
-import { traceImage, type TraceEngineStats } from '../engine/traceImage'
+import { traceOwnedImage, type TraceEngineStats } from '../engine/traceImage'
 import type { DecodedForTrace } from '../providers/imageDecoder'
 import { engineOptionsFor, type SourceFormat } from '../engine/profiles'
 
@@ -60,7 +60,7 @@ export function runTracePipeline(imageData: ImageData, mode: TraceMode, sourceFo
  */
 export function runDecodedTracePipeline(decoded: DecodedForTrace, analysis: ImageAnalysis, mode: TraceMode, sourceFormat: SourceFormat = 'unknown'): PipelineResult {
   const start = performance.now()
-  const result = traceImage(decoded.image, { ...engineOptionsFor(mode), sourceFormat, sourceSize: decoded.sourceSize })
+  const result = traceOwnedImage(decoded, { ...engineOptionsFor(mode), sourceFormat, sourceSize: decoded.sourceSize })
   const stageTimings: StageTiming[] = Object.entries(result.stats.timingsMs).map(([name, durationMs]) => ({ name, durationMs, enabled: true }))
   return {
     svg: result.svg,

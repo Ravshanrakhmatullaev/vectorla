@@ -4,7 +4,9 @@
  * border with (the way a designer would "clean up" stray pixels), instead of
  * ImageTracer's pathomit, which simply deletes small paths and leaves holes.
  */
-import { TRANSPARENT_LABEL, type PaletteColor } from './palette'
+import type { OklabSource } from './palette'
+import { TRANSPARENT_LABEL, type LabelMap, type PaletteColor } from './palette'
+import { checkpoint } from './memoryCheckpoint'
 
 export interface Components {
   /** Per-pixel component id (0..count-1). */
@@ -16,9 +18,11 @@ export interface Components {
 }
 
 /** 4-connected components of equal labels (two-pass union-find). */
-export function connectedComponents(labels: Int32Array, width: number, height: number): Components {
+export function connectedComponents(labels: LabelMap, width: number, height: number, scratch?: Int32Array): Components {
   const n = width * height
-  const parent = new Int32Array(n)
+  // `scratch` (if given) is reused for the union-find array and becomes the
+  // returned ids: repeated passes then allocate no new per-pixel memory.
+  const parent = scratch && scratch.length >= n ? scratch.subarray(0, n) : new Int32Array(n)
   for (let i = 0; i < n; i++) parent[i] = i
 
   const find = (x: number): number => {
@@ -49,18 +53,18 @@ export function connectedComponents(labels: Int32Array, width: number, height: n
     }
   }
 
-  const ids = new Int32Array(n)
-  const rootToId = new Int32Array(n).fill(-1)
+  // Ids in place of the parent array (saves 8 bytes per pixel). Unions always
+  // link to the smaller index and path compression points at the root, so a
+  // set's root is its smallest index and every other pixel's parent is a
+  // smaller index, whose slot already holds the set's id by the time it is
+  // read. Ids come out numbered by first appearance, as before.
+  const ids = parent
   let count = 0
   for (let p = 0; p < n; p++) {
-    const r = find(p)
-    let id = rootToId[r]!
-    if (id < 0) {
-      id = count++
-      rootToId[r] = id
-    }
-    ids[p] = id
+    const par = parent[p]!
+    ids[p] = par === p ? count++ : ids[par]!
   }
+  checkpoint('connectedComponents')
   const compLabels = new Int32Array(count)
   const areas = new Int32Array(count)
   for (let p = 0; p < n; p++) {
@@ -81,17 +85,18 @@ function colorDistance(palette: PaletteColor[], a: number, b: number): number {
 
 /**
  * Merges every component smaller than `minArea` into its best neighbour
- * (longest shared border, ties broken by color similarity). Returns a new
- * label map; callers re-run connectedComponents on it.
+ * (longest shared border, ties broken by color similarity). Updates `labels`
+ * in place and returns it; callers re-run connectedComponents on it.
  */
 export function mergeSmallRegions(
-  labels: Int32Array,
+  labels: LabelMap,
   width: number,
   height: number,
   palette: PaletteColor[],
   minArea: number,
-): Int32Array {
-  const comps = connectedComponents(labels, width, height)
+  scratch?: Int32Array,
+): LabelMap {
+  const comps = connectedComponents(labels, width, height, scratch)
   const { ids, count, areas } = comps
   const compLabel = comps.labels.slice()
 
@@ -192,9 +197,9 @@ export function mergeSmallRegions(
     }
   }
 
-  const out = new Int32Array(labels.length)
-  for (let p = 0; p < labels.length; p++) out[p] = compLabel[find(ids[p]!)]!
-  return out
+  // In place: each pixel's new label depends only on its own component id.
+  for (let p = 0; p < labels.length; p++) labels[p] = compLabel[find(ids[p]!)]!
+  return labels
 }
 
 /**
@@ -211,14 +216,15 @@ export function mergeSmallRegions(
  * or a color no blend of their neighbours explains (a black outline).
  */
 export function dissolveBlendSlivers(
-  labels: Int32Array,
+  labels: LabelMap,
   width: number,
   height: number,
   palette: PaletteColor[],
-  lab: Float32Array,
+  lab: OklabSource,
   maxHalfThickness: number,
-): Int32Array {
-  const comps = connectedComponents(labels, width, height)
+  scratch?: Int32Array,
+): LabelMap {
+  const comps = connectedComponents(labels, width, height, scratch)
   const { ids, count, areas } = comps
   const boundary = new Int32Array(count)
   const addEdge = (a: number, b: number) => {
@@ -295,13 +301,14 @@ export function dissolveBlendSlivers(
   }
   if (replacement.size === 0) return labels
 
-  const out = labels.slice()
+  // In place: a pixel's new label depends only on its component and color.
+  const out = labels
   for (let p = 0; p < out.length; p++) {
     const pair = replacement.get(ids[p]!)
     if (!pair) continue
-    const L = lab[p * 3] ?? 0
-    const A = lab[p * 3 + 1] ?? 0
-    const B = lab[p * 3 + 2] ?? 0
+    const L = lab.L(p)
+    const A = lab.A(p)
+    const B = lab.B(p)
     const [a, b] = pair
     const ca = palette[a]!
     const cb = palette[b]!

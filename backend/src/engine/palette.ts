@@ -16,6 +16,7 @@
  */
 import { rgbToOklabInto } from './color'
 import type { RgbaImage } from './raster'
+import { checkpoint } from './memoryCheckpoint'
 
 export interface PaletteColor {
   /** Display color: mean of the source pixels (8-bit sRGB) — exact for flat art. */
@@ -48,6 +49,9 @@ export interface PaletteOptions {
 }
 
 export const TRANSPARENT_LABEL = -1
+
+/** Per-pixel palette labels; 2 bytes per pixel (labels stay far below 32767), 4 only for huge palettes. */
+export type LabelMap = Int16Array | Int32Array
 
 export interface LabelResult {
   palette: PaletteColor[]
@@ -82,34 +86,55 @@ function dist2(aL: number, aA: number, aB: number, bL: number, bA: number, bB: n
   return dL * dL + dA * dA + dB * dB
 }
 
-/** Per-pixel OKLab (3 floats/pixel) — computed once, reused by every step. */
-export function computeOklab(image: RgbaImage): Float32Array {
-  const n = image.width * image.height
-  const lab = new Float32Array(n * 3)
-  const { data } = image
-  // Cache by packed RGB: flat art has very few distinct colors, and even
-  // photos repeat heavily, so this skips most cube roots.
-  const cache = new Map<number, number>()
-  for (let p = 0; p < n; p++) {
-    const r = data[p * 4] ?? 0
-    const g = data[p * 4 + 1] ?? 0
-    const b = data[p * 4 + 2] ?? 0
-    const key = (r << 16) | (g << 8) | b
-    const cached = cache.get(key)
-    if (cached !== undefined) {
-      lab[p * 3] = lab[cached * 3] ?? 0
-      lab[p * 3 + 1] = lab[cached * 3 + 1] ?? 0
-      lab[p * 3 + 2] = lab[cached * 3 + 2] ?? 0
-    } else {
-      rgbToOklabInto(r, g, b, lab, p * 3)
-      if (cache.size < 1 << 18) cache.set(key, p)
-    }
+/**
+ * OKLab of each pixel, computed on demand instead of stored (a stored copy
+ * costs 12 bytes per pixel: 48 MB at 4 MP, more than a third of a Worker's
+ * memory). A direct-mapped cache keyed by packed RGB makes repeated colors
+ * nearly free: flat art has few distinct colors and photos repeat heavily.
+ * Values are rounded to float32 exactly as a stored Float32Array would be.
+ */
+export class OklabSource {
+  private readonly keys: Int32Array
+  private readonly values: Float32Array
+  private readonly shift: number
+
+  constructor(
+    private readonly data: Uint8ClampedArray,
+    bits = 16,
+  ) {
+    this.keys = new Int32Array(1 << bits).fill(-1)
+    this.values = new Float32Array((1 << bits) * 3)
+    this.shift = 32 - bits
   }
-  return lab
+
+  private slot(p: number): number {
+    const r = this.data[p * 4]!
+    const g = this.data[p * 4 + 1]!
+    const b = this.data[p * 4 + 2]!
+    const key = (r << 16) | (g << 8) | b
+    const s = Math.imul(key, 0x9e3779b1) >>> this.shift
+    if (this.keys[s] !== key) {
+      this.keys[s] = key
+      rgbToOklabInto(r, g, b, this.values, s * 3)
+    }
+    return s * 3
+  }
+
+  L(p: number): number {
+    return this.values[this.slot(p)]!
+  }
+
+  A(p: number): number {
+    return this.values[this.slot(p) + 1]!
+  }
+
+  B(p: number): number {
+    return this.values[this.slot(p) + 2]!
+  }
 }
 
 /** Marks pixels whose OKLab distance to every opaque 4-neighbour is small. */
-export function computeFlatMask(image: RgbaImage, lab: Float32Array, opaque: Uint8Array): Uint8Array {
+export function computeFlatMask(image: RgbaImage, lab: OklabSource, opaque: Uint8Array): Uint8Array {
   const { width: w, height: h } = image
   const flat = new Uint8Array(w * h)
   const t2 = FLATNESS_THRESHOLD * FLATNESS_THRESHOLD
@@ -117,9 +142,9 @@ export function computeFlatMask(image: RgbaImage, lab: Float32Array, opaque: Uin
     for (let x = 0; x < w; x++) {
       const p = y * w + x
       if (!opaque[p]) continue
-      const L = lab[p * 3] ?? 0
-      const A = lab[p * 3 + 1] ?? 0
-      const B = lab[p * 3 + 2] ?? 0
+      const L = lab.L(p)
+      const A = lab.A(p)
+      const B = lab.B(p)
       let isFlat = true
       const neighbours = [x > 0 ? p - 1 : -1, x < w - 1 ? p + 1 : -1, y > 0 ? p - w : -1, y < h - 1 ? p + w : -1]
       for (const q of neighbours) {
@@ -128,7 +153,7 @@ export function computeFlatMask(image: RgbaImage, lab: Float32Array, opaque: Uin
           isFlat = false
           break
         }
-        if (dist2(L, A, B, lab[q * 3] ?? 0, lab[q * 3 + 1] ?? 0, lab[q * 3 + 2] ?? 0) > t2) {
+        if (dist2(L, A, B, lab.L(q), lab.A(q), lab.B(q)) > t2) {
           isFlat = false
           break
         }
@@ -146,7 +171,7 @@ export function computeFlatMask(image: RgbaImage, lab: Float32Array, opaque: Uin
  */
 export function extractPalette(
   image: RgbaImage,
-  lab: Float32Array,
+  lab: OklabSource,
   opaque: Uint8Array,
   flat: Uint8Array,
   options: PaletteOptions,
@@ -169,9 +194,9 @@ export function extractPalette(
   const bins = new Map<number, Cluster>()
   for (let p = 0; p < n; p++) {
     if (!opaque[p] || (!useAll && !flat[p])) continue
-    const L = lab[p * 3] ?? 0
-    const A = lab[p * 3 + 1] ?? 0
-    const B = lab[p * 3 + 2] ?? 0
+    const L = lab.L(p)
+    const A = lab.A(p)
+    const B = lab.B(p)
     const key = Math.round(L / BIN) * 1_000_000 + (Math.round(A / BIN) + 500) * 1000 + (Math.round(B / BIN) + 500)
     let bin = bins.get(key)
     if (!bin) {
@@ -387,7 +412,7 @@ function mixtureResidual(p: [number, number, number], a: [number, number, number
  */
 export function labelPixels(
   image: RgbaImage,
-  lab: Float32Array,
+  lab: OklabSource,
   opaque: Uint8Array,
   flat: Uint8Array,
   palette: PaletteColor[],
@@ -395,16 +420,19 @@ export function labelPixels(
   localPreference: number,
   thinRadius = 0,
   thinPeakRadius = thinRadius,
-): Int32Array {
+): LabelMap {
   const { width: w, height: h, data } = image
   const n = w * h
-  const labels = new Int32Array(n).fill(TRANSPARENT_LABEL)
+  // Room for gradient labels (palette.length + fills) added later.
+  const labels: LabelMap = (palette.length < 16000 ? new Int16Array(n) : new Int32Array(n)).fill(TRANSPARENT_LABEL)
   if (palette.length === 0) return labels
   // Per edge pixel: the two colors whose blend explains it and the coverage
   // of the second one (pairA = -1: no accepted blend). See preserveThinCoverage.
-  const pairA = new Int32Array(n).fill(-1)
-  const pairB = new Int32Array(n)
-  const coverage = new Float32Array(n)
+  // Narrow types: these per-pixel buffers dominate memory at multi-megapixel
+  // working sizes (4 bytes each per pixel would be 16 MB apiece at 4 MP).
+  const PairArray = palette.length < 127 ? Int8Array : Int16Array
+  const pairA = new PairArray(n).fill(-1)
+  const pairB = new PairArray(n)
 
   // Cache nearest-label lookups by packed RGB.
   const cache = new Map<number, number>()
@@ -413,7 +441,7 @@ export function labelPixels(
     const key = ((data[p * 4] ?? 0) << 16) | ((data[p * 4 + 1] ?? 0) << 8) | (data[p * 4 + 2] ?? 0)
     let label = cache.get(key)
     if (label === undefined) {
-      label = nearestLabel(palette, lab[p * 3] ?? 0, lab[p * 3 + 1] ?? 0, lab[p * 3 + 2] ?? 0)
+      label = nearestLabel(palette, lab.L(p), lab.A(p), lab.B(p))
       cache.set(key, label)
     }
     labels[p] = label
@@ -422,7 +450,7 @@ export function labelPixels(
   if (palette.length < 2) return labels
 
   const linearPalette = palette.map(linearOf)
-  const initial = labels.slice()
+  const initial = palette.length < 127 ? Int8Array.from(labels) : palette.length < 32767 ? Int16Array.from(labels) : labels.slice()
   const seen = new Int32Array(palette.length).fill(-1)
   const candidates: number[] = []
   // Flat pixels come in contiguous areas, so a sparse scan of large windows finds them.
@@ -469,7 +497,6 @@ export function labelPixels(
       let bestLabel = own
       let bestA = -1
       let bestB = -1
-      let bestT = 0
       for (let i = 0; i < candidates.length; i++) {
         for (let j = i + 1; j < candidates.length; j++) {
           const a = candidates[i]!
@@ -480,7 +507,6 @@ export function labelPixels(
             bestLabel = t < 0.5 ? a : b
             bestA = a
             bestB = b
-            bestT = t
           }
         }
       }
@@ -497,7 +523,6 @@ export function labelPixels(
             bestLabel = t < 0.5 ? a : b
             bestA = a
             bestB = b
-            bestT = t
           }
         }
       }
@@ -515,16 +540,15 @@ export function labelPixels(
         if (bestA >= 0) {
           pairA[p] = bestA
           pairB[p] = bestB
-          coverage[p] = bestT
         }
         continue
       }
       if (ownIsNearby) continue
       // …or when a surrounding color is itself close: ringing, noise and
       // soft edges shouldn't spawn islands of a color that isn't there.
-      const L = lab[p * 3] ?? 0
-      const A = lab[p * 3 + 1] ?? 0
-      const B = lab[p * 3 + 2] ?? 0
+      const L = lab.L(p)
+      const A = lab.A(p)
+      const B = lab.B(p)
       let nearestLocal = own
       let nearestLocalD = Infinity
       for (const c of candidates) {
@@ -539,7 +563,8 @@ export function labelPixels(
     }
   }
 
-  if (thinRadius > 0) preserveThinCoverage(labels, pairA, pairB, coverage, w, h, thinRadius, thinPeakRadius, palette)
+  checkpoint('labelPixels')
+  if (thinRadius > 0) preserveThinCoverage(labels, pairA, pairB, data, linearPalette, w, h, thinRadius, thinPeakRadius, palette)
   return labels
 }
 
@@ -576,10 +601,11 @@ const THIN_MAX_PEAK = 0.85
  * keeps a core about w wide, centered where the ink is.
  */
 function preserveThinCoverage(
-  labels: Int32Array,
-  pairA: Int32Array,
-  pairB: Int32Array,
-  coverage: Float32Array,
+  labels: LabelMap,
+  pairA: Int8Array | Int16Array,
+  pairB: Int8Array | Int16Array,
+  data: Uint8ClampedArray,
+  linearPalette: [number, number, number][],
   w: number,
   h: number,
   radius: number,
@@ -591,13 +617,31 @@ function preserveThinCoverage(
   // against the same (pre-pass) labels regardless of scan order.
   const promote: number[] = []
   const decided = labels
+  // Blend coverage t of the pair recorded at q, recomputed from the pixel
+  // instead of stored (4 bytes per pixel saved): same arithmetic as
+  // mixtureResidual, rounded to float32 as a Float32Array would store it.
+  const t32 = new Float32Array(1)
+  const pairT = (q: number, a: number, b: number): number => {
+    const la = linearPalette[a]!
+    const lb = linearPalette[b]!
+    const p0 = (data[q * 4] ?? 0) / 255
+    const p1 = (data[q * 4 + 1] ?? 0) / 255
+    const p2 = (data[q * 4 + 2] ?? 0) / 255
+    const dx = lb[0] - la[0]
+    const dy = lb[1] - la[1]
+    const dz = lb[2] - la[2]
+    const len2 = dx * dx + dy * dy + dz * dz
+    const t = len2 > 0 ? ((p0 - la[0]) * dx + (p1 - la[1]) * dy + (p2 - la[2]) * dz) / len2 : 0
+    t32[0] = Math.max(0, Math.min(1, t))
+    return t32[0]!
+  }
   // Coverage of color x (paired against y) at q, or -1 if q is unrelated.
   const coverageOf = (q: number, x: number, y: number): number => {
     const a = pairA[q]!
     if (a >= 0) {
       const b = pairB[q]!
-      if (a === x && b === y) return 1 - coverage[q]!
-      if (a === y && b === x) return coverage[q]!
+      if (a === x && b === y) return 1 - pairT(q, a, b)
+      if (a === y && b === x) return pairT(q, a, b)
       return -1
     }
     const label = decided[q]!
@@ -696,7 +740,7 @@ function preserveThinCoverage(
  */
 export function extractDetailColors(
   image: RgbaImage,
-  lab: Float32Array,
+  lab: OklabSource,
   opaque: Uint8Array,
   flat: Uint8Array,
   palette: PaletteColor[],
@@ -714,7 +758,7 @@ export function extractDetailColors(
     const key = ((data[q * 4] ?? 0) << 16) | ((data[q * 4 + 1] ?? 0) << 8) | (data[q * 4 + 2] ?? 0)
     let label = nearestCache.get(key)
     if (label === undefined) {
-      label = nearestLabel(palette, lab[q * 3] ?? 0, lab[q * 3 + 1] ?? 0, lab[q * 3 + 2] ?? 0)
+      label = nearestLabel(palette, lab.L(q), lab.A(q), lab.B(q))
       nearestCache.set(key, label)
     }
     return label
@@ -724,9 +768,9 @@ export function extractDetailColors(
     for (let x = 0; x < w; x++) {
       const p = y * w + x
       if (!opaque[p] || flat[p]) continue
-      const L = lab[p * 3] ?? 0
-      const A = lab[p * 3 + 1] ?? 0
-      const B = lab[p * 3 + 2] ?? 0
+      const L = lab.L(p)
+      const A = lab.A(p)
+      const B = lab.B(p)
       const own = palette[nearestIndex(p)]!
       const d2 = dist2(L, A, B, own.L, own.A, own.B)
       if (d2 < minD2) continue
@@ -806,9 +850,9 @@ export function extractDetailColors(
   const merge2 = (options.mergeDistance * 1.5) ** 2
   const clusters: { L: number; A: number; B: number; members: number[] }[] = []
   for (const { p } of detail) {
-    const L = lab[p * 3] ?? 0
-    const A = lab[p * 3 + 1] ?? 0
-    const B = lab[p * 3 + 2] ?? 0
+    const L = lab.L(p)
+    const A = lab.A(p)
+    const B = lab.B(p)
     let best = -1
     let bestD = Infinity
     for (let c = 0; c < clusters.length; c++) {
@@ -838,9 +882,9 @@ export function extractDetailColors(
       r += data[p * 4] ?? 0
       g += data[p * 4 + 1] ?? 0
       b += data[p * 4 + 2] ?? 0
-      L += lab[p * 3] ?? 0
-      A += lab[p * 3 + 1] ?? 0
-      B += lab[p * 3 + 2] ?? 0
+      L += lab.L(p)
+      A += lab.A(p)
+      B += lab.B(p)
     }
     const k = top.length
     const candidate: PaletteColor = { r: r / k, g: g / k, b: b / k, L: L / k, A: A / k, B: B / k, weight: cluster.members.length }

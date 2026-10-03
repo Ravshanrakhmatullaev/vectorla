@@ -11,12 +11,13 @@
  */
 import { PathBuilder } from './svgWriter'
 import { toShortHex } from './color'
-import { bilateralDenoise, downscaleArea, gaussianBlur, restoreJpegChroma, upscaleBilinear, upscaleMaskStrict, type RgbaImage } from './raster'
-import { computeFlatMask, computeOklab, extractDetailColors, extractPalette, labelPixels, TRANSPARENT_LABEL, type PaletteColor } from './palette'
+import { bilateralDenoise, downscaleBox, gaussianBlur, restoreJpegChroma, restoreRidges, ridgeMask, upscaleBicubic, upscaleBilinear, upscaleMaskStrict, type RgbaImage } from './raster'
+import { computeFlatMask, OklabSource, extractDetailColors, extractPalette, labelPixels, TRANSPARENT_LABEL, type PaletteColor } from './palette'
 import { connectedComponents, dissolveBlendSlivers, mergeSmallRegions } from './regions'
 import { detectGradients, validateGradientGroups, type GradientFill } from './gradients'
 import { buildRegionBoundaries, extractChains, OUTSIDE, type RegionLoop } from './planarMap'
 import { buildCurve, buildPolygon, refineJunctions, reverseFitted, type FittedChain } from './curveFit'
+import { checkpoint } from './memoryCheckpoint'
 
 export type TraceOutputMode = 'stacked' | 'cutout'
 
@@ -33,8 +34,14 @@ export interface TraceEngineOptions {
   optTolerance: number
   /** Integer upsampling factor before segmentation; 0 = auto. */
   upscale: number
-  /** Images above this many pixels are area-downsampled for tracing. */
+  /** Images above this many pixels are reduced (by a whole factor) for tracing. */
   maxWorkingPixels: number
+  /**
+   * The working-size cap for photo-like images (mostly textured pixels, see
+   * workingPixelCap): they gain nothing from more resolution, which would only
+   * multiply their region count, SVG size, time and memory.
+   */
+  photoMaxWorkingPixels: number
   /**
    * Cap on the working size reached by auto-upsampling a small image. It may
    * exceed maxWorkingPixels: an image small enough to upsample costs little
@@ -69,6 +76,12 @@ export interface TraceEngineOptions {
   gradients: boolean
   /** Source encoding hint: lossy JPEG input gets artifact-aware cleanup. */
   sourceFormat: 'png' | 'jpeg' | 'webp' | 'unknown'
+  /** Upsampling filter for small inputs (experiment switch; see BENCHMARKS.md). */
+  upscaleFilter: 'bilinear' | 'bicubic' | 'ridge'
+  /** Blur after upsampling, in source pixels (removes interpolation ripple). */
+  upscaleBlur: number
+  /** Channel contrast that marks a ridge pixel for the 'ridge' upscale filter. */
+  ridgeThreshold: number
   /** Called after each pipeline stage (profiling and memory measurement). */
   onStage?: (stage: string) => void
   /**
@@ -88,6 +101,10 @@ export const DEFAULT_ENGINE_OPTIONS: TraceEngineOptions = {
   optTolerance: 0.2,
   upscale: 0,
   maxWorkingPixels: 2_000_000,
+  photoMaxWorkingPixels: 2_000_000,
+  upscaleFilter: 'bilinear',
+  upscaleBlur: 0.45,
+  ridgeThreshold: 32,
   maxUpscaledPixels: 2_000_000,
   denoise: 'auto',
   mode: 'stacked',
@@ -156,22 +173,81 @@ function autoUpscale(width: number, height: number, maxWorkingPixels: number): n
   return factor
 }
 
-/**
- * Step 1 of traceImage: area-downsamples an image above maxWorkingPixels to
- * the engine's working size (returns the input unchanged otherwise). Callers
- * holding a large decode can run this first, release the full-resolution
- * pixels, and trace the result with `sourceSize` set to the original size.
- */
 const NO_POINTS = new Int32Array(0)
+const NO_BYTES = new Uint8Array(0)
+const NO_IMAGE: RgbaImage = { width: 0, height: 0, data: new Uint8ClampedArray(0) }
 
+/** Below this share of flat pixels an image is treated as photo-like (see workingPixelCap). */
+const PHOTO_FLAT_FRACTION = 0.7
+
+/**
+ * Share of (sampled) opaque pixels whose right and lower neighbours differ by
+ * at most 3 in every channel. Measured on the 80-image benchmark: logos,
+ * icons, text, illustrations and gradient art 0.72–0.99; photos 0.30–0.66.
+ */
+export function flatFraction(image: RgbaImage): number {
+  const { width: w, height: h, data } = image
+  const stride = Math.max(1, Math.round(Math.sqrt((w * h) / 250_000)))
+  let flat = 0
+  let total = 0
+  for (let y = 0; y + 1 < h; y += stride) {
+    for (let x = 0; x + 1 < w; x += stride) {
+      const p = (y * w + x) * 4
+      if (data[p + 3]! < 128) continue
+      total++
+      const r = p + 4
+      const b = p + w * 4
+      let diff = 0
+      for (let c = 0; c < 3; c++) diff = Math.max(diff, Math.abs(data[p + c]! - data[r + c]!), Math.abs(data[p + c]! - data[b + c]!))
+      if (diff <= 3) flat++
+    }
+  }
+  return total > 0 ? flat / total : 1
+}
+
+/**
+ * Working-size cap for an input: maxWorkingPixels for artwork (logos, text,
+ * illustrations), photoMaxWorkingPixels for photo-like images. Inputs within
+ * the photo cap are never classified (nothing to decide).
+ */
+export function workingPixelCap(image: RgbaImage, options: Pick<TraceEngineOptions, 'maxWorkingPixels' | 'photoMaxWorkingPixels'>): number {
+  if (image.width * image.height <= Math.min(options.maxWorkingPixels, options.photoMaxWorkingPixels)) return options.maxWorkingPixels
+  return flatFraction(image) < PHOTO_FLAT_FRACTION ? options.photoMaxWorkingPixels : options.maxWorkingPixels
+}
+
+/**
+ * Step 1 of traceImage: reduces an image above maxWorkingPixels by the
+ * smallest whole factor k that fits (exact k×k blocks, downscaleBox), and
+ * returns it unchanged otherwise. A fractional resample (e.g. ×0.55) smears
+ * every anti-aliased edge unevenly across pixel bins; measured on 4 MP renders,
+ * an exact 2× reduction to 1.0 MP traces more accurately than a fractional one
+ * to 1.2 MP (BENCHMARKS.md "High-resolution engine"). Callers holding a large
+ * decode can run this first, release the full-resolution pixels, and trace the
+ * result with `sourceSize` set to the original size.
+ */
 export function fitWorkingSize(image: RgbaImage, maxWorkingPixels: number): RgbaImage {
-  const pixels = image.width * image.height
-  if (pixels <= maxWorkingPixels) return image
-  const ratio = Math.sqrt(maxWorkingPixels / pixels)
-  return downscaleArea(image, Math.max(1, Math.floor(image.width * ratio)), Math.max(1, Math.floor(image.height * ratio)))
+  const { width: w, height: h } = image
+  if (w * h <= maxWorkingPixels) return image
+  let k = Math.max(2, Math.ceil(Math.sqrt((w * h) / maxWorkingPixels)))
+  while (Math.ceil(w / k) * Math.ceil(h / k) > maxWorkingPixels) k++
+  return downscaleBox(image, k)
 }
 
 export function traceImage(input: ImageData | RgbaImage, overrides: Partial<TraceEngineOptions> = {}): TraceEngineResult {
+  return traceWith({ image: { width: input.width, height: input.height, data: input.data, scale: (input as RgbaImage).scale } }, overrides, false)
+}
+
+/**
+ * traceImage for a caller that hands over its pixels: the engine takes
+ * `source.image` and clears it, so the decoded upload (16 MB at 4 MP) can be
+ * freed as soon as the first stage has produced its own copy instead of
+ * staying alive for the whole trace.
+ */
+export function traceOwnedImage(source: { image: RgbaImage | null }, overrides: Partial<TraceEngineOptions> = {}): TraceEngineResult {
+  return traceWith(source, overrides, true)
+}
+
+function traceWith(source: { image: RgbaImage | null }, overrides: Partial<TraceEngineOptions>, owned: boolean): TraceEngineResult {
   const options: TraceEngineOptions = { ...DEFAULT_ENGINE_OPTIONS, ...overrides }
   const timings: Record<string, number> = {}
   let mark = performance.now()
@@ -179,11 +255,13 @@ export function traceImage(input: ImageData | RgbaImage, overrides: Partial<Trac
     const now = performance.now()
     timings[name] = now - mark
     options.onStage?.(name)
+    checkpoint(`after ${name}`)
     mark = performance.now()
   }
 
-  const sourceWidth = options.sourceSize?.width ?? input.width
-  const sourceHeight = options.sourceSize?.height ?? input.height
+  if (!source.image) throw new Error('traceOwnedImage: source image already taken')
+  const sourceWidth = options.sourceSize?.width ?? source.image.width
+  const sourceHeight = options.sourceSize?.height ?? source.image.height
 
   // Steps 1-6a run in their own scope so every per-pixel buffer (working
   // image, OKLab, masks, labels, region ids: ~30 MB at the 1.2 MP working
@@ -191,7 +269,17 @@ export function traceImage(input: ImageData | RgbaImage, overrides: Partial<Trac
   // regions' colors and their shared boundary chains (Worker memory).
   const seg = (() => {
     // 1. Bound the working size for huge inputs.
-    let image = fitWorkingSize({ width: input.width, height: input.height, data: input.data }, options.maxWorkingPixels)
+    // Full-size buffers this trace may overwrite once retired: anything it
+    // produced itself, and the input only if the caller handed it over (only
+    // the caller's buffer is remembered, so an owned input is not kept alive).
+    const foreign = owned ? null : source.image!.data
+    const reusable = (img: RgbaImage) => img.data !== foreign
+    let image = fitWorkingSize(source.image!, workingPixelCap(source.image!, options))
+    source.image = null
+    // Source pixels per working pixel before any upsampling: exactly k after
+    // a k× box reduction (whose last row/column of blocks may be partial).
+    const baseScale = image.scale ?? sourceWidth / image.width
+    let spare: Uint8ClampedArray | undefined
     lap('downscale')
 
     // 2. Denoise at (near) source resolution, before upsampling spreads noise.
@@ -200,8 +288,16 @@ export function traceImage(input: ImageData | RgbaImage, overrides: Partial<Trac
     const lossy = options.sourceFormat === 'jpeg'
     const noiseSigma = estimateNoiseSigma(image)
     const denoise = options.denoise === 'on' || (options.denoise === 'auto' && (lossy || noiseSigma > 1.2))
-    if (lossy) image = restoreJpegChroma(image)
-    if (denoise) image = bilateralDenoise(image, 2, Math.max(lossy ? 22 : 14, 3.5 * noiseSigma))
+    if (lossy) {
+      const previous = image
+      image = restoreJpegChroma(previous)
+      if (reusable(previous)) spare = previous.data
+    }
+    if (denoise) {
+      const previous = image
+      image = bilateralDenoise(previous, 2, Math.max(lossy ? 22 : 14, 3.5 * noiseSigma), spare)
+      spare = reusable(previous) ? previous.data : undefined
+    }
     lap('denoise')
 
     // 3. Palette at source resolution: here anti-aliased edge pixels differ
@@ -210,10 +306,10 @@ export function traceImage(input: ImageData | RgbaImage, overrides: Partial<Trac
     const sourcePixels = sourceWidth * sourceHeight
     const speckleSource = options.speckleArea > 0 ? options.speckleArea : Math.max(2, Math.min(40, sourcePixels * 5e-6)) * (lossy ? 3 : 1)
     const baseN = image.width * image.height
-    const baseOpaque = new Uint8Array(baseN)
+    let baseOpaque = new Uint8Array(baseN)
     for (let p = 0; p < baseN; p++) if ((image.data[p * 4 + 3] ?? 0) >= options.alphaThreshold) baseOpaque[p] = 1
-    const baseLab = computeOklab(image)
-    const baseFlat = computeFlatMask(image, baseLab, baseOpaque)
+    let baseLab: OklabSource | null = new OklabSource(image.data)
+    let baseFlat = computeFlatMask(image, baseLab, baseOpaque)
     const baseToSource = sourcePixels / baseN
     const palette = extractPalette(image, baseLab, baseOpaque, baseFlat, {
       mergeDistance: options.mergeDistance,
@@ -233,40 +329,55 @@ export function traceImage(input: ImageData | RgbaImage, overrides: Partial<Trac
 
     // 4. Upsample small inputs so anti-aliasing becomes sub-pixel geometry;
     //    a light blur removes bilinear's grid-periodic ripple.
-    const upscale = options.upscale > 0 ? Math.round(options.upscale) : autoUpscale(image.width, image.height, Math.max(options.maxWorkingPixels, options.maxUpscaledPixels))
+    const upscale = options.upscale > 0 ? Math.round(options.upscale) : autoUpscale(image.width, image.height, options.maxUpscaledPixels)
     const baseWidth = image.width
     const baseHeight = image.height
-    if (upscale > 1) image = gaussianBlur(upscaleBilinear(image, upscale), 0.45 * upscale)
-    else if (lossy) image = gaussianBlur(image, 0.5)
+    if (upscale > 1) {
+      const base = image
+      image = gaussianBlur(options.upscaleFilter === 'bicubic' ? upscaleBicubic(base, upscale) : upscaleBilinear(base, upscale), options.upscaleBlur * upscale)
+      if (options.upscaleFilter === 'ridge') restoreRidges(image, base, upscale, ridgeMask(base, options.ridgeThreshold))
+    }
+    else if (lossy) image = gaussianBlur(image, 0.5, spare)
+    spare = undefined
     lap('upscale')
 
     const { width, height } = image
     const n = width * height
-    const opaque = new Uint8Array(n)
-    for (let p = 0; p < n; p++) if ((image.data[p * 4 + 3] ?? 0) >= options.alphaThreshold) opaque[p] = 1
-    const lab = upscale > 1 ? computeOklab(image) : baseLab
-    const flat = upscaleMaskStrict(baseFlat, baseWidth, baseHeight, upscale)
+    // Without upsampling the base mask has the same size and is not needed
+    // again: overwrite it instead of allocating a second one.
+    let opaque = upscale > 1 ? new Uint8Array(n) : baseOpaque
+    for (let p = 0; p < n; p++) opaque[p] = (image.data[p * 4 + 3] ?? 0) >= options.alphaThreshold ? 1 : 0
+    let lab: OklabSource | null = upscale > 1 ? new OklabSource(image.data) : baseLab
+    baseLab = null
+    let flat = upscaleMaskStrict(baseFlat, baseWidth, baseHeight, upscale)
     for (let p = 0; p < n; p++) if (!opaque[p]) flat[p] = 0
     lap('oklab')
 
     const sourceToWorking = (width / sourceWidth) * (height / sourceHeight)
     const minArea = Math.max(1, Math.round(speckleSource * sourceToWorking))
     let labels = labelPixels(image, lab, opaque, flat, palette, 2 * upscale + 1, options.mergeDistance * 2, options.thinFeatures ? upscale + 2 : 0, Math.max(1, Math.round(upscale * options.thinPeakScale)))
+    // Buffers are released right after their last use (memory at multi-MP sizes).
+    baseOpaque = baseFlat = opaque = flat = NO_BYTES
     lap('label')
 
     // 5. Speckle cleanup and final regions.
-    labels = mergeSmallRegions(labels, width, height, palette, minArea)
-    labels = dissolveBlendSlivers(labels, width, height, palette, lab, 0.75 * Math.sqrt(sourceToWorking))
-    labels = mergeSmallRegions(labels, width, height, palette, minArea)
-    let regions = connectedComponents(labels, width, height)
+    // One id buffer shared by every region pass (each would otherwise
+    // allocate 4 bytes per pixel of garbage).
+    const scratch = new Int32Array(n)
+    labels = mergeSmallRegions(labels, width, height, palette, minArea, scratch)
+    labels = dissolveBlendSlivers(labels, width, height, palette, lab, 0.75 * Math.sqrt(sourceToWorking), scratch)
+    lab = null
+    if (!options.gradients) image = NO_IMAGE
+    labels = mergeSmallRegions(labels, width, height, palette, minArea, scratch)
+    let regions = connectedComponents(labels, width, height, scratch)
     // Region budget: pathological inputs (pure noise, dithering, halftones)
     // would otherwise produce tens of thousands of paths and megabyte SVGs.
     // Coarsen speckle removal until the region count is sane.
     let budgetArea = minArea
     while (regions.count > options.maxRegions && budgetArea < n / 50) {
       budgetArea *= 2
-      labels = mergeSmallRegions(labels, width, height, palette, budgetArea)
-      regions = connectedComponents(labels, width, height)
+      labels = mergeSmallRegions(labels, width, height, palette, budgetArea, scratch)
+      regions = connectedComponents(labels, width, height, scratch)
     }
     lap('regions')
 
@@ -291,19 +402,23 @@ export function traceImage(input: ImageData | RgbaImage, overrides: Partial<Trac
           const g = gradient.groupOfRegion[regions.ids[p]!]!
           if (g >= 0) labels[p] = base + g
         }
-        regions = connectedComponents(labels, width, height)
+        regions = connectedComponents(labels, width, height, scratch)
         gradientFills = gradient.fills
       }
     }
     lap('gradients')
 
+    image = NO_IMAGE
+    labels = NO_POINTS
+
     // 6. Shared boundaries and curve fitting.
     const chains = extractChains(regions.ids, width, height)
+    regions.ids = NO_POINTS
     const boundaries = buildRegionBoundaries(chains, regions.count)
     lap('chains')
-    return { width, height, upscale, denoise, noiseSigma, sourceToWorking, palette, regionLabels: regions.labels, regionCount: regions.count, chains, boundaries, gradientFills }
+    return { width, height, upscale, denoise, noiseSigma, sourceToWorking, coordinateScale: baseScale / upscale, palette, regionLabels: regions.labels, regionCount: regions.count, chains, boundaries, gradientFills }
   })()
-  const { width, height, upscale, denoise, noiseSigma, sourceToWorking, palette, chains, boundaries, gradientFills } = seg
+  const { width, height, upscale, denoise, noiseSigma, sourceToWorking, coordinateScale, palette, chains, boundaries, gradientFills } = seg
   const regions = { labels: seg.regionLabels, count: seg.regionCount }
   const workingPerSource = Math.sqrt(sourceToWorking)
   const fitOptions = {
@@ -333,7 +448,7 @@ export function traceImage(input: ImageData | RgbaImage, overrides: Partial<Trac
   lap('fit')
 
   // 7. SVG output.
-  const scale = sourceWidth / width
+  const scale = coordinateScale
   // Auto: coordinate step at most 1/5000 of the longer side (3 decimals
   // under 50 px, 2 under 500 px, 1 under 5000 px) — finer is invisible even at
   // 4× zoom and only adds bytes.

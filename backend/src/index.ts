@@ -1,6 +1,7 @@
 import type { ExportedHandler, MessageBatch, ScheduledController } from '@cloudflare/workers-types'
 import type { Env } from './env'
-import { assertRequiredBackendSecrets } from './env'
+import { assertRequiredBackendSecrets, isLocalDevelopment } from './env'
+import { enableDebuggerCheckpoints } from './engine/memoryCheckpoint'
 import type { ConversionQueueMessage } from './integrations/queue'
 import { createJobService } from './services/JobService'
 import { createConversionService } from './services/ConversionService'
@@ -130,6 +131,7 @@ export default {
   async queue(batch: MessageBatch<ConversionQueueMessage>, rawEnv: Env): Promise<void> {
     const env = await withWasmModules(rawEnv)
     assertRequiredBackendSecrets(env)
+    if (isLocalDevelopment(env) && env.MEMORY_CHECKPOINTS === '1') enableDebuggerCheckpoints()
     const conversionService = createConversionService(env)
     if (isDeadLetterQueue(batch.queue)) {
       await handleDeadLetters(batch.messages, conversionService)

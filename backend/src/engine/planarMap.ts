@@ -12,6 +12,7 @@
  * Coordinates are on the pixel-corner lattice: vertex (x, y) is the top-left
  * corner of pixel (x, y); the image spans [0, width] x [0, height].
  */
+import { checkpoint } from './memoryCheckpoint'
 
 export const OUTSIDE = -1
 
@@ -165,6 +166,7 @@ export function extractChains(ids: Int32Array, width: number, height: number): C
     }
   }
 
+  checkpoint('extractChains')
   return chains
 }
 

@@ -1,8 +1,8 @@
 import type { Upload } from '../types'
 import type { VectorizationProvider, VectorizationResult } from './VectorizationProvider'
 import { decodeForTrace, type DecodedForTrace, type RasterDecoderWasm } from './imageDecoder'
-import { traceImage } from '../engine/traceImage'
-import { engineOptionsFor, sourceFormatFromMime } from '../engine/profiles'
+import { traceOwnedImage } from '../engine/traceImage'
+import { engineOptionsFor, sourceFormatFromMime, workingCaps } from '../engine/profiles'
 
 /**
  * The Vectorla tracing engine (src/engine/) as a VectorizationProvider — the
@@ -20,13 +20,13 @@ export class VectorlaProvider implements VectorizationProvider {
 
   async vectorize(upload: Upload, fileBytes: ArrayBuffer, requestedPreset?: string | null): Promise<VectorizationResult> {
     const options = engineOptionsFor('quick', requestedPreset)
-    const decoded = await decodeForTrace(upload.mimeType, fileBytes, this.wasm, options.maxWorkingPixels!)
+    const decoded = await decodeForTrace(upload.mimeType, fileBytes, this.wasm, workingCaps(options))
     return this.vectorizeDecoded(upload, decoded, requestedPreset)
   }
 
   /** Traces an upload already decoded with decodeForTrace (see ConversionService.traceQuick). */
   vectorizeDecoded(upload: Upload, decoded: DecodedForTrace, requestedPreset?: string | null): VectorizationResult {
-    const { svg } = traceImage(decoded.image, {
+    const { svg } = traceOwnedImage(decoded, {
       ...engineOptionsFor('quick', requestedPreset),
       sourceFormat: sourceFormatFromMime(upload.mimeType),
       sourceSize: decoded.sourceSize,

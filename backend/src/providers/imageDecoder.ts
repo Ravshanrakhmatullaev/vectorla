@@ -3,7 +3,8 @@ import { assertDecodableDimensions } from './imageDimensions'
 import { init as initPngDecoder, default as decodePng } from '@jsquash/png/decode.js'
 import { init as initJpegDecoder, default as decodeJpeg } from '@jsquash/jpeg/decode.js'
 import { init as initWebpDecoder, default as decodeWebp } from '@jsquash/webp/decode.js'
-import { fitWorkingSize } from '../engine/traceImage'
+import { fitWorkingSize, workingPixelCap, type TraceEngineOptions } from '../engine/traceImage'
+import { checkpoint } from '../engine/memoryCheckpoint'
 import type { RgbaImage } from '../engine/raster'
 
 export interface RasterDecoderWasm {
@@ -67,7 +68,8 @@ export async function decodeImage(mimeType: string, fileBytes: ArrayBuffer, wasm
 
 /** A decoded upload already reduced to the engine's working size. */
 export interface DecodedForTrace {
-  image: RgbaImage
+  /** Taken (set to null) by traceOwnedImage, so the pixels can be freed mid-trace. */
+  image: RgbaImage | null
   /** The upload's real size, passed to traceImage as `sourceSize`. */
   sourceSize: { width: number; height: number }
 }
@@ -83,10 +85,11 @@ export async function decodeForTrace(
   mimeType: string,
   fileBytes: ArrayBuffer,
   wasm: RasterDecoderWasm,
-  maxWorkingPixels: number,
+  caps: Pick<TraceEngineOptions, 'maxWorkingPixels' | 'photoMaxWorkingPixels'>,
   inspect?: (full: ImageData) => void,
 ): Promise<DecodedForTrace> {
   const full = await decodeImage(mimeType, fileBytes, wasm)
+  checkpoint('decoded')
   inspect?.(full)
-  return { image: fitWorkingSize(full, maxWorkingPixels), sourceSize: { width: full.width, height: full.height } }
+  return { image: fitWorkingSize(full, workingPixelCap(full, caps)), sourceSize: { width: full.width, height: full.height } }
 }

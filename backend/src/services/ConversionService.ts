@@ -20,7 +20,7 @@ import {
   PROFESSIONAL_TRACE_CREDIT_MULTIPLIER,
 } from '../pipeline/ProfessionalTracePipeline'
 import { CreditsService, createCreditsService, calculateRequiredCredits } from './CreditsService'
-import { engineOptionsFor, sourceFormatFromMime } from '../engine/profiles'
+import { engineOptionsFor, sourceFormatFromMime, workingCaps } from '../engine/profiles'
 import { NotFoundError, NotImplementedError, InsufficientCreditsError, PayloadTooLargeError, UnsupportedMediaTypeError, ValidationError } from '../errors'
 
 /** Result of looking up a job's conversion — see ConversionService.getConversionByJob. */
@@ -139,7 +139,7 @@ export class ConversionService {
     // Decode once and shrink to the working size right away: the
     // full-resolution pixels must not stay alive during the trace (memory).
     let analysis!: ImageAnalysis
-    const decoded = await decodeForTrace(upload.mimeType, fileBytes, this.decoderWasm, engineOptionsFor('professional').maxWorkingPixels!, (full) => {
+    const decoded = await decodeForTrace(upload.mimeType, fileBytes, this.decoderWasm, workingCaps(engineOptionsFor('professional')), (full) => {
       analysis = analyzeImage(full)
     })
     try {
@@ -171,7 +171,7 @@ export class ConversionService {
     // One decode serves both analysis (full resolution) and the trace
     // (working size); the full-resolution pixels are released before tracing.
     let analysis!: ImageAnalysisResult
-    const decoded = await decodeForTrace(upload.mimeType, fileBytes, this.decoderWasm, engineOptionsFor('quick', jobPreset).maxWorkingPixels!, (full) => {
+    const decoded = await decodeForTrace(upload.mimeType, fileBytes, this.decoderWasm, workingCaps(engineOptionsFor('quick', jobPreset)), (full) => {
       analysis = this.imageAnalysis.analyzeDecoded(full)
     })
     const legacyPreset = jobPreset ?? analysis.recommendedTracePreset

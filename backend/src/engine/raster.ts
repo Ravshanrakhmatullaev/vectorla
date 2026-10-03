@@ -10,11 +10,14 @@
  * area-averaged down to a bounded working size so the Worker stays within its
  * CPU and memory budget.
  */
+import { checkpoint } from './memoryCheckpoint'
 
 export interface RgbaImage {
   width: number
   height: number
   data: Uint8ClampedArray
+  /** Source pixels per pixel when produced by downscaleBox (exact integer factor). */
+  scale?: number
 }
 
 /**
@@ -22,6 +25,180 @@ export interface RgbaImage {
  * alpha weighting (premultiplied), so fully transparent pixels — whose RGB is
  * often garbage such as black — never bleed dark fringes into opaque edges.
  */
+/**
+ * Catmull-Rom bicubic upsampling (premultiplied alpha, clamped). Compared
+ * with bilinear it keeps a thin stroke's peak between source pixel centers
+ * instead of averaging it down, so hairlines do not break into beads, and it
+ * has less of bilinear's grid-periodic ripple.
+ */
+export function upscaleBicubic(image: RgbaImage, factor: number): RgbaImage {
+  if (factor <= 1) return image
+  const { width: w, height: h, data: src } = image
+  const W = w * factor
+  const H = h * factor
+  const out = new Uint8ClampedArray(W * H * 4)
+  // Weights depend only on the sub-pixel phase, which repeats every `factor` pixels.
+  const weights = new Float64Array(factor * 4)
+  const offsets = new Int32Array(factor)
+  for (let i = 0; i < factor; i++) {
+    const s = (i + 0.5) / factor - 0.5
+    const base = Math.floor(s)
+    const t = s - base
+    offsets[i] = base
+    const t2 = t * t
+    const t3 = t2 * t
+    weights[i * 4] = (-t3 + 2 * t2 - t) / 2
+    weights[i * 4 + 1] = (3 * t3 - 5 * t2 + 2) / 2
+    weights[i * 4 + 2] = (-3 * t3 + 4 * t2 + t) / 2
+    weights[i * 4 + 3] = (t3 - t2) / 2
+  }
+  const clampX = (x: number) => (x < 0 ? 0 : x >= w ? w - 1 : x)
+  const clampY = (y: number) => (y < 0 ? 0 : y >= h ? h - 1 : y)
+  const acc = new Float64Array(4)
+  for (let Y = 0; Y < H; Y++) {
+    const py = Y % factor
+    const by = Math.floor(Y / factor) + offsets[py]!
+    for (let X = 0; X < W; X++) {
+      const px = X % factor
+      const bx = Math.floor(X / factor) + offsets[px]!
+      acc.fill(0)
+      for (let j = 0; j < 4; j++) {
+        const wy = weights[py * 4 + j]!
+        const row = clampY(by - 1 + j) * w
+        for (let i = 0; i < 4; i++) {
+          const wgt = wy * weights[px * 4 + i]!
+          const q = (row + clampX(bx - 1 + i)) * 4
+          const a = (src[q + 3] ?? 0) * wgt
+          acc[0] = acc[0]! + (src[q] ?? 0) * a
+          acc[1] = acc[1]! + (src[q + 1] ?? 0) * a
+          acc[2] = acc[2]! + (src[q + 2] ?? 0) * a
+          acc[3] = acc[3]! + a
+        }
+      }
+      const o = (Y * W + X) * 4
+      const alpha = acc[3]!
+      if (alpha > 0) {
+        out[o] = acc[0]! / alpha
+        out[o + 1] = acc[1]! / alpha
+        out[o + 2] = acc[2]! / alpha
+      }
+      out[o + 3] = alpha
+    }
+  }
+  return { width: W, height: H, data: out }
+}
+
+/**
+ * Marks thin ridge pixels (hairlines, signature strokes): pixels darker or
+ * lighter than both neighbours along some direction — directly, or across a
+ * two-pixel-wide stroke — by at least `threshold` in some channel. The mask
+ * is dilated by one pixel so it covers the bicubic support around a ridge.
+ */
+export function ridgeMask(image: RgbaImage, threshold: number): Uint8Array {
+  const { width: w, height: h, data } = image
+  const raw = new Uint8Array(w * h)
+  const dirs = [1, 0, 0, 1, 1, 1, 1, -1]
+  const at = (x: number, y: number, c: number) => (x < 0 || y < 0 || x >= w || y >= h ? -1 : data[(y * w + x) * 4 + c]!)
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let ridge = false
+      for (let c = 0; c < 4 && !ridge; c++) {
+        const v = at(x, y, c)
+        for (let d = 0; d < 8 && !ridge; d += 2) {
+          const dx = dirs[d]!
+          const dy = dirs[d + 1]!
+          const a = at(x - dx, y - dy, c)
+          if (a < 0) continue
+          const da = v - a
+          if (da < threshold && da > -threshold) continue
+          const b = at(x + dx, y + dy, c)
+          if (b < 0) continue
+          const db = v - b
+          if ((da > 0 ? db : -db) >= threshold) ridge = true
+          else if ((db < 0 ? -db : db) * 2 < threshold) {
+            // Two-pixel stroke: the next pixel matches, the one after must fall off too.
+            const b2 = at(x + 2 * dx, y + 2 * dy, c)
+            if (b2 >= 0 && (da > 0 ? v - b2 : b2 - v) >= threshold) ridge = true
+          }
+        }
+      }
+      if (ridge) raw[y * w + x] = 1
+    }
+  }
+  const mask = new Uint8Array(w * h)
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (!raw[y * w + x]) continue
+      for (let j = Math.max(0, y - 1); j <= Math.min(h - 1, y + 1); j++)
+        for (let i = Math.max(0, x - 1); i <= Math.min(w - 1, x + 1); i++) mask[j * w + i] = 1
+    }
+  }
+  return mask
+}
+
+/**
+ * Overwrites the blurred upscale with sharp Catmull-Rom samples wherever the
+ * source pixel is on a (dilated) ridge, so hairlines keep their contrast while
+ * ordinary edges keep the smoothing blur (fewer, cleaner segments).
+ */
+export function restoreRidges(target: RgbaImage, source: RgbaImage, factor: number, mask: Uint8Array): void {
+  const { width: w, height: h, data: src } = source
+  const W = target.width
+  const out = target.data
+  const weights = new Float64Array(factor * 4)
+  const offsets = new Int32Array(factor)
+  for (let i = 0; i < factor; i++) {
+    const s = (i + 0.5) / factor - 0.5
+    const base = Math.floor(s)
+    const t = s - base
+    offsets[i] = base
+    const t2 = t * t
+    const t3 = t2 * t
+    weights[i * 4] = (-t3 + 2 * t2 - t) / 2
+    weights[i * 4 + 1] = (3 * t3 - 5 * t2 + 2) / 2
+    weights[i * 4 + 2] = (-3 * t3 + 4 * t2 + t) / 2
+    weights[i * 4 + 3] = (t3 - t2) / 2
+  }
+  const clampX = (x: number) => (x < 0 ? 0 : x >= w ? w - 1 : x)
+  const clampY = (y: number) => (y < 0 ? 0 : y >= h ? h - 1 : y)
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (!mask[y * w + x]) continue
+      for (let py = 0; py < factor; py++) {
+        const Y = y * factor + py
+        const by = y + offsets[py]!
+        for (let px = 0; px < factor; px++) {
+          const X = x * factor + px
+          const bx = x + offsets[px]!
+          let r = 0
+          let g = 0
+          let b = 0
+          let alpha = 0
+          for (let j = 0; j < 4; j++) {
+            const wy = weights[py * 4 + j]!
+            const row = clampY(by - 1 + j) * w
+            for (let i = 0; i < 4; i++) {
+              const q = (row + clampX(bx - 1 + i)) * 4
+              const a = src[q + 3]! * wy * weights[px * 4 + i]!
+              r += src[q]! * a
+              g += src[q + 1]! * a
+              b += src[q + 2]! * a
+              alpha += a
+            }
+          }
+          const o = (Y * W + X) * 4
+          if (alpha > 0) {
+            out[o] = r / alpha
+            out[o + 1] = g / alpha
+            out[o + 2] = b / alpha
+          }
+          out[o + 3] = alpha
+        }
+      }
+    }
+  }
+}
+
 export function upscaleBilinear(image: RgbaImage, factor: number): RgbaImage {
   if (factor <= 1) return image
   const { width: w, height: h, data: src } = image
@@ -76,6 +253,52 @@ export function upscaleBilinear(image: RgbaImage, factor: number): RgbaImage {
  * images (up to MAX_IMAGE_PIXELS) where the full decoded buffer is already
  * most of a Worker's memory.
  */
+/**
+ * Integer-factor box downscale: each output pixel is the alpha-weighted mean
+ * of an exact k×k block (the last row/column of blocks may be partial; the
+ * output is ceil(w/k) × ceil(h/k) and maps back at exactly k source pixels per
+ * pixel). Unlike a fractional resample, every block has the same shape, so an
+ * anti-aliased edge stays one clean blend pixel wide instead of being
+ * smeared unevenly across bins of 1 and 2 pixels.
+ */
+export function downscaleBox(image: RgbaImage, k: number): RgbaImage {
+  const { width: w, height: h, data: src } = image
+  if (k <= 1) return image
+  const W = Math.ceil(w / k)
+  const H = Math.ceil(h / k)
+  const out = new Uint8ClampedArray(W * H * 4)
+  const sums = new Float64Array(W * 5)
+  const flush = (Y: number) => {
+    for (let X = 0; X < W; X++) {
+      const o = X * 5
+      const aSum = sums[o + 3]!
+      const count = sums[o + 4]! || 1
+      const p = (Y * W + X) * 4
+      if (aSum > 0) {
+        out[p] = sums[o]! / aSum
+        out[p + 1] = sums[o + 1]! / aSum
+        out[p + 2] = sums[o + 2]! / aSum
+      }
+      out[p + 3] = aSum / count
+    }
+    sums.fill(0)
+  }
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4
+      const a = src[i + 3] ?? 0
+      const o = Math.floor(x / k) * 5
+      sums[o] = sums[o]! + (src[i] ?? 0) * a
+      sums[o + 1] = sums[o + 1]! + (src[i + 1] ?? 0) * a
+      sums[o + 2] = sums[o + 2]! + (src[i + 2] ?? 0) * a
+      sums[o + 3] = sums[o + 3]! + a
+      sums[o + 4] = sums[o + 4]! + 1
+    }
+    if ((y + 1) % k === 0 || y === h - 1) flush(Math.floor(y / k))
+  }
+  return { width: W, height: H, data: out, scale: k }
+}
+
 export function downscaleArea(image: RgbaImage, W: number, H: number): RgbaImage {
   const { width: w, height: h, data: src } = image
   if (W >= w && H >= h) return image
@@ -126,10 +349,11 @@ export function downscaleArea(image: RgbaImage, W: number, H: number): RgbaImage
  * flat regions while leaving real color edges sharp, so the palette and the
  * traced boundaries don't inherit either the noise or a blurred edge.
  */
-export function bilateralDenoise(image: RgbaImage, radius: number, rangeSigma: number): RgbaImage {
+export function bilateralDenoise(image: RgbaImage, radius: number, rangeSigma: number, target?: Uint8ClampedArray): RgbaImage {
   if (radius <= 0) return image
   const { width: w, height: h, data: src } = image
-  const out = new Uint8ClampedArray(src.length)
+  // `target`: a retired buffer of the same size to reuse (never the source).
+  const out = target && target.length === src.length && target !== src ? target : new Uint8ClampedArray(src.length)
   const spatialSigma = Math.max(1, radius / 1.5)
   const spatial: number[] = []
   for (let dy = -radius; dy <= radius; dy++) {
@@ -208,6 +432,7 @@ export function bilateralDenoise(image: RgbaImage, radius: number, rangeSigma: n
       out[i + 3] = src[i + 3]!
     }
   }
+  checkpoint('bilateralDenoise')
   return { width: w, height: h, data: out }
 }
 
@@ -218,7 +443,7 @@ export function bilateralDenoise(image: RgbaImage, radius: number, rangeSigma: n
  * about half a source pixel removes it without moving straight edges (a
  * symmetric blur keeps an edge's 50% contour in place).
  */
-export function gaussianBlur(image: RgbaImage, sigma: number): RgbaImage {
+export function gaussianBlur(image: RgbaImage, sigma: number, target?: Uint8ClampedArray): RgbaImage {
   if (sigma <= 0) return image
   const { width: w, height: h, data } = image
   const radius = Math.max(1, Math.ceil(sigma * 2.5))
@@ -231,52 +456,66 @@ export function gaussianBlur(image: RgbaImage, sigma: number): RgbaImage {
   }
   for (let i = 0; i < kernel.length; i++) kernel[i] = kernel[i]! / ksum
 
-  // One channel at a time through two reusable float planes (~12 bytes per
-  // pixel in total) — a full float RGBA copy would cost 32 bytes per pixel,
-  // too much for a 128 MB Worker at multi-megapixel working sizes.
+  // Rolling rows instead of whole-image float planes: each source row is
+  // blurred horizontally once into a ring of 2·radius+1 rows per channel, and
+  // the vertical pass reads that ring. Memory is O(width·radius) instead of
+  // 12 bytes per pixel (48 MB at 4 MP). The arithmetic (float32 storage points
+  // and summation order) matches a two-pass full-plane blur exactly.
   const n = w * h
-  const planeA = new Float32Array(n)
-  const planeB = new Float32Array(n)
-  const alpha = new Float32Array(n)
-  const out = new Uint8ClampedArray(n * 4)
-
-  const blurPlane = (src: Float32Array, tmp: Float32Array) => {
-    for (let y = 0; y < h; y++) {
-      const row = y * w
+  const out = target && target.length === n * 4 && target !== data ? target : new Uint8ClampedArray(n * 4)
+  const size = 2 * radius + 1
+  // ring[c] holds horizontally blurred rows for channel c (0-2 premultiplied
+  // color, 3 alpha); slot = row % size.
+  const ring = [0, 1, 2, 3].map(() => new Float32Array(size * w))
+  const rowSrc = new Float32Array(w)
+  let ready = -1
+  const blurRow = (y: number) => {
+    const slot = (y % size) * w
+    const row = y * w
+    for (let c = 0; c < 4; c++) {
+      // Channel values exactly as stored in a float32 plane.
+      if (c === 3) for (let x = 0; x < w; x++) rowSrc[x] = (data[(row + x) * 4 + 3] ?? 0) / 255
+      else for (let x = 0; x < w; x++) rowSrc[x] = ((data[(row + x) * 4 + c] ?? 0) * (data[(row + x) * 4 + 3] ?? 0)) / 255
+      const dst = ring[c]!
       for (let x = 0; x < w; x++) {
         let acc = 0
         for (let k = -radius; k <= radius; k++) {
           const xx = x + k < 0 ? 0 : x + k >= w ? w - 1 : x + k
-          acc += src[row + xx]! * kernel[k + radius]!
+          acc += rowSrc[xx]! * kernel[k + radius]!
         }
-        tmp[row + x] = acc
+        dst[slot + x] = acc
       }
     }
-    for (let y = 0; y < h; y++) {
+  }
+  const rowOffset = new Int32Array(size)
+  const blurredAlpha = new Float32Array(w)
+  const blurredColor = new Float32Array(w)
+  const [ring0, ring1, ring2, ring3] = ring as [Float32Array, Float32Array, Float32Array, Float32Array]
+  const verticalInto = (src: Float32Array, dst: Float32Array) => {
+    for (let x = 0; x < w; x++) {
+      let acc = 0
+      for (let k = 0; k < size; k++) acc += src[rowOffset[k]! + x]! * kernel[k]!
+      dst[x] = acc
+    }
+  }
+  for (let y = 0; y < h; y++) {
+    while (ready < Math.min(h - 1, y + radius)) blurRow(++ready)
+    for (let k = -radius; k <= radius; k++) {
+      const yy = y + k < 0 ? 0 : y + k >= h ? h - 1 : y + k
+      rowOffset[k + radius] = (yy % size) * w
+    }
+    const row = y * w
+    verticalInto(ring3, blurredAlpha)
+    for (let x = 0; x < w; x++) out[(row + x) * 4 + 3] = blurredAlpha[x]! * 255
+    for (let c = 0; c < 3; c++) {
+      verticalInto(c === 0 ? ring0 : c === 1 ? ring1 : ring2, blurredColor)
       for (let x = 0; x < w; x++) {
-        let acc = 0
-        for (let k = -radius; k <= radius; k++) {
-          const yy = y + k < 0 ? 0 : y + k >= h ? h - 1 : y + k
-          acc += tmp[yy * w + x]! * kernel[k + radius]!
-        }
-        src[y * w + x] = acc
+        const a = blurredAlpha[x]!
+        out[(row + x) * 4 + c] = a > 1e-6 ? blurredColor[x]! / a : 0
       }
     }
   }
-
-  // Blurred alpha first; the original alpha is read straight from `data`.
-  for (let p = 0; p < n; p++) alpha[p] = (data[p * 4 + 3] ?? 0) / 255
-  blurPlane(alpha, planeB)
-  for (let p = 0; p < n; p++) out[p * 4 + 3] = alpha[p]! * 255
-  // Premultiplied color channels, so transparent pixels don't bleed color.
-  for (let c = 0; c < 3; c++) {
-    for (let p = 0; p < n; p++) planeA[p] = ((data[p * 4 + c] ?? 0) * (data[p * 4 + 3] ?? 0)) / 255
-    blurPlane(planeA, planeB)
-    for (let p = 0; p < n; p++) {
-      const a = alpha[p]!
-      out[p * 4 + c] = a > 1e-6 ? planeA[p]! / a : 0
-    }
-  }
+  checkpoint('gaussianBlur')
   return { width: w, height: h, data: out }
 }
 
@@ -315,19 +554,27 @@ export function upscaleMaskStrict(mask: Uint8Array, width: number, height: numbe
  * from neighbours with similar luma snaps color transitions back onto the
  * sharp luma edge. Luma itself is left untouched.
  */
-export function restoreJpegChroma(image: RgbaImage, radius = 4, lumaSigma = 12): RgbaImage {
+export function restoreJpegChroma(image: RgbaImage, radius = 4, lumaSigma = 12, target?: Uint8ClampedArray): RgbaImage {
   const { width: w, height: h, data } = image
-  const n = w * h
-  const Y = new Float32Array(n)
-  const Cb = new Float32Array(n)
-  const Cr = new Float32Array(n)
-  for (let p = 0; p < n; p++) {
-    const r = data[p * 4] ?? 0
-    const g = data[p * 4 + 1] ?? 0
-    const b = data[p * 4 + 2] ?? 0
-    Y[p] = 0.299 * r + 0.587 * g + 0.114 * b
-    Cb[p] = -0.168736 * r - 0.331264 * g + 0.5 * b
-    Cr[p] = 0.5 * r - 0.418688 * g - 0.081312 * b
+  // Luma/chroma for a rolling window of 2·radius+1 rows (float32, as full
+  // planes would store them) instead of three whole-image planes: 12 bytes per
+  // pixel would be 48 MB at 4 MP.
+  const size = 2 * radius + 1
+  const Y = new Float32Array(size * w)
+  const Cb = new Float32Array(size * w)
+  const Cr = new Float32Array(size * w)
+  let ready = -1
+  const convertRow = (row: number) => {
+    const slot = (row % size) * w
+    for (let x = 0; x < w; x++) {
+      const p = row * w + x
+      const r = data[p * 4] ?? 0
+      const g = data[p * 4 + 1] ?? 0
+      const b = data[p * 4 + 2] ?? 0
+      Y[slot + x] = 0.299 * r + 0.587 * g + 0.114 * b
+      Cb[slot + x] = -0.168736 * r - 0.331264 * g + 0.5 * b
+      Cr[slot + x] = 0.5 * r - 0.418688 * g - 0.081312 * b
+    }
   }
   const spatialSigma = Math.max(1, radius / 2)
   const spatial: number[] = []
@@ -337,11 +584,13 @@ export function restoreJpegChroma(image: RgbaImage, radius = 4, lumaSigma = 12):
   const rangeLut = new Float32Array(256)
   for (let d = 0; d < 256; d++) rangeLut[d] = Math.exp(-(d * d) / (2 * lumaSigma * lumaSigma))
 
-  const out = new Uint8ClampedArray(data.length)
+  const out = target && target.length === data.length && target !== data ? target : new Uint8ClampedArray(data.length)
   for (let y = 0; y < h; y++) {
+    while (ready < Math.min(h - 1, y + radius)) convertRow(++ready)
+    const rowSlot = (y % size) * w
     for (let x = 0; x < w; x++) {
       const p = y * w + x
-      const y0 = Y[p]!
+      const y0 = Y[rowSlot + x]!
       let sw = 0
       let scb = 0
       let scr = 0
@@ -353,19 +602,21 @@ export function restoreJpegChroma(image: RgbaImage, radius = 4, lumaSigma = 12):
           if (ny < 0 || ny >= h || nx < 0 || nx >= w) continue
           const q = ny * w + nx
           if ((data[q * 4 + 3] ?? 0) === 0) continue
-          const weight = spatial[k]! * rangeLut[Math.min(255, Math.round(Math.abs(Y[q]! - y0)))]!
+          const qs = (ny % size) * w + nx
+          const weight = spatial[k]! * rangeLut[Math.min(255, Math.round(Math.abs(Y[qs]! - y0)))]!
           sw += weight
-          scb += Cb[q]! * weight
-          scr += Cr[q]! * weight
+          scb += Cb[qs]! * weight
+          scr += Cr[qs]! * weight
         }
       }
-      const cb = sw > 0 ? scb / sw : Cb[p]!
-      const cr = sw > 0 ? scr / sw : Cr[p]!
+      const cb = sw > 0 ? scb / sw : Cb[rowSlot + x]!
+      const cr = sw > 0 ? scr / sw : Cr[rowSlot + x]!
       out[p * 4] = y0 + 1.402 * cr
       out[p * 4 + 1] = y0 - 0.344136 * cb - 0.714136 * cr
       out[p * 4 + 2] = y0 + 1.772 * cb
       out[p * 4 + 3] = data[p * 4 + 3] ?? 255
     }
   }
+  checkpoint('restoreJpegChroma')
   return { width: w, height: h, data: out }
 }

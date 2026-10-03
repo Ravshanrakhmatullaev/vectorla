@@ -28,6 +28,13 @@ export interface Env {
    * environment in wrangler.toml — see api/cors.ts.
    */
   CORS_EXTRA_ORIGINS?: string
+  /**
+   * Local memory measurement only: '1' (with ENVIRONMENT=development) makes
+   * the tracing engine pause at its memory checkpoints when a debugger is
+   * attached (see engine/memoryCheckpoint.ts and BENCHMARKS.md "Memory").
+   * Never set in staging or production.
+   */
+  MEMORY_CHECKPOINTS?: string
 }
 
 /**
