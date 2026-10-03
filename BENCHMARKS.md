@@ -138,11 +138,22 @@ separately, by reading each decoder's memory size after a decode:
 
 Two problems followed, both fixed in the audit:
 
-- @jsquash/png keeps one decoder instance per isolate, so after one 4 MP
-  PNG its ~39 MB stayed allocated beside every later trace (worst case
-  ~63 + 39 ≈ 102 MB). PNG now decodes on a fresh instance per call
-  (`providers/pngDecoder.ts`). Three 4 MP PNG decodes now retain 0.0 MB,
-  against 33 MB before; `memory.smoke-test.ts` checks this.
+- Decoder instances outlived their decodes:
+  - @jsquash/png keeps one instance per isolate, so after one 4 MP PNG its
+    ~39 MB stayed allocated beside every later trace (worst case
+    ~63 + 39 ≈ 102 MB).
+  - The JPEG/WebP "re-initialize after decode" pattern still left a fresh
+    instance holding ~32 MB.
+  - Removing the PNG glue import also removed its module-scope `ImageData`
+    polyfill. The JPEG glue then defined one from inside its first instance's
+    closure, which pinned that instance (19 MB) for the life of the isolate.
+
+  Now every decode creates its own instance and drops it: PNG through a
+  per-call copy of the glue (`providers/pngDecoder.ts`), JPEG and WebP
+  through jsquash's `initEmscriptenModule`. The polyfill is defined at module
+  scope in `imageDecoder.ts`. Three 4 MP PNG decodes retain 0.0 MB, against
+  33 MB before (`memory.smoke-test.ts` checks this). In workerd, 12
+  back-to-back conversions keep the pre-conversion heap at 3–5 MB.
 - A padded JPEG pushed the decoder past 100 MB. Metadata segments are now
   stripped before decoding (`providers/jpegSegments.ts`), and JPEG/WebP
   files larger than 2 MB + 3 bytes per pixel (13.4 MB at 4 MP) are rejected

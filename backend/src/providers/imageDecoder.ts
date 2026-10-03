@@ -2,11 +2,28 @@ import { PayloadTooLargeError, UnsupportedMediaTypeError } from '../errors'
 import { assertDecodableDimensions } from './imageDimensions'
 import { decodePngFresh } from './pngDecoder'
 import { stripJpegMetadata } from './jpegSegments'
-import { init as initJpegDecoder, default as decodeJpeg } from '@jsquash/jpeg/decode.js'
-import { init as initWebpDecoder, default as decodeWebp } from '@jsquash/webp/decode.js'
+import { initEmscriptenModule as initJpegModule } from '@jsquash/jpeg/utils.js'
+import mozjpegDecoder from '@jsquash/jpeg/codec/dec/mozjpeg_dec.js'
+import { initEmscriptenModule as initWebpModule } from '@jsquash/webp/utils.js'
+import webpDecoder from '@jsquash/webp/codec/dec/webp_dec.js'
 import { fitWorkingSize, workingPixelCap, type TraceEngineOptions } from '../engine/traceImage'
 import { checkpoint } from '../engine/memoryCheckpoint'
 import type { RgbaImage } from '../engine/raster'
+
+// Workers has no ImageData. The JPEG and WebP decoder glue each define a
+// polyfill on first use, from inside a decoder instance's closure, so that
+// global would keep the first decoder instance and its WebAssembly memory
+// (~19 MB after a 4 MP JPEG) alive for the life of the isolate. Defining it
+// here first, at module scope, keeps every decoder instance collectable.
+if (!(globalThis as { ImageData?: unknown }).ImageData) {
+  ;(globalThis as { ImageData?: unknown }).ImageData = class ImageData {
+    constructor(
+      readonly data: Uint8ClampedArray,
+      readonly width: number,
+      readonly height: number,
+    ) {}
+  }
+}
 
 export interface RasterDecoderWasm {
   png: WebAssembly.Module
@@ -34,31 +51,29 @@ export async function decodeImage(mimeType: string, fileBytes: ArrayBuffer, wasm
     }
   }
   try {
-    // Each decoder instance's WebAssembly memory grows to fit the largest
-    // image it has decoded and never shrinks, and the decoder module keeps
-    // its last instance. Re-initializing after the decode drops that
-    // instance (JPEG, WebP), so ~20-50 MB (4 MP JPEG) is not held through
-    // the trace; PNG uses a fresh instance per decode instead.
+    // Every decode gets its own decoder instance, dropped when it returns: a
+    // WebAssembly memory grows to fit the largest image decoded and never
+    // shrinks, so a kept instance (jsquash's default) holds 19-51 MB after a
+    // 4 MP image, and even a freshly re-initialized one holds ~32 MB.
     switch (mimeType) {
       case 'image/png': {
-        // A fresh instance per decode (pngDecoder.ts): jsquash's own PNG
-        // glue keeps one instance, so re-initializing cannot release it.
         const image = decodePngFresh(wasm.png, fileBytes)
         checkpoint('decoder')
         return image
       }
       case 'image/jpeg': {
-        await initJpegDecoder(wasm.jpeg)
-        const image = await decodeJpeg(stripJpegMetadata(fileBytes))
+        const decoder = await initJpegModule(mozjpegDecoder, wasm.jpeg)
+        // preserveOrientation false: EXIF orientation is applied (as jsquash's decode() default).
+        const image = decoder.decode(stripJpegMetadata(fileBytes), false)
         checkpoint('decoder')
-        await initJpegDecoder(wasm.jpeg)
+        if (!image) throw new Error('Decoding error')
         return image
       }
       case 'image/webp': {
-        await initWebpDecoder(wasm.webp)
-        const image = await decodeWebp(fileBytes)
+        const decoder = await initWebpModule(webpDecoder, wasm.webp)
+        const image = decoder.decode(fileBytes)
         checkpoint('decoder')
-        await initWebpDecoder(wasm.webp)
+        if (!image) throw new Error('Decoding error')
         return image
       }
       default:

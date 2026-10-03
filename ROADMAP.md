@@ -189,7 +189,7 @@ Legend: ✅ done · 🔜 next · ⏳ planned · 🧑 needs an owner decision, cr
   - a refund that failed once was never retried;
   - a failed job could flip back to completed;
   - a 2000² diagonal-stripe image took 63 s of CPU (limit 60 s);
-  - the PNG decoder kept ~39 MB per isolate;
+  - decoder instances kept 19–39 MB per isolate between conversions;
   - a padded JPEG pushed decoder memory past 100 MB;
   - a sweeper error skipped retention;
   - upload-time analysis could exceed memory on large files.

@@ -142,8 +142,8 @@ multi-format export, batch workflows, and launch operations remain incomplete.
   computes OKLab on demand and works in place. Measured inside workerd, a
   4 MP logo traced at full resolution peaks at ~47 MB live (~63 MB with no
   forced GC), a 4 MP photo at ~19 MB. Decoder WebAssembly memory is extra
-  and transient (19–51 MB for a 4 MP image): PNG decodes on a fresh
-  instance per call, JPEG metadata is stripped before decoding, and lossy
+  and transient (19–51 MB for a 4 MP image): every decode uses its own
+  decoder instance, dropped afterwards; JPEG metadata is stripped before decoding, and lossy
   files over 2 MB + 3 B/px are rejected (BENCHMARKS.md "High-resolution
   engine"). Legacy
   preset names sent explicitly as `Job.preset` adjust engine options.
