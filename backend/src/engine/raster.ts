@@ -21,81 +21,14 @@ export interface RgbaImage {
 }
 
 /**
- * Bilinear upsample by an integer factor. Color channels are interpolated with
- * alpha weighting (premultiplied), so fully transparent pixels — whose RGB is
- * often garbage such as black — never bleed dark fringes into opaque edges.
- */
-/**
- * Catmull-Rom bicubic upsampling (premultiplied alpha, clamped). Compared
- * with bilinear it keeps a thin stroke's peak between source pixel centers
- * instead of averaging it down, so hairlines do not break into beads, and it
- * has less of bilinear's grid-periodic ripple.
- */
-export function upscaleBicubic(image: RgbaImage, factor: number): RgbaImage {
-  if (factor <= 1) return image
-  const { width: w, height: h, data: src } = image
-  const W = w * factor
-  const H = h * factor
-  const out = new Uint8ClampedArray(W * H * 4)
-  // Weights depend only on the sub-pixel phase, which repeats every `factor` pixels.
-  const weights = new Float64Array(factor * 4)
-  const offsets = new Int32Array(factor)
-  for (let i = 0; i < factor; i++) {
-    const s = (i + 0.5) / factor - 0.5
-    const base = Math.floor(s)
-    const t = s - base
-    offsets[i] = base
-    const t2 = t * t
-    const t3 = t2 * t
-    weights[i * 4] = (-t3 + 2 * t2 - t) / 2
-    weights[i * 4 + 1] = (3 * t3 - 5 * t2 + 2) / 2
-    weights[i * 4 + 2] = (-3 * t3 + 4 * t2 + t) / 2
-    weights[i * 4 + 3] = (t3 - t2) / 2
-  }
-  const clampX = (x: number) => (x < 0 ? 0 : x >= w ? w - 1 : x)
-  const clampY = (y: number) => (y < 0 ? 0 : y >= h ? h - 1 : y)
-  const acc = new Float64Array(4)
-  for (let Y = 0; Y < H; Y++) {
-    const py = Y % factor
-    const by = Math.floor(Y / factor) + offsets[py]!
-    for (let X = 0; X < W; X++) {
-      const px = X % factor
-      const bx = Math.floor(X / factor) + offsets[px]!
-      acc.fill(0)
-      for (let j = 0; j < 4; j++) {
-        const wy = weights[py * 4 + j]!
-        const row = clampY(by - 1 + j) * w
-        for (let i = 0; i < 4; i++) {
-          const wgt = wy * weights[px * 4 + i]!
-          const q = (row + clampX(bx - 1 + i)) * 4
-          const a = (src[q + 3] ?? 0) * wgt
-          acc[0] = acc[0]! + (src[q] ?? 0) * a
-          acc[1] = acc[1]! + (src[q + 1] ?? 0) * a
-          acc[2] = acc[2]! + (src[q + 2] ?? 0) * a
-          acc[3] = acc[3]! + a
-        }
-      }
-      const o = (Y * W + X) * 4
-      const alpha = acc[3]!
-      if (alpha > 0) {
-        out[o] = acc[0]! / alpha
-        out[o + 1] = acc[1]! / alpha
-        out[o + 2] = acc[2]! / alpha
-      }
-      out[o + 3] = alpha
-    }
-  }
-  return { width: W, height: H, data: out }
-}
-
-/**
  * Marks isolated hairline pixels: pixels darker or lighter than both
  * neighbours along some direction by at least `threshold` in some channel,
  * where the two neighbours match each other (a one-pixel line on a single
  * background, not an edge between two fills). A diagonal ridge also needs at
  * most one axis neighbour of its own colour, which rejects checkerboard
  * corners (two blocks touching diagonally) that look like a diagonal line in
- * a 3x3 window, and no far stronger neighbour along the line (block corners). The mask is dilated by one pixel to cover the bicubic support.
+ * a 3x3 window, and no far stronger neighbour along the line (block
+ * corners). The mask is dilated by one pixel to cover the bicubic support.
  */
 export function ridgeMask(image: RgbaImage, threshold: number): Uint8Array {
   const { width: w, height: h, data } = image
@@ -219,6 +152,11 @@ export function restoreRidges(target: RgbaImage, source: RgbaImage, factor: numb
   }
 }
 
+/**
+ * Bilinear upsample by an integer factor. Color channels are interpolated with
+ * alpha weighting (premultiplied), so fully transparent pixels — whose RGB is
+ * often garbage such as black — never bleed dark fringes into opaque edges.
+ */
 export function upscaleBilinear(image: RgbaImage, factor: number): RgbaImage {
   if (factor <= 1) return image
   const { width: w, height: h, data: src } = image
@@ -267,13 +205,6 @@ export function upscaleBilinear(image: RgbaImage, factor: number): RgbaImage {
 }
 
 /**
- * Area-average (box) downsample to exactly `W`x`H`, alpha-weighted like upscaleBilinear.
- * Source rows map to output rows in order, so sums are kept for one output
- * row at a time: memory is O(W), not O(W·H) — this runs on the largest
- * images (up to MAX_IMAGE_PIXELS) where the full decoded buffer is already
- * most of a Worker's memory.
- */
-/**
  * Integer-factor box downscale: each output pixel is the alpha-weighted mean
  * of an exact k×k block (the last row/column of blocks may be partial; the
  * output is ceil(w/k) × ceil(h/k) and maps back at exactly k source pixels per
@@ -317,50 +248,6 @@ export function downscaleBox(image: RgbaImage, k: number): RgbaImage {
     if ((y + 1) % k === 0 || y === h - 1) flush(Math.floor(y / k))
   }
   return { width: W, height: H, data: out, scale: k }
-}
-
-export function downscaleArea(image: RgbaImage, W: number, H: number): RgbaImage {
-  const { width: w, height: h, data: src } = image
-  if (W >= w && H >= h) return image
-  const out = new Uint8ClampedArray(W * H * 4)
-  const sums = new Float64Array(W * 5)
-  const xMap = new Int32Array(w)
-  for (let x = 0; x < w; x++) xMap[x] = Math.min(W - 1, Math.floor((x * W) / w))
-  const flush = (Y: number) => {
-    for (let X = 0; X < W; X++) {
-      const o = X * 5
-      const aSum = sums[o + 3]!
-      const count = sums[o + 4]! || 1
-      const p = (Y * W + X) * 4
-      if (aSum > 0) {
-        out[p] = sums[o]! / aSum
-        out[p + 1] = sums[o + 1]! / aSum
-        out[p + 2] = sums[o + 2]! / aSum
-      }
-      out[p + 3] = aSum / count
-    }
-    sums.fill(0)
-  }
-  let currentY = 0
-  for (let y = 0; y < h; y++) {
-    const Y = Math.min(H - 1, Math.floor((y * H) / h))
-    if (Y !== currentY) {
-      flush(currentY)
-      currentY = Y
-    }
-    for (let x = 0; x < w; x++) {
-      const i = (y * w + x) * 4
-      const a = src[i + 3] ?? 0
-      const o = xMap[x]! * 5
-      sums[o] = sums[o]! + (src[i] ?? 0) * a
-      sums[o + 1] = sums[o + 1]! + (src[i + 1] ?? 0) * a
-      sums[o + 2] = sums[o + 2]! + (src[i + 2] ?? 0) * a
-      sums[o + 3] = sums[o + 3]! + a
-      sums[o + 4] = sums[o + 4]! + 1
-    }
-  }
-  flush(currentY)
-  return { width: W, height: H, data: out }
 }
 
 /**

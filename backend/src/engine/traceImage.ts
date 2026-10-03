@@ -11,7 +11,7 @@
  */
 import { PathBuilder } from './svgWriter'
 import { toShortHex } from './color'
-import { bilateralDenoise, downscaleBox, gaussianBlur, restoreJpegChroma, restoreRidges, ridgeMask, upscaleBicubic, upscaleBilinear, upscaleMaskStrict, type RgbaImage } from './raster'
+import { bilateralDenoise, downscaleBox, gaussianBlur, restoreJpegChroma, restoreRidges, ridgeMask, upscaleBilinear, upscaleMaskStrict, type RgbaImage } from './raster'
 import { computeFlatMask, OklabSource, extractDetailColors, extractPalette, labelPixels, TRANSPARENT_LABEL, type PaletteColor } from './palette'
 import { connectedComponents, dissolveBlendSlivers, mergeSmallRegions } from './regions'
 import { detectGradients, validateGradientGroups, type GradientFill } from './gradients'
@@ -76,8 +76,12 @@ export interface TraceEngineOptions {
   gradients: boolean
   /** Source encoding hint: lossy JPEG input gets artifact-aware cleanup. */
   sourceFormat: 'png' | 'jpeg' | 'webp' | 'unknown'
-  /** Upsampling filter for small inputs (experiment switch; see BENCHMARKS.md). */
-  upscaleFilter: 'bilinear' | 'bicubic' | 'ridge'
+  /**
+   * Upsampling filter for small inputs: bilinear plus blur, or 'ridge', which
+   * also restores isolated one-pixel hairlines with sharp Catmull-Rom samples
+   * so the blur cannot average them away (see BENCHMARKS.md).
+   */
+  upscaleFilter: 'bilinear' | 'ridge'
   /** Blur after upsampling, in source pixels (removes interpolation ripple). */
   upscaleBlur: number
   /** Channel contrast that marks a ridge pixel for the 'ridge' upscale filter. */
@@ -102,7 +106,7 @@ export const DEFAULT_ENGINE_OPTIONS: TraceEngineOptions = {
   upscale: 0,
   maxWorkingPixels: 2_000_000,
   photoMaxWorkingPixels: 2_000_000,
-  upscaleFilter: 'bilinear',
+  upscaleFilter: 'ridge',
   upscaleBlur: 0.45,
   ridgeThreshold: 32,
   maxUpscaledPixels: 2_000_000,
@@ -279,6 +283,8 @@ function traceWith(source: { image: RgbaImage | null }, overrides: Partial<Trace
     // Source pixels per working pixel before any upsampling: exactly k after
     // a k× box reduction (whose last row/column of blocks may be partial).
     const baseScale = image.scale ?? sourceWidth / image.width
+    // Classified before denoising, which flattens photos past the threshold.
+    const hairlines = options.upscaleFilter === 'ridge' && flatFraction(image) >= PHOTO_FLAT_FRACTION
     let spare: Uint8ClampedArray | undefined
     lap('downscale')
 
@@ -334,8 +340,8 @@ function traceWith(source: { image: RgbaImage | null }, overrides: Partial<Trace
     const baseHeight = image.height
     if (upscale > 1) {
       const base = image
-      image = gaussianBlur(options.upscaleFilter === 'bicubic' ? upscaleBicubic(base, upscale) : upscaleBilinear(base, upscale), options.upscaleBlur * upscale)
-      if (options.upscaleFilter === 'ridge' && flatFraction(base) >= PHOTO_FLAT_FRACTION) restoreRidges(image, base, upscale, ridgeMask(base, options.ridgeThreshold))
+      image = gaussianBlur(upscaleBilinear(base, upscale), options.upscaleBlur * upscale)
+      if (hairlines) restoreRidges(image, base, upscale, ridgeMask(base, options.ridgeThreshold))
     }
     else if (lossy) image = gaussianBlur(image, 0.5, spare)
     spare = undefined

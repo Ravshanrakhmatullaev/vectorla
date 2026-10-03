@@ -44,7 +44,7 @@ for (const mode of ['quick', 'professional'] as const) {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><rect width="512" height="512" fill="#fff"/>${body}</svg>`
     // Rendered at 256 px: the strokes are 0.5–1 source pixels wide.
     const src = render(svg, 256)
-    const out = traceImage({ width: src.width, height: src.height, data: new Uint8ClampedArray(src.px) }, { ...engineOptionsFor(mode), upscaleFilter: 'ridge' })
+    const out = traceImage({ width: src.width, height: src.height, data: new Uint8ClampedArray(src.px) }, engineOptionsFor(mode))
     assertTrue(out.stats.upscale > 1, `${mode} ${name}: expected the small input to be upscaled`)
     const truth = render(svg, 1024)
     const traced = render(out.svg, 1024)
