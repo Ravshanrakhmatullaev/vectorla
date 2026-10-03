@@ -91,7 +91,8 @@ export function upscaleBicubic(image: RgbaImage, factor: number): RgbaImage {
 /**
  * Marks thin ridge pixels (hairlines, signature strokes): pixels darker or
  * lighter than both neighbours along some direction — directly, or across a
- * two-pixel-wide stroke — by at least `threshold` in some channel. The mask
+ * two-pixel-wide stroke — by at least `threshold` in some channel, where the
+ * two neighbours match each other (an isolated line on one background). The mask
  * is dilated by one pixel so it covers the bicubic support around a ridge.
  */
 export function ridgeMask(image: RgbaImage, threshold: number): Uint8Array {
@@ -99,6 +100,15 @@ export function ridgeMask(image: RgbaImage, threshold: number): Uint8Array {
   const raw = new Uint8Array(w * h)
   const dirs = [1, 0, 0, 1, 1, 1, 1, -1]
   const at = (x: number, y: number, c: number) => (x < 0 || y < 0 || x >= w || y >= h ? -1 : data[(y * w + x) * 4 + c]!)
+  // Isolated strokes only: both sides must be the same background colour, so
+  // edges between two different fills and shape corners are left alone.
+  const sameSides = (x0: number, y0: number, x1: number, y1: number) => {
+    for (let k = 0; k < 4; k++) {
+      const d = at(x0, y0, k) - at(x1, y1, k)
+      if (d * 2 >= threshold || d * 2 <= -threshold) return false
+    }
+    return true
+  }
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       let ridge = false
@@ -114,11 +124,11 @@ export function ridgeMask(image: RgbaImage, threshold: number): Uint8Array {
           const b = at(x + dx, y + dy, c)
           if (b < 0) continue
           const db = v - b
-          if ((da > 0 ? db : -db) >= threshold) ridge = true
+          if ((da > 0 ? db : -db) >= threshold) ridge = sameSides(x - dx, y - dy, x + dx, y + dy)
           else if ((db < 0 ? -db : db) * 2 < threshold) {
             // Two-pixel stroke: the next pixel matches, the one after must fall off too.
             const b2 = at(x + 2 * dx, y + 2 * dy, c)
-            if (b2 >= 0 && (da > 0 ? v - b2 : b2 - v) >= threshold) ridge = true
+            if (b2 >= 0 && (da > 0 ? v - b2 : b2 - v) >= threshold) ridge = sameSides(x - dx, y - dy, x + 2 * dx, y + 2 * dy)
           }
         }
       }
