@@ -103,7 +103,7 @@ function peakOf(make: () => { width: number; height: number; data: Uint8ClampedA
 }
 
 // Measured: 39.5 MB (artwork, both modes), 19.1 MB (photo). Workerd measurements of real
-// 4 MP uploads (BENCHMARKS.md): <= 61 MB photo-at-full-res, 46 MB logo.
+// 4 MP uploads (BENCHMARKS.md): 61 MB photo at full resolution (not used), 47 MB logo.
 const BUDGET_ARTWORK_4MP_MB = 46
 const BUDGET_PHOTO_4MP_MB = 23
 

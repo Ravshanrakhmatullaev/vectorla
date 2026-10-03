@@ -150,12 +150,12 @@ Legend: ✅ done · 🔜 next · ⏳ planned · 🧑 needs an owner decision, cr
   artwork be traced at its full upload resolution (up to 4 MP), cutting edge
   error 2–4× at 4 MP. Photos stay at 1.2 MP. Whole-factor downscale replaces
   fractional resampling. A ridge-preserving upsampler keeps isolated ≤ 1 px
-  hairlines. Live peak inside workerd: 4 MP logo ~46 MB, 4 MP photo ~19 MB.
+  hairlines. Live peak inside workerd: 4 MP logo ~47 MB, 4 MP photo ~19 MB.
   Tiled processing was evaluated and rejected (seams, cross-tile regions).
   See BENCHMARKS.md "High-resolution engine".
 - ⏳ **Q19. Production memory check**: measure the isolate on Cloudflare
   itself (preview deployment, owner approval needed). Locally, inside
-  workerd, the worst case is a 4 MP logo at ~46 MB live / ~63 MB without
+  workerd, the worst case is a 4 MP logo at ~47 MB live / ~63 MB without
   forced GC (limit 128 MB).
 
 ### Tier 2: Production safety (launch blockers)

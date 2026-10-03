@@ -105,20 +105,24 @@ budgets. `wrangler dev` with `MEMORY_CHECKPOINTS=1` (development only)
 enables the same pauses in the real app.
 
 **Live peak, 4 MP upload traced at its full resolution** (before → after
-the diet): photo 84 → 61 MB, logo 70 → 46 MB.
+the diet): photo 84 → 61 MB, logo 70 → 46–47 MB.
 
 **Production profiles, final engine (workerd):**
 
 | Upload | Mode | Working size | Live peak | No-GC peak | Trace time |
 |---|---|---|---:|---:|---:|
-| 4 MP JPEG photo | Quick | 1224×816 (photo cap) | 19.3 MB | 44.6 MB | 3.9 s |
-| 4 MP JPEG photo | Professional | 1224×816 | 18.4 MB | 44.3 MB | 4.3 s |
-| 4 MP PNG logo | Quick | 2000×2000 (full) | 46.2 MB | 61.8 MB | 2.2 s |
-| 4 MP PNG logo | Professional | 2000×2000 (full) | 46.6 MB | 62.9 MB | 2.3 s |
-| 600 px PNG logo | both | 1200×1200 (2× upsampled) | 17.5 MB | – | 1.3–1.6 s |
+| 4 MP JPEG photo | Quick | 1224×816 (photo cap) | 19.3 MB | 43.8 MB | 3.8 s |
+| 4 MP JPEG photo | Professional | 1224×816 | 19.3 MB | 49.3 MB | 4.4 s |
+| 4 MP PNG logo | Quick | 2000×2000 (full) | 47.1 MB¹ | 62.4 MB | 1.9–2.2 s |
+| 4 MP PNG logo | Professional | 2000×2000 (full) | 47.1 MB | 62.7 MB | 2.2–2.3 s |
+| 600 px PNG logo | Quick | 1200×1200 (2× upsampled) | 17.9 MB | 28.0 MB | 1.2 s |
+| 600 px PNG logo | Professional | 1200×1200 (2× upsampled) | 17.9 MB | 29.4 MB | 1.4 s |
+
+¹ Four fresh-isolate runs gave 47.1 MB three times and 54.7 MB once. The
+GC before that checkpoint had not yet released one 8 MB buffer.
 
 On main the same 4 MP logo was traced at 1.2 MP. The worst case (a 4 MP
-logo at full resolution, ~63 MB without GC) is about half the limit.
+logo at full resolution, ~63 MB without forced GC) is about half the limit.
 
 **Why photos stay at 1.2 MP.** A 4 MP photo at full resolution measured
 61 MB live but up to ~129 MB without forced GC in Professional (85 MB
@@ -165,7 +169,7 @@ into the background, so it vanished or broke into dashes (edge-length ratio
 | bilinear, no blur | 1.281 | 0.23–0.93 | not run (hairlines still break) |
 | Catmull-Rom bicubic, no blur | 0.667 | 0.82–0.96 | +22% segments, seams (gaps 0.16/10k) |
 | bicubic, blur 0.25 | 0.734 | – | +14% segments, gaps 0.53/10k |
-| **ridge-preserving (kept)** | **0.709** | **0.81–0.96** | ΔE 0.578 → 0.576 Quick, 0.516 → 0.514 Pro; SVG +0.3%; no gaps |
+| **ridge-preserving (kept)** | **0.685** | **0.82–0.96** | ΔE 0.578 → 0.576 Quick, 0.516 → 0.514 Pro; SVG +0.4%; no gaps |
 
 **Ridge-preserving upsampling** (`ridgeMask` / `restoreRidges`): the
 upscale stays bilinear + blur, and only pixels on an isolated one-pixel
@@ -179,16 +183,39 @@ after an A/B regression:
   corners, and diagonal ridges with a much stronger neighbour along the line
   are anti-aliased corners of solid blocks. QR codes regressed 0.58 → 0.65
   without this.
-- Runs shorter than 4 pixels (linked across one-pixel gaps) are speckles.
-  Salt-and-pepper noise became shapes without this.
+- Speckles are dropped: runs of 1–2 ridge pixels, or runs under 4 that
+  contain a lone dot (an extremum in all four directions). Runs are linked
+  across one-pixel gaps. Without this rule, salt-and-pepper noise became
+  shapes.
+- The mask is dilated by 2 px. A shallow line (~8°) crosses between pixel
+  rows every few pixels, and there its coverage is split so no single pixel
+  is a ridge. With 1 px dilation those spots were left blurred and the line
+  came out dashed.
 - Photos (flat fraction < 0.70, measured before denoising) skip it entirely.
 - Two-pixel-wide strokes are excluded. They survive the blur anyway, and
   including them opened gaps on 48 px icons (2.8/10k on icon-heart).
 
 Result on all 80 images: no image is worse by ≥ 0.02 ΔE, no seams, and
-wordmark@256 0.59 → 0.52, typo-serif@512 0.85 → 0.78, thin-lines@256 0.49 →
-0.45, ornament@160 0.48 → 0.45. The cost is more segments on those images
+wordmark@256 0.59 → 0.51, typo-serif@512 0.85 → 0.79, thin-lines@256 0.49 →
+0.45 (Quick), ornament@160 0.48 → 0.45. The cost is more segments on those images
 (+7–50%).
+
+### 80-image benchmark (main @65fbb9b → this branch)
+
+| Metric | Quick | Professional |
+|---|---:|---:|
+| Mean ΔE×100 | 0.58 → 0.58 | 0.52 → 0.51 |
+| Mean edge error (px) | 0.13 → 0.13 | 0.13 → 0.13 |
+| Seams / 10k | 0.0 → 0.0 | 0.0 → 0.0 |
+| Total segments | 195,289 → 196,179 | 216,073 → 217,016 |
+| Total SVG size | 4,879 → 4,897 KB | 5,439 → 5,458 KB |
+| Failed traces | 0 | 0 |
+
+The benchmark images are ≤ 1 MP, so they exercise the upsampler, not the
+4 MP path (see "Accuracy at 4 MP"). The comparison flags 9 variants, all
+for segment growth above 15%, with ΔE and edge error no worse than +0.01:
+wordmark@256, fine-detail@256, logo-complex@512 (Quick), thin-lines@256
+and ornament@160.
 
 ### Regression tests
 

@@ -13,7 +13,7 @@ import type { TraceEngineOptions } from './traceImage'
  * Working-resolution caps for both modes (memory-bound; BENCHMARKS.md
  * "High-resolution engine"). Artwork is traced at up to 4 MP — every upload
  * the API accepts, at full resolution: measured inside workerd (the Workers
- * runtime), a 4 MP logo peaks at ~46 MB live (forced GC at every engine
+ * runtime), a 4 MP logo peaks at ~47 MB live (forced GC at every engine
  * checkpoint) and ~63 MB with no forced GC, about half of a Worker's 128 MB.
  * Photo-like images (see workingPixelCap) stay at 1.2 MP (~19 MB live):
  * posterized photos gain nothing from more pixels, while their region count,

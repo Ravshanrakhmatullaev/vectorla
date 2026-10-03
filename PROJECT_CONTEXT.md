@@ -140,8 +140,8 @@ multi-format export, batch workflows, and launch operations remain incomplete.
   working size immediately, resets the WASM decoder and hands the pixels to
   the engine (`traceOwnedImage`), which streams its filters row by row,
   computes OKLab on demand and works in place. Measured inside workerd, a
-  4 MP logo traced at full resolution peaks at ~46 MB live (~63 MB with no
-  GC), a 4 MP photo at ~19 MB (BENCHMARKS.md "High-resolution engine"). Legacy
+  4 MP logo traced at full resolution peaks at ~47 MB live (~63 MB with no
+  forced GC), a 4 MP photo at ~19 MB (BENCHMARKS.md "High-resolution engine"). Legacy
   preset names sent explicitly as `Job.preset` adjust engine options.
 - `ImageTracer` (`PlaceholderProvider`) is the automatic fallback if the
   engine throws; `PotraceProvider` is still available; Vision/OpenAI remain stubs.
