@@ -143,15 +143,20 @@ Legend: ✅ done · 🔜 next · ⏳ planned · 🧑 needs an owner decision, cr
   4 MP photo live peak 68 → 43 MB Quick, 46 → 36 MB Professional). Selective
   seam underlay was measured and rejected (−0.3% size). See BENCHMARKS.md
   "Optimization round".
-- ⏳ **Q18. Lower-memory engine for more detail**: tracing a 4 MP upload at
-  full resolution instead of 1.2 MP cuts edge error 2–4× (BENCHMARKS.md
-  "Resolution"), but needs ~140 MB with today's per-pixel buffers. Options:
-  tiled or streaming segmentation, 8/16-bit label and coverage buffers, OKLab
-  on demand. The same work enables an edge-directed upsampler, which fixes
-  isolated ≤ 1 px hairlines vanishing.
+- ✅ **Q18. High-resolution engine** (2026-10-03, branch
+  `claude/bold-newton-y6wsui`, awaiting approval): per-pixel memory diet
+  (rolling-row filters, OKLab on demand, 16-bit labels, in-place region
+  passes, shared scratch, buffer hand-over; byte-identical output) lets
+  artwork be traced at its full upload resolution (up to 4 MP), cutting edge
+  error 2–4× at 4 MP. Photos stay at 1.2 MP. Whole-factor downscale replaces
+  fractional resampling. A ridge-preserving upsampler keeps isolated ≤ 1 px
+  hairlines. Live peak inside workerd: 4 MP logo ~46 MB, 4 MP photo ~19 MB.
+  Tiled processing was evaluated and rejected (seams, cross-tile regions).
+  See BENCHMARKS.md "High-resolution engine".
 - ⏳ **Q19. Production memory check**: measure the isolate on Cloudflare
-  itself (preview deployment, owner approval needed). Locally the workerd
-  isolate is sampled at ≤ ~91 MB for a 4 MP photo.
+  itself (preview deployment, owner approval needed). Locally, inside
+  workerd, the worst case is a 4 MP logo at ~46 MB live / ~63 MB without
+  forced GC (limit 128 MB).
 
 ### Tier 2: Production safety (launch blockers)
 

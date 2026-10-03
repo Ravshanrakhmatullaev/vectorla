@@ -11,14 +11,15 @@ import type { TraceEngineOptions } from './traceImage'
 
 /**
  * Working-resolution caps for both modes (memory-bound; BENCHMARKS.md
- * "High-resolution engine"). Measured inside workerd (the Workers runtime)
- * with a forced GC at every engine checkpoint, the exact live peak of a
- * 4 MP upload traced at full resolution is ≤ 61 MB (photo) / 46 MB (logo),
- * under half of a Worker's 128 MB. Artwork is traced at up to 4 MP — every
- * upload the API accepts, at full resolution. Photo-like images (see
- * workingPixelCap) stay at 1.2 MP: posterized photos gain nothing from more
- * pixels, while their region count, SVG size, time and garbage grow with it.
- * Larger images are reduced by a whole factor (exact k×k blocks).
+ * "High-resolution engine"). Artwork is traced at up to 4 MP — every upload
+ * the API accepts, at full resolution: measured inside workerd (the Workers
+ * runtime), a 4 MP logo peaks at ~46 MB live (forced GC at every engine
+ * checkpoint) and ~63 MB with no forced GC, about half of a Worker's 128 MB.
+ * Photo-like images (see workingPixelCap) stay at 1.2 MP (~19 MB live):
+ * posterized photos gain nothing from more pixels, while their region count,
+ * SVG size, time and garbage grow with it (a 4 MP photo at full resolution
+ * measured 61 MB live, ~129 MB without forced GC in Professional). Larger
+ * images are reduced by a whole factor (exact k×k blocks).
  */
 export const MAX_WORKING_PIXELS = 4_000_000
 export const PHOTO_MAX_WORKING_PIXELS = 1_200_000

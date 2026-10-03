@@ -53,6 +53,167 @@ npm run bench -- --corpus=all --engines=quick,professional --memory --compare=be
 
 `--out` writes each source raster, traced SVG and 4× render for visual review.
 
+## High-resolution engine (2026-10-03, branch `claude/bold-newton-y6wsui`)
+
+Goal: trace at higher resolution without approaching a Worker's 128 MB, keep
+isolated hairlines and thin signatures, and preserve Quick/Professional
+quality (gradients, sharp corners, seamless neighbouring shapes).
+
+### Approach: buffer diet + streaming, not tiles
+
+Three ways to fit a 4 MP trace in memory were compared:
+
+| Approach | Memory | Output | Verdict |
+|---|---|---|---|
+| **Tiles** (trace overlapping tiles, stitch) | bounded by tile size | Regions and palette differ per tile; shared boundaries must be re-matched across tiles, or seams and doubled shapes appear; gradients and region budgets become per-tile | rejected: the engine's planar map relies on one global labeling, which is what makes neighbouring shapes seamless |
+| **Streaming filters** (row-rolling denoise/blur/chroma) | removes whole-image float/temp planes | bit-identical | kept |
+| **Per-pixel buffer diet** | ~35 → ~11 B per working pixel at the peak | bit-identical | kept |
+
+What changed (each step verified byte-identical on all 160 traces, 80 images
+× 2 modes, against a reference copy of the previous engine):
+
+- Gaussian blur, JPEG chroma restore and bilateral denoise keep a ring of
+  2r+1 rows instead of full-size temporary planes.
+- OKLab is computed on demand through a 64K-entry direct-mapped cache
+  (`OklabSource`), rounded through float32 exactly like the old stored array
+  (12 B per pixel saved).
+- Labels are `Int16Array` (palettes < 16,000 colors), pair arrays 8-bit,
+  the coverage plane is recomputed where it is needed.
+- Connected components write ids in place over their union-find parent
+  array; merge / sliver passes work in place and share one scratch buffer.
+- Image buffers are recycled between denoise stages; the decoded upload is
+  handed to the engine (`traceOwnedImage`) and dropped as soon as it has been
+  reduced, so the full decode is not held during tracing.
+- Downscaling uses whole factors (exact k×k blocks, `downscaleBox`) instead
+  of fractional area resampling, which smeared anti-aliased edges unevenly.
+  At the same budget, 2× to 1.0 MP beats fractional 1.2 MP on every case
+  tested (edge error logo 0.42 vs 0.61 px, thin-lines 0.47 vs 0.72, hex
+  0.38 vs 0.53 with 514 vs 1,570 segments).
+
+### Memory (measured in the real Workers runtime)
+
+**Method.** A bare workerd config (the runtime inside `wrangler dev` and
+Cloudflare) runs a local harness worker with V8's `--expose-gc`. The engine
+calls `checkpoint()` inside every heavy stage (engine/memoryCheckpoint.ts;
+a no-op in production). The harness hook runs `gc()` and then `debugger`.
+While the isolate is paused, an inspector client reads
+`Runtime.getHeapUsage` (JS heap + ArrayBuffer backing stores). Peak minus
+the starting value is the trace's exact live peak, including the decode.
+Without forced GC the same readings give an upper bound that includes
+uncollected garbage. Node's `memory.smoke-test.ts` repeats this in CI with
+budgets. `wrangler dev` with `MEMORY_CHECKPOINTS=1` (development only)
+enables the same pauses in the real app.
+
+**Live peak, 4 MP upload traced at its full resolution** (before → after
+the diet): photo 84 → 61 MB, logo 70 → 46 MB.
+
+**Production profiles, final engine (workerd):**
+
+| Upload | Mode | Working size | Live peak | No-GC peak | Trace time |
+|---|---|---|---:|---:|---:|
+| 4 MP JPEG photo | Quick | 1224×816 (photo cap) | 19.3 MB | 44.6 MB | 3.9 s |
+| 4 MP JPEG photo | Professional | 1224×816 | 18.4 MB | 44.3 MB | 4.3 s |
+| 4 MP PNG logo | Quick | 2000×2000 (full) | 46.2 MB | 61.8 MB | 2.2 s |
+| 4 MP PNG logo | Professional | 2000×2000 (full) | 46.6 MB | 62.9 MB | 2.3 s |
+| 600 px PNG logo | both | 1200×1200 (2× upsampled) | 17.5 MB | – | 1.3–1.6 s |
+
+On main the same 4 MP logo was traced at 1.2 MP. The worst case (a 4 MP
+logo at full resolution, ~63 MB without GC) is about half the limit.
+
+**Why photos stay at 1.2 MP.** A 4 MP photo at full resolution measured
+61 MB live but up to ~129 MB without forced GC in Professional (85 MB
+Quick), and 11–15 s. Posterized photos gain nothing visible from more
+pixels. Photos are recognised by a sampled flat fraction: the share of
+pixels whose right and lower neighbours differ by ≤ 3 per channel. Art
+measures 0.72–0.99 (still 0.89–0.97 as q40–q90 JPEG at 4 MP), photos and
+scans 0.30–0.66. Below 0.70 the 1.2 MP photo cap applies (whole-factor 2×
+for a 4 MP photo).
+
+### Accuracy at 4 MP (main vs this branch)
+
+Corpus art rendered at ~4 MP and ~2.5 MP (what the browser uploads after
+its downscale), traced by main's engine (1.2 MP, fractional) and this
+branch, and scored at the upload's own resolution:
+
+| Case | Upload | main ΔE×100 | main edge px | main KB | main s | branch ΔE×100 | branch edge px | branch KB | branch s |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| logo-complex | 2000² | 0.17 | 0.61 | 17.1 | 0.8 | **0.06** | **0.24** | **12.5** | 2.0 |
+| typo-serif | 2828×1414 | 0.58 | 0.75 | 72.9 | 1.0 | **0.19** | **0.38** | **65.9** | 1.7 |
+| ornament | 2000² | 0.21 | 0.59 | 17.3 | 0.7 | **0.05** | **0.15** | **11.9** | 1.4 |
+| thin-lines | 2000² | 0.40 | 0.71 | 7.0 | 0.7 | **0.13** | **0.34** | **3.9** | 1.5 |
+| hex-mosaic | 2000² | 0.16 | 0.53 | 28.8 | 0.6 | **0.06** | **0.22** | **12.6** | 1.5 |
+| emoji-unicorn | 2000² | 0.07 | 0.48 | 12.1 | 0.5 | **0.03** | **0.11** | **9.1** | 1.1 |
+| emoji3d-globe | 2000² | 0.84 | 0.54 | 72.8 | 0.7 | **0.81** | **0.11** | 81.1 | 1.5 |
+| icon-settings | 2000² | 0.15 | 0.63 | 5.3 | 0.4 | **0.05** | **0.34** | **3.8** | 0.9 |
+
+Quick shown; Professional is within ±0.01 except emoji3d-globe (0.73 →
+0.69, 70.8 → 75.6 KB). At 2.5 MP the gains are the same (logo edge 0.63 →
+0.26 px). Edge error falls 2–4× and SVGs are 10–56% smaller on
+everything except the 3D globe (+1–11%), because full-resolution edges need
+fewer corrective nodes. Tracing takes 1.5–2.5× longer (≤ 2.3 s).
+
+### Hairlines and thin signatures (upsampler)
+
+Small images are upsampled 2–4× bilinearly and blurred (σ = 0.45 × factor)
+to remove interpolation ripple. That blur averaged an isolated ≤ 1 px line
+into the background, so it vanished or broke into dashes (edge-length ratio
+0.00–0.14 on a 256 px render of a hairline drawing).
+
+| Option | Hairline set ΔE (sum) | Edge-length ratio | 80 images |
+|---|---:|---|---|
+| bilinear + blur (main) | 1.718 | 0.00–0.14 | baseline |
+| bilinear, no blur | 1.281 | 0.23–0.93 | not run (hairlines still break) |
+| Catmull-Rom bicubic, no blur | 0.667 | 0.82–0.96 | +22% segments, seams (gaps 0.16/10k) |
+| bicubic, blur 0.25 | 0.734 | – | +14% segments, gaps 0.53/10k |
+| **ridge-preserving (kept)** | **0.709** | **0.81–0.96** | ΔE 0.578 → 0.576 Quick, 0.516 → 0.514 Pro; SVG +0.3%; no gaps |
+
+**Ridge-preserving upsampling** (`ridgeMask` / `restoreRidges`): the
+upscale stays bilinear + blur, and only pixels on an isolated one-pixel
+ridge are overwritten with sharp Catmull-Rom samples. A ridge pixel is
+darker or lighter than both neighbours along some direction by ≥ 32 in a
+channel, and those two neighbours match each other (a line on one
+background, not an edge between two fills). Each rule below was added
+after an A/B regression:
+
+- Diagonal ridges with two same-colored axis neighbours are checkerboard
+  corners, and diagonal ridges with a much stronger neighbour along the line
+  are anti-aliased corners of solid blocks. QR codes regressed 0.58 → 0.65
+  without this.
+- Runs shorter than 4 pixels (linked across one-pixel gaps) are speckles.
+  Salt-and-pepper noise became shapes without this.
+- Photos (flat fraction < 0.70, measured before denoising) skip it entirely.
+- Two-pixel-wide strokes are excluded. They survive the blur anyway, and
+  including them opened gaps on 48 px icons (2.8/10k on icon-heart).
+
+Result on all 80 images: no image is worse by ≥ 0.02 ΔE, no seams, and
+wordmark@256 0.59 → 0.52, typo-serif@512 0.85 → 0.78, thin-lines@256 0.49 →
+0.45, ornament@160 0.48 → 0.45. The cost is more segments on those images
+(+7–50%).
+
+### Regression tests
+
+- `engine/memory.smoke-test.ts`: exact live peak with forced GC at every
+  checkpoint. A 4 MP artwork at full resolution must stay ≤ 46 MB (measured
+  39.5) and a 4 MP photo ≤ 23 MB (19.1). It also asserts the working sizes.
+- `engine/highResolution.smoke-test.ts`: isolated 0.5–1 px diagonals, a
+  signature curve and a circle must keep edge-length ratio ≥ 0.7 in both
+  modes. 4 MP logo-complex and ornament must be traced at full resolution
+  with edge error ≤ 0.4 px (measured 0.24 / 0.15).
+- `pipeline/ProfessionalTracePipeline.smoke-test.ts`: tracing must not
+  modify the caller's pixels. A bug found here: `runTracePipeline` handed a
+  caller-owned image to the buffer-recycling path.
+
+### Limitations
+
+- Photos are still traced at 1.2 MP (by design, see above).
+- Hairline restoration applies to upsampled (small) images. At ≥ 1 MP,
+  full-resolution tracing plus the existing thin-feature pass keep lines.
+- A signature traced from a small source keeps its stroke, but its outline
+  is built from more pieces (9–31 paths for a single curve).
+- Memory was measured in workerd locally. Cloudflare's production isolate
+  has not been measured (no deployment; ROADMAP Q19).
+- 4 MP artwork takes up to ~2.3 s of CPU, 1.5–2.5× the 1.2 MP time.
+
 ## Optimization round (2026-10-03, branch `claude/bold-newton-y6wsui`)
 
 Goals: smaller SVGs, better small text and thin lines, Quick keeping pale
@@ -208,9 +369,9 @@ Findings:
   nodes and smaller files. But it needs ~35 B per working pixel (~140 MB),
   which a Worker cannot hold.
 - 2 MP buys little.
-- Conclusion: keep the 4 MP upload limit and the 1.2 MP working size. The
-  path to more detail is a lower-memory engine (tiled or streaming
-  segmentation), not larger limits; see ROADMAP Q18.
+- Conclusion at the time: keep the 4 MP upload limit and the 1.2 MP working
+  size until a lower-memory engine exists. Superseded by "High-resolution
+  engine" above, which traces artwork at full resolution.
 
 ### Still weak
 
@@ -219,8 +380,8 @@ Findings:
   drawing or signature. Bilinear upsampling plus blur turns it into beads
   whose gaps fall below the minimum coverage, and speckle cleanup then
   removes the beads. The same line next to other strokes, or ≥ 1.5 px wide,
-  survives. The fix belongs in the upsampler (edge-directed rather than
-  bilinear).
+  survives. Fixed by the ridge-preserving upsampler ("High-resolution
+  engine").
 - Small serif text is legible but its serifs and joins still break
   (typo-serif@512 ΔE 0.85).
 - Quick posterizes gradients by design.

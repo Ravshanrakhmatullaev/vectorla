@@ -123,8 +123,12 @@ multi-format export, batch workflows, and launch operations remain incomplete.
   stacked (default, seamless) or cutout SVG with compact path data.
 - Quick and Professional Trace are engine profiles
   (`engine/profiles.ts`: 32 colors / flat fills vs 64 colors / finer merge /
-  gradient reconstruction; both trace at most 1.2 MP, small images are
-  upsampled to 1.5 MP or 2 MP). Professional merges posterized bands back into
+  gradient reconstruction). Both trace artwork at up to 4 MP (every accepted
+  upload at full resolution) and photo-like images (sampled flat fraction
+  < 0.70) at 1.2 MP; larger images are reduced by a whole factor (exact k×k
+  blocks). Small images are upsampled to 1.5 MP or 2 MP, and isolated
+  one-pixel hairlines are restored with sharp Catmull-Rom samples
+  (`ridgeMask`/`restoreRidges`) so the post-upsampling blur cannot erase them. Professional merges posterized bands back into
   regions filled with fitted `<linearGradient>`/`<radialGradient>`
   (`engine/gradients.ts`), keeping a gradient only where it fits the pixels
   better than the flat color. Stacked output draws a 1 px same-color underlay
@@ -133,8 +137,11 @@ multi-format export, batch workflows, and launch operations remain incomplete.
 - Uploads are limited to 4 MP (decode memory, `config/index.ts`); the web app
   downscales larger images in the browser first (`src/utils/fitImageForUpload.ts`).
   The Worker decodes each upload once (`decodeForTrace`), shrinks it to the
-  working size immediately and resets the WASM decoder, so a 4 MP trace peaks
-  at ~36–43 MB live (BENCHMARKS.md "Optimization round"). Legacy
+  working size immediately, resets the WASM decoder and hands the pixels to
+  the engine (`traceOwnedImage`), which streams its filters row by row,
+  computes OKLab on demand and works in place. Measured inside workerd, a
+  4 MP logo traced at full resolution peaks at ~46 MB live (~63 MB with no
+  GC), a 4 MP photo at ~19 MB (BENCHMARKS.md "High-resolution engine"). Legacy
   preset names sent explicitly as `Job.preset` adjust engine options.
 - `ImageTracer` (`PlaceholderProvider`) is the automatic fallback if the
   engine throws; `PotraceProvider` is still available; Vision/OpenAI remain stubs.

@@ -33,6 +33,8 @@ const render = (svg: string, width: number) => {
 const HAIRLINES: Record<string, string> = {
   'diagonal 0.5px': '<line x1="32" y1="300" x2="480" y2="166" stroke="#111827" stroke-width="1"/>',
   'diagonal 1px': '<line x1="32" y1="300" x2="480" y2="166" stroke="#111827" stroke-width="2"/>',
+  // ~8°: crosses between pixel rows every ~7 px, where no single pixel is a ridge.
+  'shallow 0.5px': '<line x1="32" y1="120" x2="480" y2="60" stroke="#111827" stroke-width="1"/>',
   'signature 0.75px': '<path d="M40 330 C 90 200, 140 420, 190 300 S 290 180, 330 320 S 420 400, 470 250" fill="none" stroke="#1d3a8a" stroke-width="1.5"/>',
   'circle 0.75px': '<circle cx="256" cy="256" r="180" fill="none" stroke="#111827" stroke-width="1.5"/>',
 }

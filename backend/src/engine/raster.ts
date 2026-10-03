@@ -28,8 +28,10 @@ export interface RgbaImage {
  * most one axis neighbour of its own colour, which rejects checkerboard
  * corners (two blocks touching diagonally) that look like a diagonal line in
  * a 3x3 window, and no far stronger neighbour along the line (block
- * corners). Runs shorter than MIN_RIDGE_RUN pixels (speckles, noise) are
- * dropped, and the mask is dilated by one pixel to cover the bicubic support.
+ * corners). Speckles (runs of one or two pixels, or short runs containing a
+ * lone dot) are dropped. The mask is dilated by two pixels: it covers the
+ * bicubic support and bridges the short breaks where a shallow line crosses
+ * between pixel rows (split coverage, so no single pixel is a ridge there).
  */
 export function ridgeMask(image: RgbaImage, threshold: number): Uint8Array {
   const { width: w, height: h, data } = image
@@ -60,10 +62,13 @@ export function ridgeMask(image: RgbaImage, threshold: number): Uint8Array {
     }
     return false
   }
+  // raw: 1 = ridge pixel, 2 = ridge pixel that is also a lone dot (darker or
+  // lighter than its neighbours in all four directions).
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       let ridge = false
-      for (let d = 0; d < 8 && !ridge; d += 2) {
+      let extrema = 0
+      for (let d = 0; d < 8; d += 2) {
         const dx = dirs[d]!
         const dy = dirs[d + 1]!
         if (x - dx < 0 || x + dx >= w || y - dy < 0 || y - dy >= h || y + dy < 0 || y + dy >= h) continue
@@ -72,23 +77,26 @@ export function ridgeMask(image: RgbaImage, threshold: number): Uint8Array {
           const da = v - at(x - dx, y - dy, c)
           const db = v - at(x + dx, y + dy, c)
           if (da >= threshold ? db >= threshold : da <= -threshold && db <= -threshold) {
-            ridge = similar(x - dx, y - dy, x + dx, y + dy) && (dx === 0 || dy === 0 || (axisTwins(x, y) <= 1 && !strongerAlong(x, y, dx, dy, c)))
+            extrema++
+            ridge ||= similar(x - dx, y - dy, x + dx, y + dy) && (dx === 0 || dy === 0 || (axisTwins(x, y) <= 1 && !strongerAlong(x, y, dx, dy, c)))
             break
           }
         }
       }
-      if (ridge) raw[y * w + x] = 1
+      if (ridge) raw[y * w + x] = extrema === 4 ? 2 : 1
     }
   }
-  // A hairline is a run of ridge pixels (with one-pixel breaks where it
-  // crosses between pixel rows); noise is scattered pairs. Keep only runs of
-  // at least MIN_RIDGE_RUN pixels, linked across gaps of one pixel (5x5).
+  // A hairline is a run of ridge pixels, broken for a pixel or two where it
+  // crosses between pixel rows; noise is lone dots and pairs. Runs are linked
+  // across one-pixel gaps (5x5). A run of one or two pixels is dropped, and so
+  // is any run shorter than MIN_RIDGE_RUN that contains a lone dot.
   const MIN_RIDGE_RUN = 4
   const stack = new Int32Array(w * h)
   const run: number[] = []
   for (let start = 0; start < w * h; start++) {
-    if (raw[start] !== 1) continue
-    raw[start] = 2
+    if (raw[start] !== 1 && raw[start] !== 2) continue
+    let dot = raw[start] === 2
+    raw[start] = 3
     stack[0] = start
     let top = 1
     run.length = 0
@@ -100,20 +108,22 @@ export function ridgeMask(image: RgbaImage, threshold: number): Uint8Array {
       for (let j = Math.max(0, py - 2); j <= Math.min(h - 1, py + 2); j++)
         for (let i = Math.max(0, px - 2); i <= Math.min(w - 1, px + 2); i++) {
           const q = j * w + i
-          if (raw[q] === 1) {
-            raw[q] = 2
+          if (raw[q] === 1 || raw[q] === 2) {
+            if (raw[q] === 2) dot = true
+            raw[q] = 3
             stack[top++] = q
           }
         }
     }
-    if (run.length < MIN_RIDGE_RUN) for (const p of run) raw[p] = 0
+    if (run.length < 3 || (dot && run.length < MIN_RIDGE_RUN)) for (const p of run) raw[p] = 0
   }
+  const RIDGE_DILATION = 2
   const mask = new Uint8Array(w * h)
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       if (!raw[y * w + x]) continue
-      for (let j = Math.max(0, y - 1); j <= Math.min(h - 1, y + 1); j++)
-        for (let i = Math.max(0, x - 1); i <= Math.min(w - 1, x + 1); i++) mask[j * w + i] = 1
+      for (let j = Math.max(0, y - RIDGE_DILATION); j <= Math.min(h - 1, y + RIDGE_DILATION); j++)
+        for (let i = Math.max(0, x - RIDGE_DILATION); i <= Math.min(w - 1, x + RIDGE_DILATION); i++) mask[j * w + i] = 1
     }
   }
   return mask
