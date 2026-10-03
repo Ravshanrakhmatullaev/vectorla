@@ -721,3 +721,90 @@ function absorbSlivers(
   }
   }
 }
+
+/** Color of a fitted gradient fill at a working-space point (pixel centers are x + 0.5). */
+function fillColorAt(fill: GradientFill, px: number, py: number): [number, number, number] {
+  let t: number
+  if (fill.kind === 'radial') {
+    t = fill.r > 0 ? Math.hypot(px - fill.cx, py - fill.cy) / fill.r : 0
+  } else {
+    const dx = fill.x2 - fill.x1
+    const dy = fill.y2 - fill.y1
+    const len2 = dx * dx + dy * dy
+    t = len2 > 0 ? ((px - fill.x1) * dx + (py - fill.y1) * dy) / len2 : 0
+  }
+  t = Math.max(0, Math.min(1, t))
+  const stops = fill.stops
+  if (stops.length === 0) return [fill.mean.r, fill.mean.g, fill.mean.b]
+  if (t <= stops[0]!.offset) return [stops[0]!.r, stops[0]!.g, stops[0]!.b]
+  for (let i = 1; i < stops.length; i++) {
+    const b = stops[i]!
+    if (t <= b.offset) {
+      const a = stops[i - 1]!
+      const u = b.offset > a.offset ? (t - a.offset) / (b.offset - a.offset) : 0
+      return [a.r + (b.r - a.r) * u, a.g + (b.g - a.g) * u, a.b + (b.b - a.b) * u]
+    }
+  }
+  const last = stops[stops.length - 1]!
+  return [last.r, last.g, last.b]
+}
+
+/**
+ * "Do no harm" check for gradient groups. A region keeps its gradient fill
+ * only if the fitted fill reproduces the region's actual pixels at least as
+ * well as the region's own flat palette color. Genuine gradient bands pass
+ * easily (a flat band misses the ramp). Photographic texture and small
+ * detail regions (eyes, highlights, text) absorbed into a smooth group do
+ * not, so they stay flat instead of being smeared into the gradient.
+ * Measured: Professional photos went from ΔE 9.6 to Quick-level without this.
+ *
+ * Mutates `result.groupOfRegion`; fills left with no regions are dropped and
+ * the remaining groups re-indexed.
+ */
+export function validateGradientGroups(
+  image: RgbaImage,
+  regionIds: Int32Array,
+  regionCount: number,
+  flatColorOf: (region: number) => [number, number, number] | null,
+  result: GradientResult,
+): GradientResult {
+  const { width: w, height: h, data } = image
+  const gradErr = new Float64Array(regionCount)
+  const flatErr = new Float64Array(regionCount)
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const p = y * w + x
+      const region = regionIds[p]!
+      const g = result.groupOfRegion[region]!
+      if (g < 0) continue
+      const flat = flatColorOf(region)
+      if (!flat) continue
+      const r = data[p * 4] ?? 0
+      const gg = data[p * 4 + 1] ?? 0
+      const b = data[p * 4 + 2] ?? 0
+      const fill = fillColorAt(result.fills[g]!, x + 0.5, y + 0.5)
+      gradErr[region] = gradErr[region]! + (r - fill[0]) ** 2 + (gg - fill[1]) ** 2 + (b - fill[2]) ** 2
+      flatErr[region] = flatErr[region]! + (r - flat[0]) ** 2 + (gg - flat[1]) ** 2 + (b - flat[2]) ** 2
+    }
+  }
+  const used = new Uint8Array(result.fills.length)
+  for (let region = 0; region < regionCount; region++) {
+    const g = result.groupOfRegion[region]!
+    if (g < 0) continue
+    if (flatColorOf(region) && gradErr[region]! > flatErr[region]!) result.groupOfRegion[region] = -1
+    else used[g] = 1
+  }
+  const remap = new Int32Array(result.fills.length).fill(-1)
+  const fills: GradientFill[] = []
+  result.fills.forEach((fill, g) => {
+    if (used[g]) {
+      remap[g] = fills.length
+      fills.push(fill)
+    }
+  })
+  for (let region = 0; region < regionCount; region++) {
+    const g = result.groupOfRegion[region]!
+    if (g >= 0) result.groupOfRegion[region] = remap[g]!
+  }
+  return { groupOfRegion: result.groupOfRegion, fills }
+}

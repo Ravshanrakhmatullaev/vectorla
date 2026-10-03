@@ -3,6 +3,7 @@ import { uploadImage } from '@/lib/api/uploads'
 import { createJob, getJob, getJobConversion } from '@/lib/api/jobs'
 import { ApiError } from '@/lib/api/client'
 import type { Conversion, ImageAnalysisResult, Job } from '@/lib/api/types'
+import { fitImageForUpload } from '@/utils/fitImageForUpload'
 
 const POLL_INTERVAL_MS = 1000
 // Give up polling after this long; the backend fails + refunds stuck jobs itself.
@@ -60,7 +61,9 @@ export function useUploadFlow() {
     setState({ status: 'uploading' })
     setAnalysis(null)
     try {
-      const { upload: storedUpload, job, analysis: uploadAnalysis } = await uploadImage(file)
+      // Large photos are shrunk to the API's pixel limit first (no quality
+      // loss: the engine works at ~1.2 MP).
+      const { upload: storedUpload, job, analysis: uploadAnalysis } = await uploadImage(await fitImageForUpload(file))
       uploadIdRef.current = storedUpload.id
       jobIdsRef.current.quick = job.id
       setAnalysis(uploadAnalysis)

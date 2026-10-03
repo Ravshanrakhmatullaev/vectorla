@@ -131,6 +131,15 @@ Legend: ✅ done · 🔜 next · ⏳ planned · 🧑 needs an owner decision, cr
 - ⏳ **Q15. Performance**: typed-array hot loops, and later WASM for the
   labeling/fitting stages to cut Worker CPU time (currently about 0.5–1 s per
   512 px image, 2.7 s at 2 MP).
+- ✅ **Q16. Real-world corpus and fixes** (2026-10-03): 55-image licensed
+  corpus with its own gate; gradient validation (photos 6.2 → 2.7 ΔE in
+  Professional), seam underlay (0 seams), coverage-preserving hairlines,
+  blend-tint palette filter, memory limits (4 MP uploads with in-browser
+  downscale, 1.2 MP working size). See BENCHMARKS.md "Real-world corpus".
+- ⏳ **Q17. Next quality work** (evidence in BENCHMARKS.md): serifs and joins in
+  small text, dashed ~1.5 px diagonals, Quick merging pale fills into white on
+  heavy JPEG, SVG size (underlay strokes only where a seam would show), and
+  memory measured inside workerd rather than Node.
 
 ### Tier 2: Production safety (launch blockers)
 

@@ -5,12 +5,15 @@ import type { PlanLimitsByPlan, ExportFormat } from '../types'
 // SVG output (see providers/PlaceholderProvider.ts) is ever produced by this system.
 export const ALLOWED_UPLOAD_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const
 
-// Decompression-bomb limits, enforced from the file header before any decode
-// (see providers/imageDimensions.ts). 40 MP of RGBA is 160 MB — the decoded
-// buffer alone would exceed a Worker's 128 MB, so the real ceiling is set by
-// memory, not taste: 24 MP (96 MB RGBA) leaves room for the tracing engine,
-// which area-downsamples everything to <= 2 MP immediately after decode.
-export const MAX_IMAGE_PIXELS = 24_000_000
+// Decompression-bomb / memory limits, enforced from the file header before
+// any decode (see providers/imageDimensions.ts). A Worker has 128 MB for
+// everything, including WebAssembly memory, which never shrinks once grown.
+// Measured (Node, production decoders): decoding costs ~12 bytes per source
+// pixel (4 MP JPEG +48 MB, 12 MP +140 MB, 24 MP +280 MB), and the engine adds
+// ~40 MB live at its 1.2 MP working size. 4 MP keeps decode + trace near
+// 90 MB. The web app downscales larger images in the browser before upload
+// (src/utils/fitImageForUpload.ts), so ordinary phone photos still work.
+export const MAX_IMAGE_PIXELS = 4_000_000
 export const MAX_IMAGE_DIMENSION = 12_000
 
 // Hard ceiling on an upload request body, checked from Content-Length before

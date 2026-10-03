@@ -88,9 +88,9 @@ unchanged (see backend/README.md's Phase 18 notes on duplicate-job handling).
 
 Passing `preset: "professional"` (the exact value of
 `PROFESSIONAL_TRACE_JOB_PRESET` in
-`src/pipeline/ProfessionalTracePipeline.ts`) routes the job through the full
-Professional Trace preprocessing pipeline instead of the normal Quick Trace
-flow, and bills `PROFESSIONAL_TRACE_CREDIT_MULTIPLIER` (2x) the base credit
+`src/pipeline/ProfessionalTracePipeline.ts`) traces with the Professional engine
+profile (64 colors, finer color separation, gradient reconstruction; see
+`src/engine/profiles.ts`) instead of the Quick profile, and bills `PROFESSIONAL_TRACE_CREDIT_MULTIPLIER` (2x) the base credit
 cost instead of 1x — see `ConversionService.processJob`. Any other preset
 value (including omitted) is unaffected.
 

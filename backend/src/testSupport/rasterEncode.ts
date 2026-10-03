@@ -20,9 +20,9 @@ export async function encodeTestPng(imageData: ImageData): Promise<ArrayBuffer> 
   return encode(imageData)
 }
 
-export async function encodeTestJpeg(imageData: ImageData): Promise<ArrayBuffer> {
+export async function encodeTestJpeg(imageData: ImageData, quality = 75): Promise<ArrayBuffer> {
   const wasm = await loadWasmModule('node_modules/@jsquash/jpeg/codec/enc/mozjpeg_enc.wasm')
   const { init, default: encode } = await import('@jsquash/jpeg/encode.js')
   await init(wasm)
-  return encode(imageData)
+  return encode(imageData, { quality })
 }

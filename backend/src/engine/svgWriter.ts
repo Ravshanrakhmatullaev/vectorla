@@ -147,6 +147,20 @@ export class PathBuilder {
     this.close()
   }
 
+  /**
+   * Appends one fitted chain as an open subpath (for strokes). Consecutive
+   * chains that continue from the current point share one subpath.
+   */
+  appendOpen(chain: FittedChain): void {
+    if (this.parts.length === 0 || this.snap(chain.startX) !== this.curX || this.snap(chain.startY) !== this.curY) {
+      this.moveTo(chain.startX, chain.startY)
+    }
+    for (const seg of chain.segments) {
+      if (seg.type === 'L') this.lineTo(seg.x, seg.y)
+      else this.curveTo(seg.x1, seg.y1, seg.x2, seg.y2, seg.x, seg.y)
+    }
+  }
+
   toString(): string {
     return this.parts.join('')
   }

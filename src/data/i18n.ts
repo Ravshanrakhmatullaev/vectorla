@@ -384,13 +384,13 @@ export const translations: Record<Language, Translation> = {
         quickTraceTitle: 'Quick Trace',
         quickTraceDescription: 'Fast, for most images',
         professionalTraceTitle: 'Professional Trace ⭐',
-        professionalTraceDescription: 'Highest quality · full preprocessing pipeline',
+        professionalTraceDescription: 'More colors · smooth gradients',
         qualityImprovement: {
           high: 'Minor quality improvement expected',
           medium: 'Noticeable quality improvement expected',
           low: 'Major quality improvement expected',
         },
-        professionalTraceNote: 'Professional Trace runs extra preprocessing (noise reduction, background cleanup, contrast, color, edges) for a cleaner result — it takes a little longer.',
+        professionalTraceNote: 'Professional Trace keeps up to 64 colors, separates close shades more finely and turns smooth color ramps into real SVG gradients. It costs 2 credits and takes a little longer.',
       },
     },
     features: {
@@ -426,7 +426,7 @@ export const translations: Record<Language, Translation> = {
         professionalTrace: {
           title: 'Professional Trace',
           description:
-            'An optional mode with extra preprocessing (noise reduction, background cleanup, contrast and edge enhancement) for difficult images.',
+            'An optional mode for detailed artwork: up to 64 colors, finer separation of close shades, and smooth color ramps traced as real SVG gradients.',
         },
         qrPixelArt: {
           title: 'QR codes and pixel art',
@@ -735,13 +735,13 @@ export const translations: Record<Language, Translation> = {
         quickTraceTitle: 'Tezkor trace',
         quickTraceDescription: 'Tez, ko‘pchilik rasmlar uchun',
         professionalTraceTitle: 'Professional Trace ⭐',
-        professionalTraceDescription: 'Eng yuqori sifat · to‘liq qayta ishlash pipeline',
+        professionalTraceDescription: 'Ko‘proq ranglar · silliq gradientlar',
         qualityImprovement: {
           high: 'Sifat kam darajada yaxshilanadi',
           medium: 'Sifat sezilarli darajada yaxshilanadi',
           low: 'Sifat sezilarli darajada oshadi',
         },
-        professionalTraceNote: "Professional Trace qo'shimcha qayta ishlashni bajaradi (shovqinni kamaytirish, fonni tozalash, kontrast, rang, chetlarni) — bu biroz ko'proq vaqt oladi.",
+        professionalTraceNote: "Professional Trace 64 tagacha rangni saqlaydi, yaqin tuslarni aniqroq ajratadi va silliq rang o'tishlarini haqiqiy SVG gradientlariga aylantiradi. U 2 kredit turadi va biroz ko'proq vaqt oladi.",
       },
     },
     features: {
@@ -778,7 +778,7 @@ export const translations: Record<Language, Translation> = {
         professionalTrace: {
           title: 'Professional Trace',
           description:
-            'Murakkab tasvirlar uchun qo‘shimcha oldindan ishlov berish (shovqinni kamaytirish, fonni tozalash, kontrast va chekkalarni kuchaytirish) bilan ixtiyoriy rejim.',
+            'Batafsil tasvirlar uchun ixtiyoriy rejim: 64 tagacha rang, yaqin tuslarni aniqroq ajratish va silliq rang o‘tishlarini haqiqiy SVG gradientlari sifatida trassirovka qilish.',
         },
         qrPixelArt: {
           title: 'QR kodlar va piksel-art',
@@ -1094,13 +1094,13 @@ export const translations: Record<Language, Translation> = {
         quickTraceTitle: 'Быстрая трассировка',
         quickTraceDescription: 'Быстро, для большинства изображений',
         professionalTraceTitle: 'Профессиональная трассировка ⭐',
-        professionalTraceDescription: 'Максимальное качество · полный конвейер обработки',
+        professionalTraceDescription: 'Больше цветов · плавные градиенты',
         qualityImprovement: {
           high: 'Ожидается небольшое улучшение качества',
           medium: 'Ожидается заметное улучшение качества',
           low: 'Ожидается значительное улучшение качества',
         },
-        professionalTraceNote: 'Профессиональная трассировка выполняет дополнительную обработку (шумоподавление, очистка фона, контраст, цвет, края) — это займёт немного больше времени.',
+        professionalTraceNote: 'Профессиональная трассировка сохраняет до 64 цветов, точнее разделяет близкие оттенки и превращает плавные цветовые переходы в настоящие SVG-градиенты. Она стоит 2 кредита и занимает немного больше времени.',
       },
     },
     features: {
@@ -1136,7 +1136,7 @@ export const translations: Record<Language, Translation> = {
         professionalTrace: {
           title: 'Professional Trace',
           description:
-            'Дополнительный режим с предобработкой (шумоподавление, очистка фона, контраст и усиление краёв) для сложных изображений.',
+            'Дополнительный режим для детализированных изображений: до 64 цветов, более точное разделение близких оттенков и плавные цветовые переходы в виде настоящих SVG-градиентов.',
         },
         qrPixelArt: {
           title: 'QR-коды и пиксель-арт',

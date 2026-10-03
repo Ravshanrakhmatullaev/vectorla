@@ -11,9 +11,13 @@
  */
 
 export interface BenchmarkVariant {
-  /** Raster size (longest side) the ground truth is rendered at before tracing. */
+  /** Raster size (longest side) the ground truth is rendered at before tracing; 0 = a raster case's own size. */
   size: number
   format: 'png' | 'jpeg'
+  /** JPEG quality (default 75, like a typical export). */
+  quality?: number
+  /** Gaussian blur sigma in source pixels, applied before encoding (out-of-focus / upscaled uploads). */
+  blur?: number
 }
 
 export interface BenchmarkCase {

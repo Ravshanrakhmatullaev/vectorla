@@ -69,37 +69,54 @@ export function upscaleBilinear(image: RgbaImage, factor: number): RgbaImage {
   return { width: W, height: H, data: out }
 }
 
-/** Area-average (box) downsample to exactly `W`x`H`, alpha-weighted like upscaleBilinear. */
+/**
+ * Area-average (box) downsample to exactly `W`x`H`, alpha-weighted like upscaleBilinear.
+ * Source rows map to output rows in order, so sums are kept for one output
+ * row at a time: memory is O(W), not O(W·H) — this runs on the largest
+ * images (up to MAX_IMAGE_PIXELS) where the full decoded buffer is already
+ * most of a Worker's memory.
+ */
 export function downscaleArea(image: RgbaImage, W: number, H: number): RgbaImage {
   const { width: w, height: h, data: src } = image
   if (W >= w && H >= h) return image
-  const sums = new Float64Array(W * H * 5)
+  const out = new Uint8ClampedArray(W * H * 4)
+  const sums = new Float64Array(W * 5)
+  const xMap = new Int32Array(w)
+  for (let x = 0; x < w; x++) xMap[x] = Math.min(W - 1, Math.floor((x * W) / w))
+  const flush = (Y: number) => {
+    for (let X = 0; X < W; X++) {
+      const o = X * 5
+      const aSum = sums[o + 3]!
+      const count = sums[o + 4]! || 1
+      const p = (Y * W + X) * 4
+      if (aSum > 0) {
+        out[p] = sums[o]! / aSum
+        out[p + 1] = sums[o + 1]! / aSum
+        out[p + 2] = sums[o + 2]! / aSum
+      }
+      out[p + 3] = aSum / count
+    }
+    sums.fill(0)
+  }
+  let currentY = 0
   for (let y = 0; y < h; y++) {
     const Y = Math.min(H - 1, Math.floor((y * H) / h))
+    if (Y !== currentY) {
+      flush(currentY)
+      currentY = Y
+    }
     for (let x = 0; x < w; x++) {
-      const X = Math.min(W - 1, Math.floor((x * W) / w))
       const i = (y * w + x) * 4
       const a = src[i + 3] ?? 0
-      const o = (Y * W + X) * 5
-      sums[o] = (sums[o] ?? 0) + (src[i] ?? 0) * a
-      sums[o + 1] = (sums[o + 1] ?? 0) + (src[i + 1] ?? 0) * a
-      sums[o + 2] = (sums[o + 2] ?? 0) + (src[i + 2] ?? 0) * a
-      sums[o + 3] = (sums[o + 3] ?? 0) + a
-      sums[o + 4] = (sums[o + 4] ?? 0) + 1
+      const o = xMap[x]! * 5
+      sums[o] = sums[o]! + (src[i] ?? 0) * a
+      sums[o + 1] = sums[o + 1]! + (src[i + 1] ?? 0) * a
+      sums[o + 2] = sums[o + 2]! + (src[i + 2] ?? 0) * a
+      sums[o + 3] = sums[o + 3]! + a
+      sums[o + 4] = sums[o + 4]! + 1
     }
   }
-  const out = new Uint8ClampedArray(W * H * 4)
-  for (let p = 0; p < W * H; p++) {
-    const o = p * 5
-    const aSum = sums[o + 3] ?? 0
-    const count = sums[o + 4] ?? 1
-    if (aSum > 0) {
-      out[p * 4] = (sums[o] ?? 0) / aSum
-      out[p * 4 + 1] = (sums[o + 1] ?? 0) / aSum
-      out[p * 4 + 2] = (sums[o + 2] ?? 0) / aSum
-    }
-    out[p * 4 + 3] = aSum / count
-  }
+  flush(currentY)
   return { width: W, height: H, data: out }
 }
 

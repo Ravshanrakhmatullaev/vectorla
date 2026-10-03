@@ -122,15 +122,24 @@ multi-format export, batch workflows, and launch operations remain incomplete.
   polygon-level corner restoration and least-squares junction refinement →
   stacked (default, seamless) or cutout SVG with compact path data.
 - Quick and Professional Trace are engine profiles
-  (`engine/profiles.ts`: 1.5 MP / 32 colors / flat fills vs 2 MP / 64 colors /
-  gradient reconstruction). Professional merges posterized bands back into
+  (`engine/profiles.ts`: 32 colors / flat fills vs 64 colors / finer merge /
+  gradient reconstruction; both trace at most 1.2 MP, small images are
+  upsampled to 1.5 MP or 2 MP). Professional merges posterized bands back into
   regions filled with fitted `<linearGradient>`/`<radialGradient>`
-  (`engine/gradients.ts`). Legacy
+  (`engine/gradients.ts`), keeping a gradient only where it fits the pixels
+  better than the flat color. Stacked output draws a 1 px same-color underlay
+  stroke along edges shared with later shapes (no seams), and labeling keeps
+  sub-pixel hairlines (coverage-preserving thin features).
+- Uploads are limited to 4 MP (decode memory, `config/index.ts`); the web app
+  downscales larger images in the browser first (`src/utils/fitImageForUpload.ts`). Legacy
   preset names sent explicitly as `Job.preset` adjust engine options.
 - `ImageTracer` (`PlaceholderProvider`) is the automatic fallback if the
   engine throws; `PotraceProvider` is still available; Vision/OpenAI remain stubs.
 - The old Professional preprocessing stages were removed: the benchmark
   showed they made output far worse (5.95 px mean edge error).
+- **Real-world benchmark** (`npm run bench -- --corpus=real`): 55 licensed
+  images (emoji, icons, logos, text, hairlines, JPEG/blurred/low-res variants,
+  photos, scans), gated by `realWorldGate.smoke-test.ts`. See BENCHMARKS.md.
 - **Render-and-diff benchmark** (`backend/src/benchmark/`, `npm run bench`):
   11 ground-truth SVG designs × 22 raster variants, traced output rendered at
   4× and compared with the truth (OKLab ΔE, edge displacement, gaps, nodes,

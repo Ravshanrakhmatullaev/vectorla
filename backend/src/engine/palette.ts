@@ -365,11 +365,18 @@ export function labelPixels(
   palette: PaletteColor[],
   windowRadius: number,
   localPreference: number,
+  thinRadius = 0,
+  thinPeakRadius = thinRadius,
 ): Int32Array {
   const { width: w, height: h, data } = image
   const n = w * h
   const labels = new Int32Array(n).fill(TRANSPARENT_LABEL)
   if (palette.length === 0) return labels
+  // Per edge pixel: the two colors whose blend explains it and the coverage
+  // of the second one (pairA = -1: no accepted blend). See preserveThinCoverage.
+  const pairA = new Int32Array(n).fill(-1)
+  const pairB = new Int32Array(n)
+  const coverage = new Float32Array(n)
 
   // Cache nearest-label lookups by packed RGB.
   const cache = new Map<number, number>()
@@ -432,6 +439,9 @@ export function labelPixels(
       )
       let bestResidual = Infinity
       let bestLabel = own
+      let bestA = -1
+      let bestB = -1
+      let bestT = 0
       for (let i = 0; i < candidates.length; i++) {
         for (let j = i + 1; j < candidates.length; j++) {
           const a = candidates[i]!
@@ -440,6 +450,9 @@ export function labelPixels(
           if (residual < bestResidual) {
             bestResidual = residual
             bestLabel = t < 0.5 ? a : b
+            bestA = a
+            bestB = b
+            bestT = t
           }
         }
       }
@@ -454,6 +467,9 @@ export function labelPixels(
           if (residual < bestResidual) {
             bestResidual = residual
             bestLabel = t < 0.5 ? a : b
+            bestA = a
+            bestB = b
+            bestT = t
           }
         }
       }
@@ -468,6 +484,11 @@ export function labelPixels(
       // JPEG chroma bleed can push a pixel well off the exact blend line.
       if (ownIsNearby ? bestResidual < 0.06 && bestResidual <= ownResidual + 0.02 : bestResidual < 0.15 && bestResidual < ownResidual) {
         labels[p] = bestLabel
+        if (bestA >= 0) {
+          pairA[p] = bestA
+          pairB[p] = bestB
+          coverage[p] = bestT
+        }
         continue
       }
       if (ownIsNearby) continue
@@ -490,7 +511,103 @@ export function labelPixels(
     }
   }
 
+  if (thinRadius > 0) preserveThinCoverage(labels, pairA, pairB, coverage, w, h, thinRadius, thinPeakRadius)
   return labels
+}
+
+/** Pixels with less coverage than this are never promoted (noise). */
+const THIN_MIN_COVERAGE = 0.15
+/** Features whose coverage reaches this anywhere nearby are wide, not thin. */
+const THIN_MAX_PEAK = 0.85
+
+/**
+ * Coverage-preserving labeling for thin features.
+ *
+ * Deciding each anti-aliased pixel by its own coverage (> 50% = the stroke)
+ * is right for edges between wide areas, but loses thin features: a 1 px
+ * line straddling two pixels is ~50% in each, and a 0.5 px hairline never
+ * reaches 50% anywhere, so hairlines, small-text stems and thin gaps break up
+ * or vanish. Instead, for a pixel blended between colors A and B, look at a
+ * small window: the summed coverage S of the color the pixel is NOT labeled
+ * with says how many pixels of that color the window should contain. If
+ * fewer than S pixels in the window have higher coverage than this one, this
+ * pixel belongs to that color too.
+ *
+ * Pure pixels add 1 (or 0) to both sides of the comparison, so wide shapes
+ * are unaffected: along a straight edge between wide areas this reproduces
+ * the 50% rule exactly. Only where the coverage budget is not met — thin
+ * strokes and thin gaps — do pixels change, and a feature of total width w
+ * keeps a core about w wide, centered where the ink is.
+ */
+function preserveThinCoverage(
+  labels: Int32Array,
+  pairA: Int32Array,
+  pairB: Int32Array,
+  coverage: Float32Array,
+  w: number,
+  h: number,
+  radius: number,
+  peakRadius: number,
+): void {
+  const peakRadius2 = peakRadius * peakRadius
+  // Decisions are collected and applied afterwards, so every pixel is judged
+  // against the same (pre-pass) labels regardless of scan order.
+  const promote: number[] = []
+  const decided = labels
+  // Coverage of color x (paired against y) at q, or -1 if q is unrelated.
+  const coverageOf = (q: number, x: number, y: number): number => {
+    const a = pairA[q]!
+    if (a >= 0) {
+      const b = pairB[q]!
+      if (a === x && b === y) return 1 - coverage[q]!
+      if (a === y && b === x) return coverage[q]!
+      return -1
+    }
+    const label = decided[q]!
+    if (label === x) return 1
+    if (label === y) return 0
+    return -1
+  }
+  for (let y0 = 0; y0 < h; y0++) {
+    for (let x0 = 0; x0 < w; x0++) {
+      const p = y0 * w + x0
+      const a = pairA[p]!
+      if (a < 0) continue
+      const b = pairB[p]!
+      const current = decided[p]!
+      let other: number
+      let own: number
+      if (current === a) {
+        other = b
+        own = a
+      } else if (current === b) {
+        other = a
+        own = b
+      } else continue
+      const cp = coverageOf(p, other, own)
+      if (cp < THIN_MIN_COVERAGE || cp >= 0.5) continue
+      let sum = 0
+      let above = 0
+      let peak = 0
+      for (let dy = -radius; dy <= radius; dy++) {
+        const yy = y0 + dy
+        if (yy < 0 || yy >= h) continue
+        for (let dx = -radius; dx <= radius; dx++) {
+          const xx = x0 + dx
+          if (xx < 0 || xx >= w) continue
+          const c = coverageOf(yy * w + xx, other, own)
+          if (c < 0) continue
+          sum += c
+          if (c > cp) above++
+          if (c > peak && dx * dx + dy * dy <= peakRadius2) peak = c
+        }
+      }
+      // A nearly pure pixel of that color nearby means a wide shape, where the
+      // per-pixel 50% rule is already right; only thin features need this.
+      if (peak < THIN_MAX_PEAK && above + 0.5 < sum) promote.push(p, other)
+    }
+  }
+  for (let i = 0; i < promote.length; i += 2) labels[promote[i]!] = promote[i + 1]!
 }
 
 /**
@@ -670,5 +787,23 @@ export function extractDetailColors(
     if (!tooClose && !isBlend) added.push({ ...candidate, r: Math.round(candidate.r), g: Math.round(candidate.g), b: Math.round(candidate.b) })
     if (palette.length + added.length >= options.maxColors) break
   }
-  return added
+
+  // The order check above misses a tint accepted *before* its pure color
+  // (small italic text: the 80% ink/20% paper blend cluster can come first).
+  // Such a tint steals the stroke's edge pixels and is later merged into the
+  // background, breaking the glyphs, so drop any detail color that a later
+  // accepted color explains as a blend.
+  const known = [...palette, ...added]
+  return added.filter((color, k) => {
+    const self = palette.length + k
+    const rgb: [number, number, number] = [color.r / 255, color.g / 255, color.b / 255]
+    for (let i = palette.length + k + 1; i < known.length; i++) {
+      for (let j = 0; j < known.length; j++) {
+        if (j === i || j === self) continue
+        const { residual, t } = mixtureResidual(rgb, linearOf(known[i]!), linearOf(known[j]!))
+        if (residual < 0.045 && t > 0.05 && t < 0.95) return false
+      }
+    }
+    return true
+  })
 }
