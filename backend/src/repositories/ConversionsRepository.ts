@@ -2,6 +2,8 @@ import type { Conversion } from '../types'
 
 export interface ConversionsRepository {
   create(conversion: Conversion): Promise<Conversion>
+  /** Which of these storage keys have a row — the orphan sweep deletes R2 objects without one. */
+  findExistingStorageKeys(keys: string[]): Promise<Set<string>>
   findById(id: string): Promise<Conversion | null>
   /** Today's pipeline (see ConversionService.processJob) produces exactly one Conversion per Job. */
   findByJobId(jobId: string): Promise<Conversion | null>

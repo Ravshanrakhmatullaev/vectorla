@@ -11,6 +11,14 @@ export interface R2Client {
    * cleanup would need to follow `truncated`/`cursor` to page through everything.
    */
   list(prefix: string): Promise<string[]>
+  /** One page of objects under a prefix, with upload times — the orphan sweep pages with `cursor`. */
+  listPage(prefix: string, cursor?: string, limit?: number): Promise<R2ListPage>
+}
+
+export interface R2ListPage {
+  objects: Array<{ key: string; uploaded: Date }>
+  /** Present when more objects follow. */
+  cursor?: string
 }
 
 /**
@@ -32,6 +40,13 @@ export function createR2Client(bucket: R2Bucket): R2Client {
     async list(prefix) {
       const result = await bucket.list({ prefix })
       return result.objects.map((object) => object.key)
+    },
+    async listPage(prefix, cursor, limit = 1000) {
+      const result = await bucket.list({ prefix, cursor, limit })
+      return {
+        objects: result.objects.map((object) => ({ key: object.key, uploaded: object.uploaded })),
+        cursor: result.truncated ? result.cursor : undefined,
+      }
     },
   }
 }

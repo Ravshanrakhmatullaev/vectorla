@@ -85,11 +85,17 @@ export class UploadService {
       createdAt: new Date().toISOString(),
     }
 
-    // NOTE: no rollback if this write fails after storage.storeFile() above
-    // succeeds — that would orphan the R2 object. Acceptable for a first
-    // implementation; a real system would need a cleanup job or two-phase
-    // commit. See backend/README.md.
-    return this.repository.create(upload)
+    // The file is stored before its row; if the row can't be written the
+    // file is deleted right away. Should that delete fail too, the
+    // scheduled OrphanSweeper removes it after its grace period.
+    try {
+      return await this.repository.create(upload)
+    } catch (error) {
+      await this.storage.deleteFile(storageKey).catch((cleanupError: unknown) => {
+        console.error(`Failed to delete ${storageKey} after its upload row failed; the orphan sweep will remove it:`, cleanupError)
+      })
+      throw error
+    }
   }
 
   async getUpload(_uploadId: string): Promise<Upload> {

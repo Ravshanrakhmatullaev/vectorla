@@ -4,6 +4,7 @@
 // cron/queue trigger — see the service's own doc comment.
 //
 // Run with: npx tsx src/services/OrphanCleanupService.smoke-test.ts (from inside backend/)
+import { listPageOf } from '../testSupport/r2Fake'
 import { OrphanCleanupService } from './OrphanCleanupService'
 import { InMemoryUploadsRepository } from '../repositories/InMemoryUploadsRepository'
 import { InMemoryConversionsRepository } from '../repositories/InMemoryConversionsRepository'
@@ -35,6 +36,9 @@ function createFakeR2Client(): R2Client & { objects: Map<string, ArrayBuffer> } 
     },
     async list(prefix) {
       return Array.from(objects.keys()).filter((key) => key.startsWith(prefix))
+    },
+    async listPage(prefix) {
+      return listPageOf(objects.keys(), prefix)
     },
   }
 }

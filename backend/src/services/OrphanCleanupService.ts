@@ -23,13 +23,9 @@ export interface OrphanReport {
  * failed right after), and a database row whose R2 object never — or no
  * longer — exists.
  *
- * Deliberately not wired to any cron/queue trigger (Phase 18 scope:
- * "do not implement scheduled cleanup workers") — this is the detection
- * logic a future scheduled worker would call, or that an operator can run
- * by hand today. It only reports; deleting orphaned R2 objects or flagging
- * DB rows is a follow-up decision (e.g. how long to wait before treating an
- * orphan as safe to delete, since a slow-in-flight upload can look orphaned
- * for a few seconds) that's out of scope here.
+ * A one-shot report for operators (it lists the whole bucket and every
+ * row). The scheduled deletion is OrphanSweeper below, which works one
+ * shard at a time and leaves recent objects alone.
  */
 export class OrphanCleanupService {
   constructor(
@@ -60,6 +56,74 @@ export class OrphanCleanupService {
 
     return { orphanedR2Keys, uploadsMissingR2Object, conversionsMissingR2Object }
   }
+}
+
+export interface OrphanSweepResult {
+  prefix: string
+  scanned: number
+  deleted: number
+}
+
+/** Objects younger than this are never deleted: an upload's R2 write lands before its database row. */
+export const ORPHAN_GRACE_MS = 24 * 60 * 60 * 1000
+const HEX = '0123456789abcdef'
+/** uploads/ and conversions/, each split by the first hex digit of the user id: 32 shards. */
+export const ORPHAN_SHARD_COUNT = 2 * HEX.length
+const MAX_PAGES_PER_SWEEP = 5
+
+/** The R2 prefix a shard covers. User ids are UUIDs, so every key falls in exactly one shard. */
+export function orphanShardPrefix(shard: number): string {
+  const index = ((shard % ORPHAN_SHARD_COUNT) + ORPHAN_SHARD_COUNT) % ORPHAN_SHARD_COUNT
+  return `${index < HEX.length ? 'uploads' : 'conversions'}/${HEX[index % HEX.length]}`
+}
+
+/**
+ * Deletes R2 objects with no database row (the "orphans" detectOrphans
+ * reports): an original whose upload row insert failed, a result whose
+ * conversion row was never written, or files whose rows were removed
+ * without them. Run from the cron trigger one shard at a time, so the whole
+ * bucket is covered every 32 runs (8 hours at the 15-minute cron) without
+ * listing it all at once; objects younger than ORPHAN_GRACE_MS are skipped.
+ */
+export class OrphanSweeper {
+  constructor(
+    private readonly r2: R2Client,
+    private readonly uploads: UploadsRepository,
+    private readonly conversions: ConversionsRepository,
+  ) {}
+
+  async sweep(shard: number, now: number = Date.now()): Promise<OrphanSweepResult> {
+    const prefix = orphanShardPrefix(shard)
+    const rows = prefix.startsWith('uploads/') ? this.uploads : this.conversions
+    let cursor: string | undefined
+    let scanned = 0
+    let deleted = 0
+    for (let page = 0; page < MAX_PAGES_PER_SWEEP; page++) {
+      const listed = await this.r2.listPage(prefix, cursor)
+      scanned += listed.objects.length
+      const old = listed.objects.filter((object) => now - object.uploaded.getTime() > ORPHAN_GRACE_MS).map((object) => object.key)
+      if (old.length > 0) {
+        const kept = await rows.findExistingStorageKeys(old)
+        for (const key of old) {
+          if (kept.has(key)) continue
+          await this.r2.delete(key)
+          deleted++
+        }
+      }
+      cursor = listed.cursor
+      if (!cursor) break
+    }
+    return { prefix, scanned, deleted }
+  }
+}
+
+/** The shard a cron run at `now` sweeps: one per 15-minute slot. */
+export function orphanShardFor(now: number): number {
+  return Math.floor(now / (15 * 60 * 1000)) % ORPHAN_SHARD_COUNT
+}
+
+export function createOrphanSweeper(env: Env): OrphanSweeper {
+  return new OrphanSweeper(createR2Client(env.UPLOADS_BUCKET), createUploadsRepository(env), createConversionsRepository(env))
 }
 
 export function createOrphanCleanupService(env: Env): OrphanCleanupService {

@@ -4,6 +4,7 @@
 // row for the next run. In-memory repositories and a fake R2 client.
 //
 // Run with: npx tsx src/services/RetentionService.smoke-test.ts (from inside backend/)
+import { listPageOf } from '../testSupport/r2Fake'
 import { RetentionService } from './RetentionService'
 import { StorageService } from './StorageService'
 import { InMemoryUploadsRepository } from '../repositories/InMemoryUploadsRepository'
@@ -41,6 +42,9 @@ function createFakeR2(): R2Client & { objects: Set<string>; failDeleteFor: Set<s
     },
     async list(prefix) {
       return [...objects].filter((key) => key.startsWith(prefix))
+    },
+    async listPage(prefix) {
+      return listPageOf(objects, prefix)
     },
   }
 }

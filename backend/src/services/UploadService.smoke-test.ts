@@ -3,6 +3,7 @@
 // Node and needs no real Cloudflare/Supabase credentials.
 //
 // Run with: npx tsx src/services/UploadService.smoke-test.ts (from inside backend/)
+import { listPageOf } from '../testSupport/r2Fake'
 import { UploadService } from './UploadService'
 import { StorageService } from './StorageService'
 import { InMemoryUploadsRepository } from '../repositories/InMemoryUploadsRepository'
@@ -55,6 +56,9 @@ function createFakeR2Client(): R2Client & { objects: Map<string, ReadableStream 
     },
     async list(prefix) {
       return Array.from(objects.keys()).filter((key) => key.startsWith(prefix))
+    },
+    async listPage(prefix) {
+      return listPageOf(objects.keys(), prefix)
     },
   }
 }

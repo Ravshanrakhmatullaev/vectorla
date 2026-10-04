@@ -5,6 +5,7 @@
 // self-signed download URL's expiry check, against in-memory fakes.
 //
 // Run with: npx tsx src/services/ConversionService.smoke-test.ts (from inside backend/)
+import { listPageOf } from '../testSupport/r2Fake'
 import { ConversionService } from './ConversionService'
 import { JobService } from './JobService'
 import { QueueService } from './QueueService'
@@ -73,6 +74,9 @@ function createFakeR2Client(): R2Client & { objects: Map<string, ReadableStream 
     },
     async list(prefix) {
       return Array.from(objects.keys()).filter((key) => key.startsWith(prefix))
+    },
+    async listPage(prefix) {
+      return listPageOf(objects.keys(), prefix)
     },
   }
 }

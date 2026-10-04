@@ -23,6 +23,11 @@ export class InMemoryUploadsRepository implements UploadsRepository {
     return upload
   }
 
+  async findExistingStorageKeys(keys: string[]): Promise<Set<string>> {
+    const stored = new Set(Array.from(this.uploadsById.values(), (row) => row.storageKey))
+    return new Set(keys.filter((key) => stored.has(key)))
+  }
+
   async findById(id: string): Promise<Upload | null> {
     return this.uploadsById.get(id) ?? null
   }

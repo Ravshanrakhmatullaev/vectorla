@@ -3,6 +3,8 @@ import type { Upload } from '../types'
 export interface UploadsRepository {
   /** Throws ConflictError if (userId, originalFileName) already exists — see implementations for how the race is closed. */
   create(upload: Upload): Promise<Upload>
+  /** Which of these storage keys have a row — the orphan sweep deletes R2 objects without one. */
+  findExistingStorageKeys(keys: string[]): Promise<Set<string>>
   findById(id: string): Promise<Upload | null>
   /** Uploads by a user created at or after `since` (ISO) — upload rate limits. */
   countByUserSince(userId: string, since: string): Promise<number>

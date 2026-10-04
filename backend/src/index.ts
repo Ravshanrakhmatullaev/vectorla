@@ -8,6 +8,7 @@ import { createConversionService } from './services/ConversionService'
 import { NotFoundError, RateLimitedError } from './errors'
 import { isDeadLetterQueue, handleConversionMessages, handleDeadLetters, sweepStaleJobs } from './queueConsumer'
 import { createRetentionService } from './services/RetentionService'
+import { createOrphanSweeper, orphanShardFor } from './services/OrphanCleanupService'
 import { mapErrorToResponse } from './api/response'
 import { handlePreflight, applyCors } from './api/cors'
 import { logRequest } from './api/logging'
@@ -160,7 +161,8 @@ export default {
   },
 
   // Cron trigger (wrangler.toml [triggers]): fail + refund jobs stuck past any
-  // real run, then delete uploads and results past the retention period.
+  // real run, delete uploads and results past the retention period, and
+  // delete one shard's orphaned R2 objects (no database row).
   async scheduled(_controller: ScheduledController, rawEnv: Env): Promise<void> {
     const env = await withWasmModules(rawEnv)
     assertRequiredBackendSecrets(env)
@@ -182,6 +184,13 @@ export default {
       }
     } catch (error) {
       console.error('Retention purge failed:', error)
+      failures.push(error)
+    }
+    try {
+      const orphans = await createOrphanSweeper(env).sweep(orphanShardFor(Date.now()))
+      if (orphans.deleted > 0) console.warn(`Orphan sweep ${orphans.prefix}: deleted ${orphans.deleted} of ${orphans.scanned} object(s) with no database row`)
+    } catch (error) {
+      console.error('Orphan sweep failed:', error)
       failures.push(error)
     }
     if (failures.length > 0) throw failures[0]

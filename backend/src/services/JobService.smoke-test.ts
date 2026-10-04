@@ -2,6 +2,7 @@
 // in-memory fakes for the jobs/uploads repositories and the queue client.
 //
 // Run with: npx tsx src/services/JobService.smoke-test.ts (from inside backend/)
+import { listPageOf } from '../testSupport/r2Fake'
 import { JobService } from './JobService'
 import { QueueService } from './QueueService'
 import { CreditsService } from './CreditsService'
@@ -161,6 +162,9 @@ async function run() {
     },
     async list(prefix) {
       return [...storedKeys].filter((key) => key.startsWith(prefix))
+    },
+    async listPage(prefix) {
+      return listPageOf(storedKeys, prefix)
     },
   }
   const serviceWithCredits = new JobService(jobsRepo, uploadsRepo, queueService, creditsService, conversionsRepo, new StorageService(fakeR2, 'test-secret'))

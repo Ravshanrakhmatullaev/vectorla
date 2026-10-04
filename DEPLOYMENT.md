@@ -109,6 +109,25 @@ origin, e.g. `https://staging.<pages-project>.pages.dev`. Only exact
 
 - The 15-minute cron deletes uploads and their results 30 days after upload
   (`UPLOAD_RETENTION_DAYS`, `backend/src/services/RetentionService.ts`).
+- The same cron deletes **orphaned files** (an R2 object with no database
+  row, e.g. an original whose upload row failed): one of 32 key shards per
+  run, so the whole bucket is checked every 8 hours; objects younger than
+  24 hours are never touched (`OrphanSweeper`,
+  `backend/src/services/OrphanCleanupService.ts`). Originals whose upload row
+  fails, and results of failed jobs, are deleted immediately.
+- **R2 lifecycle rule (backstop, 🧑 requires owner approval — it changes the
+  production bucket).** Expire anything the cron somehow missed 5 days after
+  the 30-day retention:
+
+  ```sh
+  wrangler r2 bucket lifecycle add vectorla-uploads expire-uploads uploads/ --expire-days 35
+  wrangler r2 bucket lifecycle add vectorla-uploads expire-conversions conversions/ --expire-days 35
+  wrangler r2 bucket lifecycle list vectorla-uploads   # verify
+  # staging: the same three commands with vectorla-uploads-staging
+  ```
+
+  The rule acts on an object's upload time, like the cron, so it never
+  deletes a file the Privacy Policy says is still kept.
 - Request logs must be kept for **no longer than 30 days**. Cloudflare's own
   Workers log retention is shorter than that. Do not add a log drain or
   observability setting that keeps logs longer without updating the Privacy

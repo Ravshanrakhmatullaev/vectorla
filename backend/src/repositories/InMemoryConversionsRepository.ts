@@ -18,6 +18,11 @@ export class InMemoryConversionsRepository implements ConversionsRepository {
     this.conversionsById.delete(id)
   }
 
+  async findExistingStorageKeys(keys: string[]): Promise<Set<string>> {
+    const stored = new Set(Array.from(this.conversionsById.values(), (row) => row.storageKey))
+    return new Set(keys.filter((key) => stored.has(key)))
+  }
+
   async findById(id: string): Promise<Conversion | null> {
     return this.conversionsById.get(id) ?? null
   }

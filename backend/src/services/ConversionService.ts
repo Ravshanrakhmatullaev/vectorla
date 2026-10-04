@@ -121,7 +121,14 @@ export class ConversionService {
         downloadUrl: null,
         createdAt: new Date().toISOString(),
       }
-      created = await this.conversions.create(conversion)
+      try {
+        created = await this.conversions.create(conversion)
+      } catch (error) {
+        // Not left behind if no row points at it: a retry stores it again
+        // first, and a job that fails for good never needs it.
+        await this.storage.deleteFile(storageKey).catch(() => undefined)
+        throw error
+      }
     }
 
     await this.jobs.markCompleted(claimed.id)
@@ -145,6 +152,17 @@ export class ConversionService {
     if (job.status === 'completed') return
     if (job.status !== 'failed') await this.jobs.markFailed(jobId, reason)
     await this.credits.refundJobDebit(job.userId, jobId, `Refund: job failed (${reason.slice(0, 120)})`)
+    // A failed job's partial result (stored, maybe with a row, before the
+    // failure) is never downloadable: delete it now rather than after the
+    // retention period. Best-effort — the job is already failed and
+    // refunded; a missed file is caught by the orphan sweep or retention.
+    try {
+      const leftover = await this.conversions.findByJobId(jobId)
+      await this.storage.deleteFile(leftover?.storageKey ?? `conversions/${job.userId}/${jobId}/output.svg`)
+      if (leftover) await this.conversions.delete(leftover.id)
+    } catch (error) {
+      console.error(`Could not delete job ${jobId}'s partial result:`, error)
+    }
   }
 
   /** Professional Trace: the engine's Professional profile, ImageTracer fallback on failure. */

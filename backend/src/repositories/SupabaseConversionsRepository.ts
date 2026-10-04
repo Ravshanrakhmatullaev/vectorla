@@ -55,6 +55,17 @@ export class SupabaseConversionsRepository implements ConversionsRepository {
     if (error) throw new Error(`Failed to delete conversion: ${error.message}`)
   }
 
+  async findExistingStorageKeys(keys: string[]): Promise<Set<string>> {
+    const found = new Set<string>()
+    // Chunked: the keys travel in the request URL.
+    for (let i = 0; i < keys.length; i += 100) {
+      const { data, error } = await this.client.from('conversions').select('storage_key').in('storage_key', keys.slice(i, i + 100)).returns<Array<{ storage_key: string }>>()
+      if (error) throw new Error(`Failed to look up stored keys: ${error.message}`)
+      for (const row of data ?? []) found.add(row.storage_key)
+    }
+    return found
+  }
+
   async findById(id: string): Promise<Conversion | null> {
     const { data, error } = await this.client.from('conversions').select().eq('id', id).maybeSingle<ConversionRow>()
     // 22P02: the id isn't a valid UUID, so no such row can exist.
