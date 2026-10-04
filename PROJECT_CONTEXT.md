@@ -233,9 +233,17 @@ Backend plan configuration has four tiers:
 | Plan | Monthly credits | Max file | Batch limit | Configured formats |
 |---|---:|---:|---:|---|
 | Free | 10 | 5 MB | 1 | SVG, PNG |
-| Starter | 100 | 25 MB | 10 | SVG, PNG, PDF |
-| Pro | 500 | 100 MB | 100 | SVG, PDF, EPS, DXF, PNG |
-| Business | 5,000 | 500 MB | 1,000 | SVG, PDF, EPS, DXF, PNG |
+| Starter | 100 | 15 MB | 10 | SVG, PNG, PDF |
+| Pro | 500 | 15 MB | 100 | SVG, PDF, EPS, DXF, PNG |
+| Business | 5,000 | 15 MB | 1,000 | SVG, PDF, EPS, DXF, PNG |
+
+Paid plans share a 15 MB file cap (`MAX_UPLOAD_FILE_BYTES`), set by Worker
+memory: a 15.5 MB 16-bit PNG peaks at about 88 MB in workerd. Each plan
+also has abuse limits (`uploadsPerTenMinutes`, `uploadsPerDay`,
+`storageQuotaBytes`, `maxActiveJobs`) enforced by `UsageLimitsService`; the
+values are in `DEPLOYMENT.md` ("Abuse limits"). Pricing: Quick 1 credit,
+Professional 2, or 1 when it falls back to the basic tracer, charged once
+after tracing.
 
 These are configuration limits, not proof that batch/multi-format generation
 exists. The frontend pricing section is still the older Free/Pro/Business
@@ -253,8 +261,9 @@ buttons provide the minimal account flow.
 
 ### Cleanup and operations
 
-Orphan detection works, but there is no scheduled trigger or deletion pass.
-`StorageService.deleteFile`, `UploadService.getUpload`, and
+Orphaned R2 objects are deleted by `OrphanSweeper` on the 15-minute cron (one
+of 32 key shards per run, 24 h grace), and immediately when a row insert fails
+or a job fails. `StorageService.deleteFile`, `UploadService.getUpload`, and
 `UploadService.deleteUpload` are not implemented. The health endpoint is a
 liveness check only; it does not probe R2, Queue, or Supabase dependencies.
 
@@ -310,14 +319,18 @@ See `backend/API.md` and the served OpenAPI document for response contracts.
 - Root `npm run build` runs strict TypeScript project builds and Vite.
 - Root `npm run lint` runs oxlint (it also scans `backend/`).
 - `cd backend && npm run typecheck` runs backend TypeScript without emit.
-- `cd backend && npm test` runs every `*.smoke-test.ts` (27 files) and
-  reports pass/fail. This includes the engine tests, the job-lifecycle and credit
+- `cd backend && npm test` runs every `*.smoke-test.ts` (37 files) and
+  reports pass/fail. Launch-readiness tests include usage limits, streamed
+  upload limits, orphan cleanup, billing (fallback price, races, single
+  refund), resilience (memory exhaustion, concurrent and duplicate
+  deliveries, storage failures) and dense patterns. This includes the engine tests, the job-lifecycle and credit
   concurrency tests (`queueConsumer.smoke-test.ts`), the decompression-bomb
   guard and the vector quality gate (~90 s).
 - `cd backend && npm run bench` prints the render-and-diff benchmark;
   `-- --compare` diffs it against the committed `src/benchmark/baseline.json`.
 - `backend/supabase/tests/credit_integrity.test.sql` asserts the ledger,
-  constraints and signup grant on real Postgres (see the CI `database` job).
+  constraints and signup grant on real Postgres;
+  `usage_limits.test.sql` asserts migration 0003 (see the CI `database` job).
 - Tests call real handlers/services with fake Cloudflare bindings and
   in-memory repositories; no real Supabase project is required. Concurrency
   and Supabase-specific paths are not exercised.
@@ -381,9 +394,10 @@ migrations, secrets, staging then production, verification, rollback).
 
 See `ROADMAP.md` for the full prioritized list. In short:
 
-1. Vector quality: gradient reconstruction (Q3) and lossy-source quality (Q4).
-2. Production safety: decompression-bomb guard, stuck-job recovery, queue
-   configuration, credit integrity, free-credit grant (P1–P5).
+1. Launch: the code side of launch readiness is done (P6, P7 and P11 in
+   `ROADMAP.md`). What remains are owner-approved Cloudflare and Supabase
+   changes, listed in `DEPLOYMENT.md` under "Production launch checklist".
+2. Vector quality: patterns above 40,000 regions, small text.
 3. Then SaaS work: honest copy (done except Pricing), account UI (credits done),
    legal drafts (awaiting owner decisions), export formats, billing.
 

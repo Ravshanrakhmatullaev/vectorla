@@ -172,43 +172,57 @@ Legend: ✅ done · 🔜 next · ⏳ planned · 🧑 needs an owner decision, cr
 - ✅ **P5. Free-credit grant on signup**: 10 credits via `handle_new_user`, with a backfill
   for existing users. 🧑 A recurring monthly grant for free users is a pricing
   decision and is not implemented.
-- ⏳ **P6.** Done: CSP `blob:` for previews, HSTS, and `[env.staging]` in wrangler
-  (separate Worker, bucket and queues) with a `DEPLOYMENT.md` runbook. Constant-time
-  HMAC compare done (launch audit). Remaining: drop the duplicate-filename unique
-  index; narrow CSP `connect-src https://*.workers.dev` to the final API host and
-  replace `script-src 'unsafe-inline'` with a hash of the theme script; 🧑 decide the
-  paid-plan file size limit (a 25 MB 16-bit PNG is estimated at ~110 MB at decode
-  time in the queue consumer; ~15 MB keeps a wide margin).
-- ⏳ **P7.** Rate limiting (Workers Rate Limiting or Turnstile): still missing. Uploads
-  need no credits, so one account can store files in R2 for 30 days and spend CPU
-  on decoding without limit. The dev bypass is stricter now (launch audit): it also
-  requires a localhost request.
-- ⏳ **P11. Launch audit (2026-10-03)**, fixed on `claude/bold-newton-y6wsui`:
-  - superseding a job refunded it while its result stayed downloadable (free
-    conversions);
+- 🟡 **P6.** Done: CSP `blob:` for previews, HSTS (`includeSubDomains`),
+  `object-src 'none'`, and `[env.staging]` in wrangler (separate Worker, bucket
+  and queues) with a `DEPLOYMENT.md` runbook. Constant-time HMAC compare.
+  Launch readiness: the build (`scripts/securityHeaders.ts`) now sets
+  `connect-src` to exactly the configured API and Supabase origins (no
+  `*.workers.dev`), and allows the inline theme script by its SHA-256 hash (no
+  `script-src 'unsafe-inline'`). The paid-plan file size limit is **15 MB**,
+  measured at about 88 MB peak for a 15.5 MB 16-bit PNG in workerd (25 MB
+  would reach about 110 MB). Remaining: `style-src 'unsafe-inline'` (React
+  inline styles); dropping the duplicate-filename unique index.
+- ✅ **P7. Abuse limits.** Per-user upload rate (10 minutes and a day), storage
+  quota (summed in Postgres, migration 0003) and an active-job limit, per plan
+  (`PLAN_LIMITS`), all returning 429 with `Retry-After` and translated UI
+  messages. The upload body is counted while it streams and cut off past
+  16 MB, even with no or a false `Content-Length`. An optional per-IP
+  Workers Rate Limiting binding (120/min, fails open, health exempt) is
+  in code. 🧑 Enabling it in `wrangler.toml` needs owner approval.
+- ✅ **P11. Launch audit (2026-10-03) and launch readiness (2026-10-04)**, on
+  `claude/bold-newton-y6wsui`.
+
+  Fixed in the audit:
+  - superseding a job refunded it while its result stayed downloadable;
   - a refund that failed once was never retried;
   - a failed job could flip back to completed;
-  - a 2000² diagonal-stripe image took 63 s of CPU (limit 60 s);
+  - a 2000² diagonal-stripe image took 63 s of CPU;
   - decoder instances kept 19–39 MB per isolate between conversions;
   - a padded JPEG pushed decoder memory past 100 MB;
   - a sweeper error skipped retention;
   - upload-time analysis could exceed memory on large files.
 
-  Open:
-  - orphaned R2 objects (written before a DB insert that then failed) are never
-    deleted. `OrphanCleanupService` is not wired; an R2 lifecycle rule would be
-    the backstop (🧑 production config).
-  - job error messages can include internal text (Supabase errors, R2 keys).
-  - Professional Trace falling back to ImageTracer is still billed 2×
-    (🧑 pricing decision).
-  - dense patterns over the region budget (e.g. an 8 px checkerboard at 4 MP)
-    collapse to one shape.
-  - uploads without a Content-Length header skip the pre-buffer size check. The
-    edge's 100 MB body limit is the only bound until the per-plan check after
-    buffering.
-- ✅ **P8.** CI (`.github/workflows/ci.yml`): lint and build, typecheck, `npm test`
-  including the quality gate, Worker dry-run bundles, and a Postgres 16 job running
-  schema + migration + credit-integrity assertions + a concurrency check.
+  Fixed in launch readiness:
+  - orphaned R2 objects are deleted: at once when the DB insert fails, and
+    by a sharded 15-minute sweep with a 24 h grace period (🧑 the R2 lifecycle
+    rule backstop needs approval);
+  - users see only fixed, translated job errors; raw errors are logged only;
+  - Professional Trace falling back to ImageTracer is billed 1 credit, charged
+    once after tracing, never overdrawn by concurrent jobs, refunded once;
+  - dense patterns up to 40,000 regions keep their shapes (a 16 px
+    checkerboard at 4 MP has 31,249 paths, 59 MB live peak);
+  - an allocation failure fails the job at once (no retry loop, no fallback,
+    refunded, "too complex" message);
+  - uploads without Content-Length are byte-counted.
+
+  Open: patterns above 40,000 regions (8 px checkerboard at 4 MP) are still
+  merged into a few shapes, as the memory guard. Memory is measured in local
+  workerd only (🧑 a staging check on Cloudflare is in the launch checklist).
+- ✅ **P8.** CI (`.github/workflows/ci.yml`): lint and build (with a check
+  of the generated CSP), typecheck, `npm test` including the quality gate,
+  Worker dry-run bundles, and a Postgres 16 job running the schema, migrations
+  0002 and 0003 (each twice), the credit-integrity and usage-limit
+  assertions, and a concurrency check.
 - ⏳ **P9.** Observability: Workers observability and error tracking; a
   health check that probes dependencies.
 - 🧑 **P10.** Supabase project `rvrpuapbeglqmcajsdgm` is **paused** (INACTIVE).
@@ -247,3 +261,7 @@ Legend: ✅ done · 🔜 next · ⏳ planned · 🧑 needs an owner decision, cr
 3. Vision/ML provider for upscaling and text detection, and its budget (Q12).
 4. Free-tier credit amount and cadence (P5), Stripe setup (S5).
 5. Resume the paused Supabase project when ready to deploy (P10).
+6. Approve the Cloudflare and Supabase changes in the launch checklist
+   (`DEPLOYMENT.md`, "Production launch checklist"): the per-IP rate limiter,
+   R2 lifecycle rules, migrations 0002 and 0003, secrets, Pages variables,
+   and a staging memory check.

@@ -674,6 +674,33 @@ about 1,650 regions and under 1 MB of SVG by the region budget; 4000×3000 input
 are area-downsampled to the 1.2 MP working cap (uploads above 4 MP are
 rejected by the API and downscaled in the browser first; see "Memory" below).
 
+## Launch readiness (2026-10-04)
+
+Full corpus (80 images, Quick and Professional) against the audit baseline:
+0 failed, **0 regressions, no variant changed**. The dense-pattern change
+below never triggers on the corpus.
+
+**Dense regular patterns.** On a checkerboard, merging small regions to meet
+the region budget recoloured neighbours in a cascade until the whole board
+became one path. The budget pass now undoes a merge round that collapses the
+image (fewer than a quarter of the budget left), as long as the region count
+is at most `maxRegionsHard` (40,000). Above that, merging stays, as the
+memory guard.
+
+| 2000² checkerboard | Squares | Paths before → after | Time | Live peak |
+|---|---:|---:|---:|---:|
+| 32 px squares | 3,969 | 7,937 | 2.7 s | n/a |
+| 16 px squares | 15,625 | 1 → **31,249** | 4.8 s | 59.8 MB (budget 68 MB) |
+| 8 px squares | 62,500 | 1 (above the hard cap) | 2.9 s | n/a |
+
+Keeping 125k regions (8 px) was estimated at about 122 MB, too close to the
+128 MB isolate limit. The undo copy of the labels raises the Quick 4 MP
+artwork peak from 39.5 to 43.1 MB, within its 46 MB budget.
+
+**Upload size.** A 15.5 MB 16-bit PNG peaks at about 88 MB in workerd at
+decode time (file, decoder and pixels), and a 25 MB file was estimated at
+about 110 MB. Paid plans are therefore capped at 15 MB.
+
 ## Against professional expectations
 
 What a professional tool such as Vectorizer.ai is expected to deliver, and where
@@ -707,3 +734,4 @@ Vectorla stands on this benchmark:
 | 2026-09-28 | + JPEG chroma restoration, blend-sliver dissolve, edge labeling next to thin strokes | **0.18** (Pro) / 0.31 (Quick) | **0.12** | 0 |
 | 2026-10-03 | Real-world corpus (55 images); gradient validation, seam underlay, thin-feature labeling, blend-tint filter, memory limits | 0.17 (Pro) / 0.29 (Quick) core; 0.68 / 0.74 real-world | 0.12 / 0.13 | 0 |
 | 2026-10-03 | Optimization round: palette separation, ridge promotion for thin strokes, size-relative precision, memory (single decode, early downscale, decoder reset, scoped buffers) | 0.52 (Pro) / 0.58 (Quick), 80 images | 0.13 | 0 |
+| 2026-10-04 | Launch readiness: dense-pattern undo below 40,000 regions (16 px checkerboard 1 → 31,249 paths) | 0.50 (Pro) / 0.57 (Quick), 80 images, 0 regressions, byte-identical | 0.12 | 0 |
