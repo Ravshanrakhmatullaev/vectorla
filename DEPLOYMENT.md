@@ -55,13 +55,19 @@ In order, in the SQL editor or with `psql`:
 3. Re-run `preflight_0002.sql`. Expect every `0002:` object to be `t`,
    `service_role` to be `t` on all six tables, anon and authenticated to be
    `f`, RLS to be `t`, and violations to be 0.
+4. `backend/supabase/migrations/0003_usage_limits.sql` (indexes for the
+   upload rate limits, the concurrency limit and the orphan sweep, plus
+   `user_stored_bytes()`, which sums a user's stored bytes for the storage
+   quota). It adds only indexes and one read-only function, and changes no
+   data. Until it is applied, the Worker still enforces the quota by paging
+   the rows, which is slower but correct.
 
 Both files are idempotent, and the order is robust. Re-running `schema.sql`
 after 0002 keeps the signup grant, because it lives in its own trigger
 (`on_auth_user_created_grant_credits`) rather than in `handle_new_user`.
-CI runs the stubs, schema, the migration twice, and
-`supabase/tests/credit_integrity.test.sql` against Postgres 16 on every
-push. The tests cover ledger invariants, anon denial, and a full Worker
+CI runs the stubs, schema, each migration twice,
+`supabase/tests/credit_integrity.test.sql` and
+`supabase/tests/usage_limits.test.sql` against Postgres 16 on every push. The tests cover ledger invariants, anon denial, and a full Worker
 cycle as `service_role`.
 
 **Why the GRANTs:** projects created with automatic Data API grants
@@ -104,6 +110,36 @@ Before staging is used from a browser, set `CORS_EXTRA_ORIGINS` in
 `[env.staging.vars]` (`wrangler.toml`) to the staging frontend's exact
 origin, e.g. `https://staging.<pages-project>.pages.dev`. Only exact
 `https://` origins are accepted, with no wildcards.
+
+### Abuse limits
+
+These are enforced in code with no configuration (`PLAN_LIMITS`,
+`backend/src/config/index.ts`; `UsageLimitsService`). A breach returns
+**429** with `Retry-After`.
+
+| Limit | Free | Starter | Pro | Business |
+|---|---:|---:|---:|---:|
+| Uploads per 10 min | 20 | 60 | 60 | 120 |
+| Uploads per day | 100 | 600 | 1,000 | 3,000 |
+| Stored originals | 250 MB | 2 GB | 10 GB | 50 GB |
+| Active (queued/processing) jobs | 2 | 4 | 6 | 10 |
+| File size | 5 MB | 15 MB | 15 MB | 15 MB |
+
+The upload body is counted as it streams. A request is cut off at 16 MB
+(the 15 MB file plus multipart overhead) even when it has no, or a false,
+`Content-Length`.
+
+**Per-IP request limit (🧑 requires owner approval: it adds a binding to
+the production Worker).** `wrangler.toml` contains a commented
+`[[ratelimits]]` block (`API_RATE_LIMITER`, 120 requests per 60 s per
+`CF-Connecting-IP`), with a separate namespace for staging. To enable it,
+uncomment both blocks, run `npx wrangler deploy --dry-run`, and check that
+the output lists `env.API_RATE_LIMITER (120 requests/60s)`. Without the
+binding, the code skips this check; if the binding errors, the request is
+allowed (fail open), so a Cloudflare problem cannot lock users out. Health
+checks and CORS preflights are never limited. As a further layer, a
+Cloudflare WAF rate-limiting rule on `/api/v1/uploads` can be added in the
+dashboard (also needs approval).
 
 ### Data retention (stated in the Privacy Policy)
 
@@ -155,8 +191,14 @@ origin, e.g. `https://staging.<pages-project>.pages.dev`. Only exact
 3. Upload a PNG logo. The job completes, the SVG downloads, and the balance is **9**.
 4. Upload a JPEG and run a Professional trace. The job completes and the balance drops by **2**.
 5. Upload an oversized image (e.g. a PNG header claiming 30000×30000). It is
-   rejected with **413** before decoding.
-6. `npx wrangler tail` shows no errors, and the cron sweeper runs every 15 minutes
+   rejected with **413** before decoding. A 16 MB file is rejected with
+   **413**, and the browser shows the translated "too large" message.
+6. Start 21 uploads within 10 minutes as a free user. The 21st returns
+   **429** with `Retry-After`, and the browser shows the translated
+   rate-limit message, never the raw server text.
+7. In the browser devtools, check that the response `Content-Security-Policy`
+   `connect-src` lists only `'self'`, the API origin and the Supabase origin.
+8. `npx wrangler tail` shows no errors, and the cron sweeper runs every 15 minutes
    with no "failed and refunded" messages on a healthy system.
 
 ## Local development with local Supabase (no hosted project needed)
@@ -197,3 +239,67 @@ the local database.
   functions, a trigger, GRANTs). To undo the signup grant:
   `drop trigger on_auth_user_created_grant_credits on auth.users;`. Don't drop the ledger functions
   while a Worker that calls them is deployed.
+
+## Production launch checklist
+
+Status at commit time on branch `claude/bold-newton-y6wsui`. **✅ code** means
+it is done in this repository and verified by tests. **🧑 approval** means it
+is a change to a live account, which nobody has made; each needs the owner's
+go-ahead.
+
+### Done in code (✅)
+
+- [x] Upload limits: 15 MB file cap, enforced on the streamed bytes (with no,
+      or a false, `Content-Length`); 413 before decoding for oversized
+      dimensions.
+- [x] Abuse limits: per-user upload rate (10 min / day), storage quota,
+      active-job limit, all 429 with `Retry-After`; optional per-IP limiter
+      (fails open).
+- [x] Orphan cleanup: immediate deletion of files whose row fails, failed
+      jobs' partial results, and a sharded 24 h-grace sweep every 15 minutes.
+- [x] CSP `connect-src` built from the configured API/Supabase origins;
+      inline script allowed by hash; `object-src 'none'`; HSTS.
+- [x] Users see only fixed, translated error messages (EN/UZ/RU); raw errors
+      are logged only.
+- [x] Billing: Professional 2 credits, 1 when it falls back to the basic
+      tracer; charged once per job after tracing; concurrent jobs never
+      overdraw; concurrent failure handlers refund once.
+- [x] Memory: allocation failure fails the job at once (no retry loop),
+      refunded, "too complex" message. Dense patterns up to 40,000 regions are
+      kept, within a 68 MB tested budget.
+- [x] Tests: backend smoke suite, Postgres 16 credit and usage-limit tests,
+      the 80-image benchmark (0 regressions), frontend lint and build, and the
+      local end-to-end browser runs.
+
+### Needs owner approval (🧑): Cloudflare and Supabase
+
+1. [ ] **Resume the Supabase project** (`rvrpuapbeglqmcajsdgm`, paused).
+2. [ ] **Database:** `preflight_0002.sql`, then `schema.sql`, `0002`, `0003`,
+       then the preflight again (§2). Staging first.
+3. [ ] **Workers Paid plan** (`cpu_ms = 60000`), §0.
+4. [ ] **R2 buckets and queues** (§1), if they don't exist yet.
+5. [ ] **Worker secrets** (§3): `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
+       `DOWNLOAD_URL_SECRET` per environment. Never commit them.
+6. [ ] **Per-IP rate limiter:** uncomment the `[[ratelimits]]` blocks
+       (Abuse limits, above).
+7. [ ] **R2 lifecycle rules:** 35-day expiry on `uploads/` and `conversions/`
+       for both buckets (Data retention, above).
+8. [ ] **Pages environment variables** (§5): `VITE_API_BASE_URL`,
+       `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`. The production
+       build fails without the API URL.
+9. [ ] **Staging CORS:** `CORS_EXTRA_ORIGINS` set to the staging Pages origin.
+10. [ ] **Supabase Auth URLs**, email confirmation and SMTP (§2).
+11. [ ] **Deploy staging**, run every step in §6, then deploy production and
+        run them again.
+12. [ ] **Memory on Cloudflare:** run a 15 MB, 16-bit PNG and a dense pattern
+        on staging, and watch `wrangler tail` for "exceeded memory". The
+        measurements so far are from local workerd (about 88 MB peak against
+        a 128 MB isolate).
+
+### Known limitations (accepted for launch, tracked in ROADMAP.md)
+
+- Checkerboard-like patterns with more than 40,000 regions (e.g. 8 px squares
+  at 2000²) are still simplified into a few shapes, to keep memory bounded.
+- `style-src` keeps `'unsafe-inline'` (React inline styles).
+- Memory figures come from local workerd, not from Cloudflare's production
+  runtime.

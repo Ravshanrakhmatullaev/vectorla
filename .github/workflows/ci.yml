@@ -75,7 +75,10 @@ jobs:
           -f schema.sql
           -f migrations/0002_credit_integrity.sql
           -f migrations/0002_credit_integrity.sql
+          -f migrations/0003_usage_limits.sql
+          -f migrations/0003_usage_limits.sql
           -f tests/credit_integrity.test.sql
+          -f tests/usage_limits.test.sql
       - name: Concurrent debits never overdraw
         run: |
           U=00000000-0000-0000-0000-000000000002

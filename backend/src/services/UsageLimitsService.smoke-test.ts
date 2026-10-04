@@ -145,11 +145,13 @@ async function run(): Promise<void> {
       },
     }
     const env = { ...baseEnv, API_RATE_LIMITER: denyAfterTwo }
-    const call = (ip: string) => worker.fetch(new Request('http://localhost/api/v1/health', { headers: { 'CF-Connecting-IP': ip } }), env)
+    const call = (ip: string, path = '/api/v1/openapi.json') => worker.fetch(new Request(`http://localhost${path}`, { headers: { 'CF-Connecting-IP': ip } }), env)
     assertTrue((await call('203.0.113.7')).status === 200 && (await call('203.0.113.7')).status === 200, 'first two requests pass')
     const limited = await call('203.0.113.7')
     assertTrue(limited.status === 429 && limited.headers.get('Retry-After') === '60', 'third request from the same IP gets 429')
     assertTrue((await call('198.51.100.9')).status === 200, 'another IP is unaffected')
+    const before = seen.length
+    assertTrue((await call('203.0.113.7', '/api/v1/health')).status === 200 && seen.length === before, 'health checks are never limited')
     const broken: RateLimitBinding = {
       async limit() {
         throw new Error('binding unavailable')
@@ -157,11 +159,11 @@ async function run(): Promise<void> {
     }
     const original = console.error
     console.error = () => {}
-    const failOpen = await worker.fetch(new Request('http://localhost/api/v1/health', { headers: { 'CF-Connecting-IP': '203.0.113.7' } }), { ...baseEnv, API_RATE_LIMITER: broken })
+    const failOpen = await worker.fetch(new Request('http://localhost/api/v1/openapi.json', { headers: { 'CF-Connecting-IP': '203.0.113.7' } }), { ...baseEnv, API_RATE_LIMITER: broken })
     console.error = original
     assertTrue(failOpen.status === 200, 'a failing limiter lets the request through')
     assertTrue((await worker.fetch(new Request('http://localhost/api/v1/health', { headers: { 'CF-Connecting-IP': '203.0.113.7' } }), baseEnv)).status === 200, 'no binding: no IP limit')
-    console.log('PASS: optional per-IP Rate Limiting binding: 429 per IP, fails open, absent = off')
+    console.log('PASS: optional per-IP Rate Limiting binding: 429 per IP, health exempt, fails open, absent = off')
   }
 
   console.log('\nAll usage limit smoke tests passed.')

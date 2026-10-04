@@ -102,8 +102,9 @@ async function withWasmModules(env: Env): Promise<Env> {
  * binding: its counters live at the edge, so this costs no database or
  * Supabase Auth call. A limiter error never blocks a request.
  */
-async function enforceClientRateLimit(request: Request, env: Env): Promise<void> {
-  if (!env.API_RATE_LIMITER) return
+async function enforceClientRateLimit(request: Request, env: Env, path: string): Promise<void> {
+  // Health checks stay unlimited so uptime monitors can't use up an IP's budget.
+  if (!env.API_RATE_LIMITER || path === '/api/v1/health') return
   const ip = request.headers.get('CF-Connecting-IP')
   if (!ip) return
   let allowed = true
@@ -128,7 +129,7 @@ export default {
     let response: Response
     try {
       assertRequiredBackendSecrets(env)
-      await enforceClientRateLimit(request, env)
+      await enforceClientRateLimit(request, env, url.pathname)
       response = await routeRequest(url, request, env, requestId)
     } catch (error) {
       response = mapErrorToResponse(error, requestId)

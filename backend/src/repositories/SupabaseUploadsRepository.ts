@@ -85,11 +85,21 @@ export class SupabaseUploadsRepository implements UploadsRepository {
   }
 
   async storedBytesByUser(userId: string): Promise<number> {
-    // Summed here: PostgREST aggregates are off by default on Supabase. Rows
-    // are bounded by the upload rate limits within the retention period.
-    const { data, error } = await this.client.from('uploads').select('size_bytes').eq('user_id', userId).limit(100_000).returns<Array<{ size_bytes: number }>>()
-    if (error) throw new Error(`Failed to sum stored upload bytes: ${error.message}`)
-    return (data ?? []).reduce((sum, row) => sum + Number(row.size_bytes), 0)
+    // Summed in the database (migration 0003). PostgREST aggregates are off
+    // by default on Supabase, and a plain select returns at most db-max-rows
+    // (1000) rows, so a client-side sum would undercount.
+    const rpc = await this.client.rpc('user_stored_bytes', { p_user_id: userId })
+    if (!rpc.error) return Number(rpc.data ?? 0)
+    // PGRST202: 0003 not applied yet. Page through the rows instead.
+    if (rpc.error.code !== 'PGRST202') throw new Error(`Failed to sum stored upload bytes: ${rpc.error.message}`)
+    const PAGE = 1000
+    let total = 0
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await this.client.from('uploads').select('size_bytes').eq('user_id', userId).order('id').range(from, from + PAGE - 1).returns<Array<{ size_bytes: number }>>()
+      if (error) throw new Error(`Failed to sum stored upload bytes: ${error.message}`)
+      for (const row of data ?? []) total += Number(row.size_bytes)
+      if (!data || data.length < PAGE) return total
+    }
   }
 
   async findByUserAndFilename(userId: string, fileName: string): Promise<Upload | null> {
