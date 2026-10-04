@@ -109,4 +109,37 @@ for (const { id, maxEdge } of HIGH_RES) {
   console.log(`PASS: 2000² diagonal stripes traced in ${seconds.toFixed(1)} s (< 25 s; was 63 s)`)
 }
 
+// --- 4. Dense regular patterns ----------------------------------------------
+// Checkerboards have far more regions than the soft budget. Merging small
+// regions there recoloured neighbours in a cascade until the whole board was
+// one path. Up to maxRegionsHard (40,000) the engine now keeps the regions
+// instead; above it (8 px squares: 62,500 regions) collapsing is the
+// intended memory guard, and it must still finish quickly.
+{
+  const checker = (cell: number) => {
+    const n = 2000
+    const data = new Uint8ClampedArray(n * n * 4)
+    for (let y = 0; y < n; y++) {
+      for (let x = 0; x < n; x++) {
+        const v = ((((x / cell) | 0) + ((y / cell) | 0)) & 1) * 255
+        data.set([v, v, v, 255], (y * n + x) * 4)
+      }
+    }
+    return { width: n, height: n, data }
+  }
+  for (const [cell, minPaths] of [[32, 7_800], [16, 31_000]] as const) {
+    const start = performance.now()
+    const out = traceImage(checker(cell), { ...engineOptionsFor('professional'), sourceFormat: 'png' })
+    const seconds = (performance.now() - start) / 1000
+    assertTrue(out.stats.pathCount >= minPaths, `${cell} px checkerboard keeps its squares (${out.stats.pathCount} paths, want >= ${minPaths})`)
+    assertTrue(seconds < 25, `${cell} px checkerboard traced in ${seconds.toFixed(1)} s`)
+    console.log(`PASS: 2000² ${cell} px checkerboard keeps ${out.stats.pathCount} paths (${seconds.toFixed(1)} s)`)
+  }
+  const start = performance.now()
+  const dense = traceImage(checker(8), { ...engineOptionsFor('professional'), sourceFormat: 'png' })
+  const seconds = (performance.now() - start) / 1000
+  assertTrue(dense.svg.startsWith('<svg') && seconds < 25, `8 px checkerboard (above the hard cap) completes (${seconds.toFixed(1)} s)`)
+  console.log(`PASS: 2000² 8 px checkerboard (62,500 regions, above the hard cap) completes in ${seconds.toFixed(1)} s with ${dense.stats.pathCount} paths`)
+}
+
 console.log('\nAll high-resolution and hairline smoke tests passed.')

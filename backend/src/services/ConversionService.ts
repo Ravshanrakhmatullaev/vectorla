@@ -198,6 +198,9 @@ export class ConversionService {
       )
       return { data: new TextEncoder().encode(pipelineResult.svg).buffer as ArrayBuffer, format: 'svg', fallback: false }
     } catch (error) {
+      // Out of memory: the fallback decodes the full image again and would
+      // only make it worse; the job fails (nothing is charged).
+      if (error instanceof RangeError) throw error
       console.error(
         `[professional-trace] engine failed for job "${jobId}" — falling back to the ImageTracer engine:`,
         error instanceof Error ? error.message : error,
@@ -229,6 +232,7 @@ export class ConversionService {
       // of the Vectorla engine fall back to the ImageTracer engine, so a
       // tracing bug degrades output quality instead of failing the job.
       if (!(error instanceof NotImplementedError) && analysis.recommendedProvider !== 'vectorla') throw error
+      if (error instanceof RangeError) throw error // out of memory: see traceProfessional
       console.error(
         `Provider "${analysis.recommendedProvider}" failed for job "${jobId}" — falling back to the ImageTracer engine:`,
         error instanceof Error ? error.message : error,
@@ -310,6 +314,9 @@ export function isPermanentJobError(error: unknown): boolean {
     error instanceof UnsupportedMediaTypeError ||
     error instanceof ValidationError ||
     error instanceof NotFoundError ||
+    // Memory exhaustion (a failed ArrayBuffer/WebAssembly allocation): the
+    // same input would fail again on every retry.
+    error instanceof RangeError ||
     (error instanceof Error && error.message.startsWith('Failed to decode'))
   )
 }

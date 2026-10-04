@@ -70,6 +70,8 @@ export interface TraceEngineOptions {
   alphaThreshold: number
   /** Upper bound on output regions; speckle removal coarsens adaptively above it. */
   maxRegions: number
+  /** Regions kept when merging down to maxRegions would collapse a regular dense pattern (memory-bound). */
+  maxRegionsHard: number
   /** Restore sharp corners rounded off by anti-aliasing and resampling. */
   snapCorners: boolean
   /** Reconstruct smooth color ramps as SVG linear gradients instead of flat bands. */
@@ -119,6 +121,7 @@ export const DEFAULT_ENGINE_OPTIONS: TraceEngineOptions = {
   thinPeakScale: 1,
   alphaThreshold: 128,
   maxRegions: 6000,
+  maxRegionsHard: 40_000,
   snapCorners: true,
   gradients: false,
   sourceFormat: 'unknown',
@@ -379,11 +382,27 @@ function traceWith(source: { image: RgbaImage | null }, overrides: Partial<Trace
     // Region budget: pathological inputs (pure noise, dithering, halftones)
     // would otherwise produce tens of thousands of paths and megabyte SVGs.
     // Coarsen speckle removal until the region count is sane.
+    //
+    // On regular dense patterns (a fine checkerboard, pinstripes) one pass
+    // cascades instead: recoloring a small square joins the neighbours of
+    // the new color through it, until the image is a single shape. Such a
+    // pass (from over budget to under a quarter of it at once) is undone,
+    // and the detailed result is kept, up to maxRegionsHard regions: a
+    // 2000² 16 px checkerboard (31k regions) peaks at ~51 MB live, an 8 px
+    // one (125k) at ~122 MB, so beyond the hard cap the cascade is accepted.
     let budgetArea = minArea
     while (regions.count > options.maxRegions && budgetArea < n / 50) {
       budgetArea *= 2
+      const undo = regions.count <= options.maxRegionsHard ? labels.slice() : null
+      const countBefore = regions.count
       labels = mergeSmallRegions(labels, width, height, palette, budgetArea, scratch)
       regions = connectedComponents(labels, width, height, scratch)
+      if (undo && regions.count < options.maxRegions / 4) {
+        labels = undo
+        regions = connectedComponents(labels, width, height, scratch)
+        console.warn(`Region budget: a merge pass collapsed ${countBefore} regions to fewer than ${Math.ceil(options.maxRegions / 4)}; kept the detailed result`)
+        break
+      }
     }
     lap('regions')
 

@@ -9,6 +9,7 @@ import { InsufficientCreditsError, PayloadTooLargeError, UnsupportedMediaTypeErr
 export const PUBLIC_JOB_ERRORS = {
   insufficientCredits: 'Not enough credits for this conversion.',
   tooLarge: 'The image is too large to convert.',
+  tooComplex: 'The image is too complex to convert. Try a smaller or simpler image.',
   unreadable: 'The image could not be read. It may be damaged or in an unsupported format.',
   timedOut: 'The conversion timed out. Any credits charged were refunded.',
   failed: 'The conversion failed. Any credits charged were refunded.',
@@ -18,6 +19,7 @@ export const PUBLIC_JOB_ERRORS = {
 export function publicJobError(error: unknown): string {
   if (error instanceof InsufficientCreditsError) return PUBLIC_JOB_ERRORS.insufficientCredits
   if (error instanceof PayloadTooLargeError) return PUBLIC_JOB_ERRORS.tooLarge
+  if (error instanceof RangeError) return PUBLIC_JOB_ERRORS.tooComplex
   if (error instanceof UnsupportedMediaTypeError || error instanceof ValidationError) return PUBLIC_JOB_ERRORS.unreadable
   if (error instanceof Error && /^Failed to decode /.test(error.message)) return PUBLIC_JOB_ERRORS.unreadable
   return PUBLIC_JOB_ERRORS.failed

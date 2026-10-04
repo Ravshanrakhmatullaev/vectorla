@@ -104,7 +104,8 @@ function peakOf(make: () => { width: number; height: number; data: Uint8ClampedA
   return { peak, where, working: `${result.stats.workingWidth}x${result.stats.workingHeight}` }
 }
 
-// Measured: 39.5 MB (artwork, both modes), 19.1 MB (photo). Workerd measurements of real
+// Measured: 39.3 MB (artwork, Professional), 43.1 MB (artwork, Quick: includes
+// the dense-pattern undo copy of the labels, traceImage.ts), 19.1 MB (photo). Workerd measurements of real
 // 4 MP uploads (BENCHMARKS.md): 61 MB photo at full resolution (not used), 47 MB logo.
 const BUDGET_ARTWORK_4MP_MB = 46
 const BUDGET_PHOTO_4MP_MB = 23
@@ -121,6 +122,29 @@ for (const mode of ['quick', 'professional'] as const) {
   assertTrue(ph.peak <= BUDGET_PHOTO_4MP_MB, `${mode}: 4 MP photo live peak ${ph.peak.toFixed(1)} MB at ${ph.where} exceeds ${BUDGET_PHOTO_4MP_MB} MB`)
   console.log(`PASS: ${mode} 4 MP photo at ${ph.working}: live peak ${ph.peak.toFixed(1)} MB (${ph.where}) <= ${BUDGET_PHOTO_4MP_MB} MB`)
 }
+
+// Dense regular pattern: a 2000² checkerboard of 16 px squares has 15,625
+// regions per colour, above the soft region budget. The budget pass no longer
+// collapses it (traceImage.ts maxRegionsHard), so every square is kept, at a
+// higher peak than ordinary artwork. Measured 58.8 MB.
+const BUDGET_CHECKER_16_MB = 68
+{
+  const checker = () => {
+    const n = 2000
+    const data = new Uint8ClampedArray(n * n * 4)
+    for (let y = 0; y < n; y++) {
+      for (let x = 0; x < n; x++) {
+        const v = (((x >> 4) + (y >> 4)) & 1) * 255
+        data.set([v, v, v, 255], (y * n + x) * 4)
+      }
+    }
+    return { width: n, height: n, data }
+  }
+  const c = peakOf(checker, 'professional')
+  assertTrue(c.peak <= BUDGET_CHECKER_16_MB, `16 px checkerboard live peak ${c.peak.toFixed(1)} MB at ${c.where} exceeds ${BUDGET_CHECKER_16_MB} MB`)
+  console.log(`PASS: 2000² 16 px checkerboard: live peak ${c.peak.toFixed(1)} MB (${c.where}) <= ${BUDGET_CHECKER_16_MB} MB`)
+}
+
 /** RGBA PNG with stored (uncompressed) deflate blocks, so building it needs no PNG codec instance. */
 function storedPng(width: number, height: number, rgba: Uint8ClampedArray): ArrayBuffer {
   const crcTable = new Int32Array(256).map((_, n) => {
