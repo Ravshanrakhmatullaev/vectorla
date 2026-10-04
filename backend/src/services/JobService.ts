@@ -1,4 +1,4 @@
-import type { Job } from '../types'
+import type { Job, UserPlan } from '../types'
 import type { Env } from '../env'
 import { QueueService } from './QueueService'
 import { createQueueClient } from '../integrations/queue'
@@ -10,6 +10,7 @@ import type { ConversionsRepository } from '../repositories/ConversionsRepositor
 import { createConversionsRepository } from '../repositories/createConversionsRepository'
 import { createR2Client } from '../integrations/r2'
 import { StorageService } from './StorageService'
+import { UsageLimitsService, createUsageLimitsService } from './UsageLimitsService'
 import { CreditsService, createCreditsService } from './CreditsService'
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError, JobLeaseHeldError } from '../errors'
 import { JOB_LEASE_MS } from '../config'
@@ -29,6 +30,8 @@ export interface CreateJobInput {
    * belong to the caller, isn't for this upload, or isn't completed.
    */
   supersedesJobId?: string
+  /** When set (POST /jobs), the plan's concurrent-conversion limit is enforced for a new job. */
+  plan?: UserPlan
 }
 
 export class JobService {
@@ -43,6 +46,7 @@ export class JobService {
     private readonly credits?: CreditsService,
     private readonly conversions?: ConversionsRepository,
     private readonly storage?: StorageService,
+    private readonly limits?: UsageLimitsService,
   ) {}
 
   /**
@@ -64,6 +68,7 @@ export class JobService {
 
     const active = await this.repository.findActiveByUploadId(input.uploadId)
     if (active) return active
+    if (input.plan && this.limits) await this.limits.assertCanStartJob(input.userId, input.plan)
 
     if (input.supersedesJobId && this.credits && this.conversions && this.storage) {
       const superseded = await this.repository.findById(input.supersedesJobId)
@@ -213,5 +218,5 @@ export function createJobService(env: Env): JobService {
   const queueService = new QueueService(queueClient)
   const credits = createCreditsService(env)
   const storage = new StorageService(createR2Client(env.UPLOADS_BUCKET), env.DOWNLOAD_URL_SECRET)
-  return new JobService(repository, uploads, queueService, credits, createConversionsRepository(env), storage)
+  return new JobService(repository, uploads, queueService, credits, createConversionsRepository(env), storage, createUsageLimitsService(env))
 }

@@ -110,6 +110,12 @@ export class SupabaseJobsRepository implements JobsRepository {
     return data ? mapRowToJob(data) : null
   }
 
+  async countActiveByUser(userId: string): Promise<number> {
+    const { count, error } = await this.client.from('jobs').select('id', { count: 'exact', head: true }).eq('user_id', userId).in('status', ['queued', 'processing'])
+    if (error) throw new Error(`Failed to count active jobs: ${error.message}`)
+    return count ?? 0
+  }
+
   async findByUploadId(uploadId: string): Promise<Job[]> {
     const { data, error } = await this.client.from('jobs').select().eq('upload_id', uploadId).returns<JobRow[]>()
     if (error) throw new Error(`Failed to list jobs for upload: ${error.message}`)

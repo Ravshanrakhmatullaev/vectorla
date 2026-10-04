@@ -36,5 +36,18 @@ export class JobLeaseHeldError extends Error {
   }
 }
 
+/** A usage limit was hit (uploads per period, concurrent conversions) — HTTP 429 with Retry-After. */
+export class RateLimitedError extends Error {
+  constructor(
+    message: string,
+    readonly retryAfterSeconds: number,
+  ) {
+    super(message)
+  }
+}
+
+/** The user's storage quota would be exceeded — HTTP 429 until older files expire (no Retry-After). */
+export class QuotaExceededError extends Error {}
+
 /** Thrown by still-stubbed routes/services (see backend/README.md) — routes map this to HTTP 501. */
 export class NotImplementedError extends Error {}

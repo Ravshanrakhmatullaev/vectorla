@@ -67,6 +67,20 @@ export class SupabaseUploadsRepository implements UploadsRepository {
     return data ? mapRowToUpload(data) : null
   }
 
+  async countByUserSince(userId: string, since: string): Promise<number> {
+    const { count, error } = await this.client.from('uploads').select('id', { count: 'exact', head: true }).eq('user_id', userId).gte('created_at', since)
+    if (error) throw new Error(`Failed to count recent uploads: ${error.message}`)
+    return count ?? 0
+  }
+
+  async storedBytesByUser(userId: string): Promise<number> {
+    // Summed here: PostgREST aggregates are off by default on Supabase. Rows
+    // are bounded by the upload rate limits within the retention period.
+    const { data, error } = await this.client.from('uploads').select('size_bytes').eq('user_id', userId).limit(100_000).returns<Array<{ size_bytes: number }>>()
+    if (error) throw new Error(`Failed to sum stored upload bytes: ${error.message}`)
+    return (data ?? []).reduce((sum, row) => sum + Number(row.size_bytes), 0)
+  }
+
   async findByUserAndFilename(userId: string, fileName: string): Promise<Upload | null> {
     const { data, error } = await this.client
       .from('uploads')

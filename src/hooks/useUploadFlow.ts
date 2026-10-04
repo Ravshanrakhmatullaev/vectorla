@@ -12,7 +12,7 @@ const POLL_TIMEOUT_MS = 10 * 60 * 1000
 const MAX_CONSECUTIVE_POLL_ERRORS = 5
 
 /** Which of the task's four required error states a failure maps to. */
-export type UploadFailureKind = 'auth' | 'insufficient-credits' | 'generic'
+export type UploadFailureKind = 'auth' | 'insufficient-credits' | 'rate-limited' | 'quota' | 'too-large' | 'unsupported' | 'generic'
 
 export type UploadFlowState =
   | { status: 'idle' }
@@ -197,6 +197,10 @@ function classifyError(error: unknown): UploadFailureKind {
   if (error instanceof ApiError) {
     if (error.code === 'UNAUTHORIZED') return 'auth'
     if (error.code === 'INSUFFICIENT_CREDITS') return 'insufficient-credits'
+    if (error.code === 'RATE_LIMITED') return 'rate-limited'
+    if (error.code === 'QUOTA_EXCEEDED') return 'quota'
+    if (error.status === 413) return 'too-large'
+    if (error.status === 415) return 'unsupported'
   }
   return 'generic'
 }

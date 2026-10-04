@@ -38,6 +38,12 @@ export class InMemoryJobsRepository implements JobsRepository {
     return this.activeFor(uploadId)
   }
 
+  async countActiveByUser(userId: string): Promise<number> {
+    let count = 0
+    for (const job of this.jobsById.values()) if (job.userId === userId && (job.status === 'queued' || job.status === 'processing')) count++
+    return count
+  }
+
   async findByUploadId(uploadId: string): Promise<Job[]> {
     return Array.from(this.jobsById.values()).filter((job) => job.uploadId === uploadId)
   }

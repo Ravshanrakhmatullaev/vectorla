@@ -44,6 +44,16 @@ crons = ["*/15 * * * *"]
 [limits]
 cpu_ms = 60000
 
+# Per-client-IP request limit (Cloudflare Workers Rate Limiting) — REQUIRES
+# OWNER APPROVAL before enabling (DEPLOYMENT.md "Launch checklist"). Until it
+# is enabled the code runs without it (env.ts API_RATE_LIMITER is optional);
+# the per-user upload/quota/concurrency limits apply either way. Pick an
+# account-unique namespace_id when enabling:
+# [[ratelimits]]
+# name = "API_RATE_LIMITER"
+# namespace_id = "1001"
+# simple = { limit = 120, period = 60 }
+
 [vars]
 # Safe deployment default. `npm run dev` overrides this value explicitly;
 # staging has its own environment block at the end of this file.
@@ -78,6 +88,12 @@ VECTORIZATION_PROVIDER = "vectorla"
 #   wrangler secret put SUPABASE_URL --env staging   (and the other secrets)
 [env.staging]
 name = "vectorla-api-staging"
+
+# Staging rate limiter (see the production [[ratelimits]] note above):
+# [[env.staging.ratelimits]]
+# name = "API_RATE_LIMITER"
+# namespace_id = "1002"
+# simple = { limit = 120, period = 60 }
 
 [env.staging.vars]
 ENVIRONMENT = "staging"

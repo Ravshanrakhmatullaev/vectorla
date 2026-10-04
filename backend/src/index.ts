@@ -5,7 +5,7 @@ import { enableDebuggerCheckpoints } from './engine/memoryCheckpoint'
 import type { ConversionQueueMessage } from './integrations/queue'
 import { createJobService } from './services/JobService'
 import { createConversionService } from './services/ConversionService'
-import { NotFoundError } from './errors'
+import { NotFoundError, RateLimitedError } from './errors'
 import { isDeadLetterQueue, handleConversionMessages, handleDeadLetters, sweepStaleJobs } from './queueConsumer'
 import { createRetentionService } from './services/RetentionService'
 import { mapErrorToResponse } from './api/response'
@@ -96,6 +96,24 @@ async function withWasmModules(env: Env): Promise<Env> {
   return merged
 }
 
+/**
+ * Per-client-IP burst limit via the optional Cloudflare Rate Limiting
+ * binding: its counters live at the edge, so this costs no database or
+ * Supabase Auth call. A limiter error never blocks a request.
+ */
+async function enforceClientRateLimit(request: Request, env: Env): Promise<void> {
+  if (!env.API_RATE_LIMITER) return
+  const ip = request.headers.get('CF-Connecting-IP')
+  if (!ip) return
+  let allowed = true
+  try {
+    ;({ success: allowed } = await env.API_RATE_LIMITER.limit({ key: ip }))
+  } catch (error) {
+    console.error('Rate limiter unavailable, allowing the request:', error)
+  }
+  if (!allowed) throw new RateLimitedError('Too many requests; slow down and try again shortly', 60)
+}
+
 export default {
   async fetch(request: Request, rawEnv: Env): Promise<Response> {
     const env = await withWasmModules(rawEnv)
@@ -109,6 +127,7 @@ export default {
     let response: Response
     try {
       assertRequiredBackendSecrets(env)
+      await enforceClientRateLimit(request, env)
       response = await routeRequest(url, request, env, requestId)
     } catch (error) {
       response = mapErrorToResponse(error, requestId)

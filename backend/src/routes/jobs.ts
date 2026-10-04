@@ -1,6 +1,7 @@
 import type { Env } from '../env'
 import type { Conversion } from '../types'
 import { createJobService } from '../services/JobService'
+import { createProfileService } from '../services/ProfileService'
 import { createConversionService } from '../services/ConversionService'
 import { requireAuth } from '../middleware/requireAuth'
 import { jsonSuccess, jsonError, mapErrorToResponse, withNoStore } from '../api/response'
@@ -40,9 +41,11 @@ async function handleCreateJob(request: Request, env: Env, requestId: string): P
   }
 
   try {
+    const plan = await createProfileService(env).getRequiredPlan(userId)
     const jobService = createJobService(env)
     const job = await jobService.createJob({
       userId,
+      plan,
       uploadId: body.uploadId,
       preset: typeof body.preset === 'string' ? body.preset : undefined,
       settings: isRecordOfNumbers(body.settings) ? body.settings : undefined,

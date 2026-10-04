@@ -85,6 +85,10 @@ export const CREDIT_COST_BASE_CONVERSION = 1
 export const CREDIT_COST_ADDITIONAL_EXPORT_FORMAT = 1
 export const CREDIT_COST_PRINT_READY_MODE = 1
 
+// Abuse limits (uploadsPerTenMinutes, uploadsPerDay, storageQuotaBytes,
+// maxActiveJobs) sit far above normal use: a designer tracing a batch of
+// logos uploads a few dozen files an hour, holds a few hundred MB within the
+// 30-day retention, and waits for one or two conversions at a time.
 export const PLAN_LIMITS: PlanLimitsByPlan = {
   free: {
     monthlyCredits: 10,
@@ -93,6 +97,10 @@ export const PLAN_LIMITS: PlanLimitsByPlan = {
     exportFormats: ['svg', 'png'],
     printReadyIncluded: false,
     apiAccess: false,
+    uploadsPerTenMinutes: 20,
+    uploadsPerDay: 100,
+    storageQuotaBytes: 250 * 1024 * 1024,
+    maxActiveJobs: 2,
   },
   starter: {
     monthlyCredits: 100,
@@ -101,6 +109,10 @@ export const PLAN_LIMITS: PlanLimitsByPlan = {
     exportFormats: ['svg', 'png', 'pdf'],
     printReadyIncluded: true,
     apiAccess: false,
+    uploadsPerTenMinutes: 60,
+    uploadsPerDay: 600,
+    storageQuotaBytes: 2 * 1024 * 1024 * 1024,
+    maxActiveJobs: 4,
   },
   pro: {
     monthlyCredits: 500,
@@ -109,6 +121,10 @@ export const PLAN_LIMITS: PlanLimitsByPlan = {
     exportFormats: ['svg', 'pdf', 'eps', 'dxf', 'png'],
     printReadyIncluded: true,
     apiAccess: false,
+    uploadsPerTenMinutes: 60,
+    uploadsPerDay: 1000,
+    storageQuotaBytes: 10 * 1024 * 1024 * 1024,
+    maxActiveJobs: 6,
   },
   business: {
     monthlyCredits: 5000,
@@ -117,5 +133,9 @@ export const PLAN_LIMITS: PlanLimitsByPlan = {
     exportFormats: ['svg', 'pdf', 'eps', 'dxf', 'png'],
     printReadyIncluded: true,
     apiAccess: true,
+    uploadsPerTenMinutes: 120,
+    uploadsPerDay: 3000,
+    storageQuotaBytes: 50 * 1024 * 1024 * 1024,
+    maxActiveJobs: 10,
   },
 }

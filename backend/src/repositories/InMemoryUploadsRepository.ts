@@ -27,6 +27,18 @@ export class InMemoryUploadsRepository implements UploadsRepository {
     return this.uploadsById.get(id) ?? null
   }
 
+  async countByUserSince(userId: string, since: string): Promise<number> {
+    let count = 0
+    for (const upload of this.uploadsById.values()) if (upload.userId === userId && upload.createdAt >= since) count++
+    return count
+  }
+
+  async storedBytesByUser(userId: string): Promise<number> {
+    let total = 0
+    for (const upload of this.uploadsById.values()) if (upload.userId === userId) total += upload.sizeBytes
+    return total
+  }
+
   async findByUserAndFilename(userId: string, fileName: string): Promise<Upload | null> {
     for (const upload of this.uploadsById.values()) {
       if (upload.userId === userId && upload.originalFileName === fileName) return upload

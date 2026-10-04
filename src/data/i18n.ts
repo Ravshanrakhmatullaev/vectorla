@@ -169,6 +169,19 @@ export interface Translation {
     uploadFailedTitle: string
     authRequiredTitle: string
     insufficientCreditsTitle: string
+    rateLimitedTitle: string
+    quotaTitle: string
+    /** Shown under a failure title; the server's own error text is never shown. */
+    failureMessages: {
+      upload: string
+      processing: string
+      auth: string
+      insufficientCredits: string
+      rateLimited: string
+      quota: string
+      tooLarge: string
+      unsupported: string
+    }
     fetchResultFailedTitle: string
     retry: string
     download: string
@@ -361,6 +374,18 @@ export const translations: Record<Language, Translation> = {
       uploadFailedTitle: 'Upload failed',
       authRequiredTitle: 'Sign in required',
       insufficientCreditsTitle: 'Not enough credits',
+      rateLimitedTitle: 'Too many requests',
+      quotaTitle: 'Storage full',
+      failureMessages: {
+        upload: 'The file could not be uploaded. Please try again.',
+        processing: 'Something went wrong while tracing. Any credits used were refunded — please try again.',
+        auth: 'Sign in to upload and convert images.',
+        insufficientCredits: 'You do not have enough credits for this conversion.',
+        rateLimited: 'You are uploading very quickly. Please wait a few minutes and try again.',
+        quota: 'Your storage is full. Uploads are deleted automatically 30 days after upload.',
+        tooLarge: 'This file is too large for your plan. Try a smaller or more compressed file.',
+        unsupported: 'Unsupported file. Please upload a PNG, JPG or WebP image.',
+      },
       fetchResultFailedTitle: 'Could not load result',
       retry: 'Retry',
       download: 'Download',
@@ -712,6 +737,18 @@ export const translations: Record<Language, Translation> = {
       uploadFailedTitle: 'Yuklash muvaffaqiyatsiz tugadi',
       authRequiredTitle: 'Tizimga kirish talab qilinadi',
       insufficientCreditsTitle: 'Kredit yetarli emas',
+      rateLimitedTitle: 'So\'rovlar juda ko\'p',
+      quotaTitle: 'Xotira to\'lgan',
+      failureMessages: {
+        upload: 'Faylni yuklab bo\'lmadi. Iltimos, qayta urinib ko\'ring.',
+        processing: 'Trassirovka paytida xatolik yuz berdi. Sarflangan kreditlar qaytarildi — iltimos, qayta urinib ko\'ring.',
+        auth: 'Rasmlarni yuklash va konvertatsiya qilish uchun tizimga kiring.',
+        insufficientCredits: 'Bu konvertatsiya uchun kreditlaringiz yetarli emas.',
+        rateLimited: 'Siz juda tez yuklayapsiz. Bir necha daqiqa kuting va qayta urinib ko\'ring.',
+        quota: 'Xotirangiz to\'lgan. Yuklangan fayllar 30 kundan keyin avtomatik o\'chiriladi.',
+        tooLarge: 'Bu fayl tarifingiz uchun juda katta. Kichikroq yoki ko\'proq siqilgan faylni sinab ko\'ring.',
+        unsupported: 'Fayl turi qo\'llab-quvvatlanmaydi. PNG, JPG yoki WebP rasmini yuklang.',
+      },
       fetchResultFailedTitle: 'Natijani yuklab bo\'lmadi',
       retry: 'Qayta urinish',
       download: 'Yuklab olish',
@@ -1071,6 +1108,18 @@ export const translations: Record<Language, Translation> = {
       uploadFailedTitle: 'Не удалось загрузить файл',
       authRequiredTitle: 'Требуется вход в систему',
       insufficientCreditsTitle: 'Недостаточно кредитов',
+      rateLimitedTitle: 'Слишком много запросов',
+      quotaTitle: 'Хранилище заполнено',
+      failureMessages: {
+        upload: 'Не удалось загрузить файл. Попробуйте ещё раз.',
+        processing: 'При трассировке произошла ошибка. Списанные кредиты возвращены — попробуйте ещё раз.',
+        auth: 'Войдите, чтобы загружать и конвертировать изображения.',
+        insufficientCredits: 'Для этой конвертации недостаточно кредитов.',
+        rateLimited: 'Вы загружаете файлы слишком часто. Подождите несколько минут и попробуйте снова.',
+        quota: 'Хранилище заполнено. Загруженные файлы автоматически удаляются через 30 дней после загрузки.',
+        tooLarge: 'Файл слишком большой для вашего тарифа. Попробуйте файл меньшего размера или с большим сжатием.',
+        unsupported: 'Неподдерживаемый файл. Загрузите изображение PNG, JPG или WebP.',
+      },
       fetchResultFailedTitle: 'Не удалось загрузить результат',
       retry: 'Повторить',
       download: 'Скачать',

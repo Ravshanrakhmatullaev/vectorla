@@ -15,6 +15,8 @@ export interface JobsRepository {
   /** An upload's currently in-flight job (queued/processing), if any — used to prevent duplicate active jobs per upload. */
   findActiveByUploadId(uploadId: string): Promise<Job | null>
   findByUploadId(uploadId: string): Promise<Job[]>
+  /** A user's queued or processing jobs — concurrent-conversion limit. */
+  countActiveByUser(userId: string): Promise<number>
   findPageByUserId(userId: string, limit: number, offset: number): Promise<{ jobs: Job[]; total: number }>
   /** Jobs in `status` whose updatedAt is older than `before` (ISO) — for the stale-job sweeper. */
   findStale(status: 'queued' | 'processing', before: string, limit: number): Promise<Job[]>

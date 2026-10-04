@@ -8,6 +8,8 @@ import {
   ConflictError,
   InsufficientCreditsError,
   NotImplementedError,
+  RateLimitedError,
+  QuotaExceededError,
 } from '../errors'
 
 /**
@@ -25,6 +27,8 @@ export type ApiErrorCode =
   | 'NOT_FOUND'
   | 'CONFLICT'
   | 'INSUFFICIENT_CREDITS'
+  | 'RATE_LIMITED'
+  | 'QUOTA_EXCEEDED'
   | 'INTERNAL_ERROR'
 
 export interface SuccessResponse<T> {
@@ -106,6 +110,12 @@ export function mapErrorToResponse(error: unknown, requestId: string): Response 
   if (error instanceof ConflictError) return jsonError('CONFLICT', error.message, 409, requestId)
   if (error instanceof InsufficientCreditsError) return jsonError('INSUFFICIENT_CREDITS', error.message, 402, requestId)
   if (error instanceof NotImplementedError) return jsonError('INTERNAL_ERROR', error.message, 501, requestId)
+  if (error instanceof RateLimitedError) {
+    const response = jsonError('RATE_LIMITED', error.message, 429, requestId)
+    response.headers.set('Retry-After', String(Math.max(1, Math.ceil(error.retryAfterSeconds))))
+    return response
+  }
+  if (error instanceof QuotaExceededError) return jsonError('QUOTA_EXCEEDED', error.message, 429, requestId)
 
   console.error(`[${requestId}] Unexpected error:`, error)
   return jsonError('INTERNAL_ERROR', 'Internal Server Error', 500, requestId)

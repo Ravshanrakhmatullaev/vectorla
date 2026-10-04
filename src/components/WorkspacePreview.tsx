@@ -28,7 +28,8 @@ import { requestAuthDialog } from '@/lib/authDialogEvents'
 import { formatCredits } from '@/utils/formatCredits'
 import { useCompareSlider } from '@/hooks/useCompareSlider'
 import { useDropzone } from '@/hooks/useDropzone'
-import { useUploadFlow } from '@/hooks/useUploadFlow'
+import { useUploadFlow, type UploadFailureKind } from '@/hooks/useUploadFlow'
+import type { Translation } from '@/data/i18n'
 import { isBackendConfigured } from '@/lib/api/client'
 import { fetchConversionFile } from '@/lib/api/conversions'
 import { cn } from '@/utils/cn'
@@ -166,10 +167,16 @@ export function WorkspacePreview() {
         ? t.workspace.authRequiredTitle
         : uploadState.kind === 'insufficient-credits'
           ? t.workspace.insufficientCreditsTitle
-          : uploadState.stage === 'upload'
-            ? t.workspace.uploadFailedTitle
-            : t.workspace.statusFailedTitle
+          : uploadState.kind === 'rate-limited'
+            ? t.workspace.rateLimitedTitle
+            : uploadState.kind === 'quota'
+              ? t.workspace.quotaTitle
+              : uploadState.stage === 'upload'
+                ? t.workspace.uploadFailedTitle
+                : t.workspace.statusFailedTitle
       : ''
+  // Translated per failure kind: the server's error text can be internal and is English-only.
+  const failureMessage = uploadState.status === 'failed' ? failureMessageFor(uploadState.kind, uploadState.stage, t.workspace.failureMessages) : ''
   const FailureIcon = uploadState.status === 'failed' && uploadState.kind === 'auth' ? Lock : uploadState.status === 'failed' && uploadState.kind === 'insufficient-credits' ? Coins : AlertTriangle
   const isAiRecommended = analysis ? analysis.recommendedProvider === 'vision' || analysis.recommendedProvider === 'openai' : false
   const ImageTypeIcon = analysis ? IMAGE_TYPE_ICONS[analysis.imageType] : ImageIcon
@@ -369,7 +376,7 @@ export function WorkspacePreview() {
                       <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[var(--bg-elevated)]/95 p-6 text-center">
                         <FailureIcon className="text-red-500" size={28} />
                         <p className="text-sm font-semibold text-[var(--ink)]">{failureTitle}</p>
-                        <p className="max-w-[220px] text-xs text-[var(--ink-faint)]">{uploadState.message}</p>
+                        <p className="max-w-[220px] text-xs text-[var(--ink-faint)]">{failureMessage}</p>
                         <Button variant="secondary" size="sm" onClick={retry}>
                           <RefreshCcw size={14} />
                           {t.workspace.retry}
@@ -605,4 +612,27 @@ export function WorkspacePreview() {
       </div>
     </section>
   )
+}
+
+function failureMessageFor(
+  kind: UploadFailureKind,
+  stage: 'upload' | 'processing',
+  messages: Translation['workspace']['failureMessages'],
+): string {
+  switch (kind) {
+    case 'auth':
+      return messages.auth
+    case 'insufficient-credits':
+      return messages.insufficientCredits
+    case 'rate-limited':
+      return messages.rateLimited
+    case 'quota':
+      return messages.quota
+    case 'too-large':
+      return messages.tooLarge
+    case 'unsupported':
+      return messages.unsupported
+    default:
+      return stage === 'upload' ? messages.upload : messages.processing
+  }
 }

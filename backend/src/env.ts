@@ -35,6 +35,18 @@ export interface Env {
    * Never set in staging or production.
    */
   MEMORY_CHECKPOINTS?: string
+  /**
+   * Optional Cloudflare Workers Rate Limiting binding (wrangler.toml
+   * [[ratelimits]], see DEPLOYMENT.md): per-client-IP request limit checked
+   * before routing. Absent locally and until it is configured; the per-user
+   * limits in services/UsageLimitsService.ts apply either way.
+   */
+  API_RATE_LIMITER?: RateLimitBinding
+}
+
+/** The Workers Rate Limiting binding's API (a subset of @cloudflare/workers-types' RateLimit). */
+export interface RateLimitBinding {
+  limit(options: { key: string }): Promise<{ success: boolean }>
 }
 
 /**

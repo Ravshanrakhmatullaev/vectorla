@@ -3,6 +3,8 @@ import { createUploadService } from '../services/UploadService'
 import { createJobService } from '../services/JobService'
 import { createImageAnalysisService } from '../services/ImageAnalysisService'
 import { createProfileService } from '../services/ProfileService'
+import { createUsageLimitsService } from '../services/UsageLimitsService'
+import type { UserPlan } from '../types'
 import { requireAuth } from '../middleware/requireAuth'
 import { jsonSuccess, jsonError, mapErrorToResponse } from '../api/response'
 import { UnauthorizedError } from '../errors'
@@ -21,6 +23,17 @@ export async function handleUploadsRoute(request: Request, env: Env, requestId: 
   } catch (error) {
     if (error instanceof UnauthorizedError) return mapErrorToResponse(error, requestId)
     throw error
+  }
+
+  // Abuse limits before the body is read (services/UsageLimitsService.ts):
+  // uploads per 10 minutes / per day and concurrent conversions.
+  const limits = createUsageLimitsService(env)
+  let plan: UserPlan
+  try {
+    plan = await createProfileService(env).getRequiredPlan(userId)
+    await limits.assertCanStartUpload(userId, plan)
+  } catch (error) {
+    return mapErrorToResponse(error, requestId)
   }
 
   // The body is read with a byte limit: a missing or false Content-Length
@@ -48,7 +61,7 @@ export async function handleUploadsRoute(request: Request, env: Env, requestId: 
   }
 
   try {
-    const plan = await createProfileService(env).getRequiredPlan(userId)
+    await limits.assertStorageAvailable(userId, plan, file.size)
     const buffer = await file.arrayBuffer()
     const uploadService = createUploadService(env)
     const upload = await uploadService.createUpload({

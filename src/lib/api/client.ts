@@ -10,6 +10,8 @@ export type ApiErrorCode =
   | 'NOT_FOUND'
   | 'CONFLICT'
   | 'INSUFFICIENT_CREDITS'
+  | 'RATE_LIMITED'
+  | 'QUOTA_EXCEEDED'
   | 'INTERNAL_ERROR'
   | 'NETWORK_ERROR'
 
