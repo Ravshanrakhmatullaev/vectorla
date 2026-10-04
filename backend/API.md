@@ -91,8 +91,11 @@ Passing `preset: "professional"` (the exact value of
 `src/pipeline/ProfessionalTracePipeline.ts`) traces with the Professional engine
 profile (64 colors, finer color separation, gradient reconstruction; see
 `src/engine/profiles.ts`) instead of the Quick profile, and bills `PROFESSIONAL_TRACE_CREDIT_MULTIPLIER` (2x) the base credit
-cost instead of 1x — see `ConversionService.processJob`. Any other preset
-value (including omitted) is unaffected.
+cost instead of 1x — see `ConversionService.processJob`. If the Professional
+engine fails and the job falls back to the basic ImageTracer engine, it is billed
+1x. Credits are charged once the result exists, before it is stored, atomically
+and at most once per job; a job that fails is refunded. Any other preset value
+(including omitted) is unaffected.
 
 `supersedesJobId` (Phase 26): the id of an already-*completed* job for the
 same upload that this new job replaces — e.g. re-tracing an upload with

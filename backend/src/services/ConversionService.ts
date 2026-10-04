@@ -42,12 +42,15 @@ export class ConversionService {
     private readonly imageAnalysis: ImageAnalysisService,
     private readonly decoderWasm: RasterDecoderWasm,
     private readonly credits: CreditsService,
+    // Injectable so tests can make the Professional engine fail.
+    private readonly professionalPipeline: typeof runDecodedTracePipeline = runDecodedTracePipeline,
   ) {}
 
   /**
    * Runs the conversion pipeline for a queued job: claim it (processing
-   * lease), charge its credits (atomic, at most once per job), trace, store
-   * the result in R2, record the Conversion, mark the job completed.
+   * lease), check the balance, trace, charge the exact price (atomic, at
+   * most once per job; 1 credit when Professional falls back to ImageTracer),
+   * store the result in R2, record the Conversion, mark the job completed.
    *
    * Safe under queue redelivery and crashes:
    *  - completed job  -> returns the existing conversion (no re-trace, no second charge)
@@ -91,20 +94,31 @@ export class ConversionService {
 
     // TODO(backend): formatCount/printReady are hardcoded until Job carries
     // the caller's requested formats/print-ready flag — see calculateRequiredCredits.
-    // Professional Trace bills PROFESSIONAL_TRACE_CREDIT_MULTIPLIER times the base cost.
+    // Professional Trace bills PROFESSIONAL_TRACE_CREDIT_MULTIPLIER times the
+    // base cost — unless it fell back to the ImageTracer engine, which is
+    // billed like Quick Trace.
     const isProfessionalTrace = claimed.preset === PROFESSIONAL_TRACE_JOB_PRESET
-    const requiredCredits = calculateRequiredCredits(1, false) * (isProfessionalTrace ? PROFESSIONAL_TRACE_CREDIT_MULTIPLIER : 1)
-    // Charged up front, atomically and at most once per job: concurrent jobs
-    // can't overdraw the balance, and a retried job is never charged twice.
-    // A job that later fails terminally is refunded (failJob).
-    await this.credits.chargeJob(claimed.userId, claimed.id, requiredCredits, `Conversion for job "${claimed.id}"`)
+    const baseCredits = calculateRequiredCredits(1, false)
+    const fullCredits = baseCredits * (isProfessionalTrace ? PROFESSIONAL_TRACE_CREDIT_MULTIPLIER : 1)
+    // Cheap pre-check (not a reservation) so a user without enough credits
+    // never costs a trace; the charge below is the atomic step.
+    await this.credits.ensureEnoughCredits(claimed.userId, fullCredits)
 
     const fileStream = await this.storage.getFile(upload.storageKey)
     const fileBytes = await new Response(fileStream).arrayBuffer()
 
-    const result = isProfessionalTrace
+    const { fallback, ...result } = isProfessionalTrace
       ? await this.traceProfessional(claimed.id, upload, fileBytes)
-      : await this.traceQuick(claimed.id, claimed.preset, upload, fileBytes)
+      : { ...(await this.traceQuick(claimed.id, claimed.preset, upload, fileBytes)), fallback: false }
+
+    // Charged once the price is known (atomic, at most once per job: a
+    // concurrent job of the same user that loses the race fails here with
+    // nothing stored or charged; a retried job is never charged twice).
+    // Only then is the result stored. A job that later fails terminally is
+    // refunded (failJob).
+    const charged = fallback ? baseCredits : fullCredits
+    await this.credits.chargeJob(claimed.userId, claimed.id, charged, `Conversion for job "${claimed.id}"${fallback ? ' (Professional Trace fell back to the basic engine)' : ''}`)
+
     // Deterministic key: a retry after a crash simply overwrites the object.
     const storageKey = `conversions/${claimed.userId}/${claimed.id}/output.${result.format}`
     await this.storage.storeFile(storageKey, result.data)
@@ -166,7 +180,7 @@ export class ConversionService {
   }
 
   /** Professional Trace: the engine's Professional profile, ImageTracer fallback on failure. */
-  private async traceProfessional(jobId: string, upload: Upload, fileBytes: ArrayBuffer): Promise<VectorizationResult> {
+  private async traceProfessional(jobId: string, upload: Upload, fileBytes: ArrayBuffer): Promise<VectorizationResult & { fallback: boolean }> {
     // Decode once and shrink to the working size right away: the
     // full-resolution pixels must not stay alive during the trace (memory).
     let analysis!: ImageAnalysis
@@ -174,7 +188,7 @@ export class ConversionService {
       analysis = analyzeImage(full)
     })
     try {
-      const pipelineResult = runDecodedTracePipeline(decoded, analysis, 'professional', sourceFormatFromMime(upload.mimeType))
+      const pipelineResult = this.professionalPipeline(decoded, analysis, 'professional', sourceFormatFromMime(upload.mimeType))
       console.log(
         `[professional-trace] job "${jobId}": provider=${pipelineResult.provider} profile=${pipelineResult.tracePreset} ` +
           `colors=${pipelineResult.engine.paletteSize} paths=${pipelineResult.engine.pathCount} ` +
@@ -182,13 +196,13 @@ export class ConversionService {
             .map((t) => `${t.name}:${t.durationMs.toFixed(1)}ms`)
             .join(', ')}]`,
       )
-      return { data: new TextEncoder().encode(pipelineResult.svg).buffer as ArrayBuffer, format: 'svg' }
+      return { data: new TextEncoder().encode(pipelineResult.svg).buffer as ArrayBuffer, format: 'svg', fallback: false }
     } catch (error) {
       console.error(
         `[professional-trace] engine failed for job "${jobId}" — falling back to the ImageTracer engine:`,
         error instanceof Error ? error.message : error,
       )
-      return createProviderByName('placeholder', this.decoderWasm).vectorize(upload, fileBytes, null)
+      return { ...(await createProviderByName('placeholder', this.decoderWasm).vectorize(upload, fileBytes, null)), fallback: true }
     }
   }
 
