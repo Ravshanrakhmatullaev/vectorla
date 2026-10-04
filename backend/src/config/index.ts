@@ -18,18 +18,28 @@ export const ALLOWED_UPLOAD_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp
 export const MAX_IMAGE_PIXELS = 4_000_000
 export const MAX_IMAGE_DIMENSION = 12_000
 
-// Hard ceiling on an upload request body, checked from Content-Length before
-// the body is buffered. Plan limits above this can't be honored by a Worker
-// holding the file in memory (see ROADMAP P6 on plan size limits).
-export const MAX_UPLOAD_BODY_BYTES = 30 * 1024 * 1024
+/**
+ * Largest file any plan may upload. Measured in workerd (BENCHMARKS.md
+ * "Launch readiness"): the worst 15 MB file (a 16-bit noise PNG) peaks at
+ * ~88 MB while decoding (file + 51 MB decoder memory + 16 MB pixels) and
+ * ~60 MB while tracing; a 25 MB file would reach ~110 MB of the Worker's
+ * 128 MB.
+ */
+export const MAX_UPLOAD_FILE_BYTES = 15 * 1024 * 1024
+
+/**
+ * Hard ceiling on an upload request body (the file plus multipart framing),
+ * enforced while the body is read (api/readLimitedBody.ts), with or without
+ * a Content-Length header.
+ */
+export const MAX_UPLOAD_BODY_BYTES = MAX_UPLOAD_FILE_BYTES + 1024 * 1024
 
 /**
  * Largest upload whose image analysis is computed in the upload request
  * itself (a best-effort preview; the queue consumer always analyses). That
  * request already holds the body twice (form data and an ArrayBuffer copy),
  * and decoding adds the decoder's WebAssembly memory (~51 MB for a 15.5 MB
- * 16-bit 4 MP PNG) plus the 16 MB RGBA result, which for a 25 MB file
- * would exceed a Worker's 128 MB.
+ * 16-bit 4 MP PNG) plus the 16 MB RGBA result: ~110 MB for a 15 MB file.
  */
 export const UPLOAD_ANALYSIS_MAX_BYTES = 8 * 1024 * 1024
 
@@ -86,7 +96,7 @@ export const PLAN_LIMITS: PlanLimitsByPlan = {
   },
   starter: {
     monthlyCredits: 100,
-    maxFileSizeBytes: 25 * 1024 * 1024,
+    maxFileSizeBytes: MAX_UPLOAD_FILE_BYTES,
     maxBatchSize: 10,
     exportFormats: ['svg', 'png', 'pdf'],
     printReadyIncluded: true,
@@ -94,7 +104,7 @@ export const PLAN_LIMITS: PlanLimitsByPlan = {
   },
   pro: {
     monthlyCredits: 500,
-    maxFileSizeBytes: 100 * 1024 * 1024,
+    maxFileSizeBytes: MAX_UPLOAD_FILE_BYTES,
     maxBatchSize: 100,
     exportFormats: ['svg', 'pdf', 'eps', 'dxf', 'png'],
     printReadyIncluded: true,
@@ -102,7 +112,7 @@ export const PLAN_LIMITS: PlanLimitsByPlan = {
   },
   business: {
     monthlyCredits: 5000,
-    maxFileSizeBytes: 500 * 1024 * 1024,
+    maxFileSizeBytes: MAX_UPLOAD_FILE_BYTES,
     maxBatchSize: 1000,
     exportFormats: ['svg', 'pdf', 'eps', 'dxf', 'png'],
     printReadyIncluded: true,

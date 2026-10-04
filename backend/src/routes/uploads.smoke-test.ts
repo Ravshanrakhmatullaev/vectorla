@@ -8,6 +8,7 @@
 import { handleUploadsRoute } from './uploads'
 import { loadDecoderWasmModules } from '../testSupport/wasmTestFixtures'
 import { readSuccessBody, readErrorBody, TEST_REQUEST_ID } from '../testSupport/apiTestHelpers'
+import { MAX_UPLOAD_BODY_BYTES } from '../config'
 import type { Env } from '../env'
 import type { R2Bucket, Queue } from '@cloudflare/workers-types'
 import type { ConversionQueueMessage } from '../integrations/queue'
@@ -165,6 +166,47 @@ async function run() {
   assertEqual(res7.status, 500, 'status for unexpected storage failure')
   assertEqual((await readErrorBody(res7)).code, 'INTERNAL_ERROR', 'error code for unexpected storage failure')
   console.log('PASS: 500 Internal Server Error on unexpected storage failure')
+
+  // 413 — the body limit holds without (or against) Content-Length: a
+  // chunked body is cut off once it passes MAX_UPLOAD_BODY_BYTES, a false
+  // small Content-Length is ignored, and a declared oversize is refused unread.
+  const multipart = async (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    const encoded = new Response(form)
+    return { bytes: new Uint8Array(await encoded.arrayBuffer()), contentType: encoded.headers.get('Content-Type')! }
+  }
+  const streamed = (bytes: Uint8Array, contentType: string, headers: Record<string, string> = {}) => {
+    let sent = 0
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sent >= bytes.length) return controller.close()
+        controller.enqueue(bytes.subarray(sent, sent + 256 * 1024))
+        sent += 256 * 1024
+      },
+    }, { highWaterMark: 0 }) // no read-ahead: `sent` counts only what the route read
+    const request = new Request('http://localhost/api/v1/uploads', {
+      method: 'POST',
+      headers: { 'X-Test-User-Id': 'route-user-5', 'Content-Type': contentType, ...headers },
+      body,
+      duplex: 'half',
+    } as RequestInit)
+    return { request, readBytes: () => Math.min(sent, bytes.length) }
+  }
+  const huge = await multipart(new File([pngBytes(MAX_UPLOAD_BODY_BYTES + 4 * 1024 * 1024)], 'huge.png', { type: 'image/png' }))
+  const chunked = streamed(huge.bytes, huge.contentType)
+  const res8 = await handleUploadsRoute(chunked.request, env, TEST_REQUEST_ID)
+  assertEqual(res8.status, 413, 'chunked body over the limit without Content-Length')
+  assertTrue(chunked.readBytes() <= MAX_UPLOAD_BODY_BYTES + 256 * 1024, `reading stopped at the limit (${chunked.readBytes()} bytes read)`)
+  const lying = streamed(huge.bytes, huge.contentType, { 'Content-Length': '1000' })
+  assertEqual((await handleUploadsRoute(lying.request, env, TEST_REQUEST_ID)).status, 413, 'a false small Content-Length is not trusted')
+  const declared = streamed(huge.bytes, huge.contentType, { 'Content-Length': String(huge.bytes.length) })
+  assertEqual((await handleUploadsRoute(declared.request, env, TEST_REQUEST_ID)).status, 413, 'a declared oversize is refused')
+  assertEqual(declared.readBytes(), 0, 'a declared oversize is refused before reading the body')
+  const small = await multipart(new File([pngBytes()], 'chunked-ok.png', { type: 'image/png' }))
+  const okChunked = streamed(small.bytes, small.contentType)
+  assertEqual((await handleUploadsRoute(okChunked.request, env, TEST_REQUEST_ID)).status, 201, 'a normal chunked upload without Content-Length still works')
+  console.log('PASS: upload body limit enforced while reading (chunked, false or missing Content-Length)')
 
   console.log('\nAll POST /api/v1/uploads route smoke tests passed.')
 }
