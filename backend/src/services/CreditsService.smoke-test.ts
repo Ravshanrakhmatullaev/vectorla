@@ -50,7 +50,7 @@ async function run() {
   // 3. ensureEnoughCredits — not enough
   await assertRejects(
     () => service.ensureEnoughCredits('user-1', 1),
-    /has 0 credits, needs 1/,
+    /you have 0, this conversion needs 1/,
     'insufficient credits',
   )
   console.log('PASS: ensureEnoughCredits rejects when the balance is too low')

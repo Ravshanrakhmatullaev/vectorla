@@ -98,7 +98,7 @@ async function run() {
   // 3. Upload belonging to a different user rejected
   await assertRejects(
     () => service.createJob({ userId: 'someone-else', uploadId: 'upload-1' }),
-    /does not belong to user/,
+    /do not have access to this upload/,
     'mismatched user',
   )
   console.log('PASS: createJob rejects an upload owned by a different user')

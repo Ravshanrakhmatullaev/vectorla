@@ -49,9 +49,9 @@ function mapLedgerRow(row: LedgerRow): LedgerResult {
   return { transaction: mapRowToTransaction(transaction), duplicate, balance }
 }
 
-function mapLedgerError(error: { message: string }, userId: string): Error {
+function mapLedgerError(error: { message: string }): Error {
   if (error.message.includes('insufficient_credits')) {
-    return new InsufficientCreditsError(`User "${userId}" does not have enough credits`)
+    return new InsufficientCreditsError('Not enough credits for this conversion')
   }
   return new Error(`Credit ledger operation failed: ${error.message}`)
 }
@@ -83,7 +83,7 @@ export class SupabaseCreditsRepository implements CreditsRepository {
         p_grant_key: entry.grantKey ?? null,
       })
       .single<LedgerRow>()
-    if (error) throw mapLedgerError(error, entry.userId)
+    if (error) throw mapLedgerError(error)
     return mapLedgerRow(data)
   }
 
@@ -92,7 +92,7 @@ export class SupabaseCreditsRepository implements CreditsRepository {
     const { data, error } = await this.client
       .rpc('refund_job_credits', { p_user_id: userId, p_job_id: jobId, p_reason: reason })
       .maybeSingle<LedgerRow>()
-    if (error) throw mapLedgerError(error, userId)
+    if (error) throw mapLedgerError(error)
     if (!data || data.duplicate) return null
     return mapLedgerRow(data).transaction
   }

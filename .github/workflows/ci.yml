@@ -15,7 +15,17 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
+      # The build writes dist/_headers from the configured API/Supabase hosts
+      # (scripts/securityHeaders.ts); CI builds against placeholder hosts.
       - run: npm run build
+        env:
+          VITE_API_BASE_URL: https://api.example.invalid
+          VITE_SUPABASE_URL: https://example.supabase.co
+      - name: CSP lists only the configured hosts and no inline-script wildcard
+        run: |
+          grep -q "connect-src 'self' https://api.example.invalid https://example.supabase.co;" dist/_headers
+          ! grep -E "script-src[^;]*unsafe-inline" dist/_headers
+          ! grep -E "\*\.(workers\.dev|supabase\.co)" dist/_headers
 
   backend:
     runs-on: ubuntu-latest

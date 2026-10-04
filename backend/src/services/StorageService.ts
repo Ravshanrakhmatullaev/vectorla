@@ -37,7 +37,7 @@ export class StorageService {
   /** Used by routes/download.ts to stream a conversion's file after all download checks pass. */
   async getFile(key: string): Promise<ReadableStream> {
     const object = await this.r2.get(key)
-    if (!object) throw new NotFoundError(`No object found in storage for key "${key}"`)
+    if (!object) throw new NotFoundError('The stored file was not found')
     return object
   }
 

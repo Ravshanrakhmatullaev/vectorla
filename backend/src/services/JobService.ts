@@ -63,7 +63,7 @@ export class JobService {
       throw new ValidationError(`No upload found with id "${input.uploadId}"`)
     }
     if (upload.userId !== input.userId) {
-      throw new ForbiddenError(`Upload "${input.uploadId}" does not belong to user "${input.userId}"`)
+      throw new ForbiddenError('You do not have access to this upload')
     }
 
     const active = await this.repository.findActiveByUploadId(input.uploadId)

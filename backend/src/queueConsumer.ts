@@ -3,6 +3,7 @@ import type { ConversionService } from './services/ConversionService'
 import { isPermanentJobError } from './services/ConversionService'
 import type { JobService } from './services/JobService'
 import { ConflictError, JobLeaseHeldError } from './errors'
+import { PUBLIC_JOB_ERRORS, publicJobError } from './api/publicErrors'
 import { MAX_JOB_ATTEMPTS, STALE_PROCESSING_JOB_MS, STALE_QUEUED_JOB_MS } from './config'
 
 /** The subset of a Workers queue Message this consumer uses (kept small so tests can fake it). */
@@ -58,11 +59,12 @@ export async function handleConversionMessages(
         message.ack()
         continue
       }
+      // The raw error is logged only; the job stores a fixed public sentence.
       const reason = error instanceof Error ? error.message : 'Unknown error'
       if (isPermanentJobError(error) || message.attempts >= MAX_JOB_ATTEMPTS) {
         console.error(`Job ${jobId} failed terminally after ${message.attempts} attempt(s): ${reason}`)
         try {
-          await conversions.failJob(jobId, reason)
+          await conversions.failJob(jobId, publicJobError(error))
           message.ack()
         } catch (failError) {
           // Not acked: the redelivery re-runs failJob, or (if the job was
@@ -73,7 +75,7 @@ export async function handleConversionMessages(
         continue
       }
       console.warn(`Job ${jobId} attempt ${message.attempts} failed, will retry: ${reason}`)
-      await jobs.releaseAfterError(jobId, reason).catch((releaseError: unknown) => {
+      await jobs.releaseAfterError(jobId, PUBLIC_JOB_ERRORS.retrying).catch((releaseError: unknown) => {
         console.error(`Failed to release job ${jobId} after error:`, releaseError)
       })
       message.retry({ delaySeconds: RETRY_BASE_DELAY_SECONDS * 2 ** (message.attempts - 1) })
@@ -85,7 +87,7 @@ export async function handleConversionMessages(
 export async function handleDeadLetters(messages: readonly ConversionMessage[], conversions: ConversionService): Promise<void> {
   for (const message of messages) {
     try {
-      await conversions.failJob(message.body.jobId, 'Processing did not complete after repeated attempts')
+      await conversions.failJob(message.body.jobId, PUBLIC_JOB_ERRORS.failed)
       message.ack()
     } catch (error) {
       // Retried on the dead-letter queue itself, so the refund is not lost.
@@ -108,7 +110,8 @@ export async function sweepStaleJobs(conversions: ConversionService, jobs: JobSe
   ] as const) {
     for (const job of await jobs.findStaleJobs(status, olderThan, 50, now)) {
       try {
-        await conversions.failJob(job.id, `Job was stuck in "${status}" and timed out`)
+        console.warn(`Job ${job.id} was stuck in "${status}" past its time limit`)
+        await conversions.failJob(job.id, PUBLIC_JOB_ERRORS.timedOut)
         swept++
       } catch (error) {
         console.error(`Failed to sweep stale job ${job.id}:`, error)

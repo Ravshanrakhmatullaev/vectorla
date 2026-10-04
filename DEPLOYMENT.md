@@ -140,9 +140,13 @@ origin, e.g. `https://staging.<pages-project>.pages.dev`. Only exact
   - `VITE_API_BASE_URL`: the Worker URL for that environment
   - `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`: publishable key
     only, never the service-role key
-- `public/_headers` sets the CSP, including `blob:` for image previews and
-  the API/Supabase hosts in `connect-src`. Narrow `https://*.workers.dev` once
-  the final API host is known.
+- `public/_headers` is a template. The build (`scripts/securityHeaders.ts`)
+  writes `dist/_headers` with `connect-src` set to exactly the origins of
+  `VITE_API_BASE_URL` and `VITE_SUPABASE_URL` (no wildcards), and `script-src`
+  allowing the inline theme script by its SHA-256 hash (no `'unsafe-inline'`).
+  A production build without `VITE_API_BASE_URL`, or with a non-https URL,
+  fails. Changing the API or Supabase host therefore needs a rebuild.
+  `style-src` keeps `'unsafe-inline'` (React inline styles).
 
 ## 6. Verify after each deploy
 

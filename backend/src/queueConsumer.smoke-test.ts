@@ -18,6 +18,7 @@ import { createCreditsRepository } from './repositories/createCreditsRepository'
 import { createConversionsRepository } from './repositories/createConversionsRepository'
 import { createUploadsRepository } from './repositories/createUploadsRepository'
 import { createJobsRepository } from './repositories/createJobsRepository'
+import { PUBLIC_JOB_ERRORS } from './api/publicErrors'
 import { handleConversionMessages, handleDeadLetters, sweepStaleJobs, type ConversionMessage } from './queueConsumer'
 import { loadDecoderWasmModules, createTestPng } from './testSupport/wasmTestFixtures'
 import { JOB_LEASE_MS, MAX_JOB_ATTEMPTS, STALE_PROCESSING_JOB_MS } from './config'
@@ -177,6 +178,10 @@ async function run(): Promise<void> {
   assertTrue(lastTry.acked, 'terminal failure is acked')
   assertEqual(calls, 2, 'processJob attempted twice')
   assertEqual(await balanceOf('u1'), balanceBeforeFlaky, 'terminally failed job is refunded (charged once, refunded once)')
+  const failedFlaky = await jobService.getJob(flaky.id)
+  assertTrue(!failedFlaky.errorMessage?.includes('R2 timeout'), 'the raw error never reaches the job record')
+  assertEqual(failedFlaky.errorMessage, PUBLIC_JOB_ERRORS.failed, 'a failed job stores a fixed public message')
+  assertEqual(afterFirst.errorMessage, PUBLIC_JOB_ERRORS.retrying, 'a retried job stores a fixed public message')
   console.log('PASS: transient error -> queued + 15s backoff; final attempt -> failed and fully refunded')
 
   // 4. Refunds are exactly-once even if failJob runs repeatedly (DLQ + sweeper overlap).

@@ -105,7 +105,8 @@ export function mapErrorToResponse(error: unknown, requestId: string): Response 
   if (error instanceof PayloadTooLargeError) return jsonError('VALIDATION_ERROR', error.message, 413, requestId)
   if (error instanceof UnsupportedMediaTypeError) return jsonError('VALIDATION_ERROR', error.message, 415, requestId)
   if (error instanceof UnauthorizedError) return jsonError('UNAUTHORIZED', error.message, 401, requestId)
-  if (error instanceof ForbiddenError) return jsonError('FORBIDDEN', error.message, 403, requestId)
+  // Fixed text: a 403 must not describe whose resource it was.
+  if (error instanceof ForbiddenError) return jsonError('FORBIDDEN', 'You do not have access to this resource', 403, requestId)
   if (error instanceof NotFoundError) return jsonError('NOT_FOUND', error.message, 404, requestId)
   if (error instanceof ConflictError) return jsonError('CONFLICT', error.message, 409, requestId)
   if (error instanceof InsufficientCreditsError) return jsonError('INSUFFICIENT_CREDITS', error.message, 402, requestId)

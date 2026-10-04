@@ -104,7 +104,9 @@ export async function handleUploadsRoute(request: Request, env: Env, requestId: 
       }
     }
 
-    return jsonSuccess({ upload, job, analysis }, 201, requestId)
+    // Storage keys never reach clients (see routes/conversions.ts toPublicConversion).
+    const { storageKey: _storageKey, ...publicUpload } = upload
+    return jsonSuccess({ upload: publicUpload, job, analysis }, 201, requestId)
   } catch (error) {
     return mapErrorToResponse(error, requestId)
   }

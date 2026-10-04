@@ -79,7 +79,7 @@ export class ConversionService {
     // if failJob already refunded it (at most one refund per job), and the
     // recovery path if failJob marked it failed but the refund call failed.
     if (job.status === 'failed') {
-      await this.credits.refundJobDebit(job.userId, job.id, `Refund: job failed (${(job.errorMessage ?? 'unknown').slice(0, 120)})`)
+      await this.credits.refundJobDebit(job.userId, job.id, `Refund: ${(job.errorMessage ?? 'job failed').slice(0, 120)}`)
       return []
     }
 
@@ -165,7 +165,7 @@ export class ConversionService {
     }
     if (job.status === 'completed') return
     if (job.status !== 'failed') await this.jobs.markFailed(jobId, reason)
-    await this.credits.refundJobDebit(job.userId, jobId, `Refund: job failed (${reason.slice(0, 120)})`)
+    await this.credits.refundJobDebit(job.userId, jobId, `Refund: ${reason.slice(0, 120)}`)
     // A failed job's partial result (stored, maybe with a row, before the
     // failure) is never downloadable: delete it now rather than after the
     // retention period. Best-effort — the job is already failed and

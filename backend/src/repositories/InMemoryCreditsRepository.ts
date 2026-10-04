@@ -48,7 +48,7 @@ export class InMemoryCreditsRepository implements CreditsRepository {
       return { transaction, duplicate: true, balance }
     }
     if (balance + entry.delta < 0) {
-      throw new InsufficientCreditsError(`User "${entry.userId}" has ${balance} credits, needs ${-entry.delta}`)
+      throw new InsufficientCreditsError(`Not enough credits: you have ${balance}, this needs ${-entry.delta}`)
     }
     const now = new Date().toISOString()
     this.balancesByUserId.set(entry.userId, {

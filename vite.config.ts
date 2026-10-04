@@ -1,11 +1,12 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
+import { securityHeaders } from './scripts/securityHeaders.ts'
 
 // https://vite.dev/config/
-export default defineConfig({
-  plugins: [react(), tailwindcss()],
+export default defineConfig(({ mode }) => ({
+  plugins: [react(), tailwindcss(), securityHeaders({ ...loadEnv(mode, process.cwd(), ''), ...process.env } as Record<string, string>, mode)],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -24,4 +25,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))

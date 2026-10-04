@@ -106,6 +106,7 @@ async function run() {
   assertEqual(body1.upload.status, 'stored', 'response upload.status')
   assertEqual(body1.job.status, 'queued', 'response job.status')
   assertEqual(body1.job.retryCount, 0, 'response job.retryCount')
+  assertTrue(!('storageKey' in (body1.upload as Record<string, unknown>)), 'the storage key is never sent to the client')
   console.log('PASS: 201 Created on successful upload, with an auto-created queued job')
 
   // 401 — no Authorization header and no test bypass header

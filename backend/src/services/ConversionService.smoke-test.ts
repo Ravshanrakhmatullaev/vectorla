@@ -146,7 +146,7 @@ async function run() {
 
   // 0. Not enough credits: processJob rejects before vectorizing/storing/debiting
   const brokeJob = await jobService.createJob({ userId: 'broke-user', uploadId: 'upload-broke' })
-  await assertRejects(() => service.processJob(brokeJob.id), /has 0 credits, needs 1/, 'insufficient credits')
+  await assertRejects(() => service.processJob(brokeJob.id), /you have 0, this conversion needs 1/, 'insufficient credits')
   const brokeBalance = await creditsService.getBalance('broke-user')
   assertEqual(brokeBalance.balance, 0, 'balance untouched after an insufficient-credits rejection')
   assertEqual(

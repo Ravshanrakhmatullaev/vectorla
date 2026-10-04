@@ -1,12 +1,16 @@
 # Cloudflare Pages headers — https://developers.cloudflare.com/pages/configuration/headers/
+# TEMPLATE: the build (scripts/securityHeaders.ts) fills the connect-src
+# placeholder with the origins of VITE_API_BASE_URL and VITE_SUPABASE_URL,
+# and the script-src placeholder with the SHA-256 hash of index.html's
+# inline theme script. Never deploy this file unbuilt.
 
 /*
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
-  Strict-Transport-Security: max-age=31536000
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
   Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://api.vectorla.app https://*.workers.dev https://*.supabase.co; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src __SCRIPT_SRC__; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src __CONNECT_SRC__; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
 
 # Vite emits content-hashed filenames under /assets/*, so these are safe to
 # cache forever — a new deploy produces new filenames, never mutates old ones.

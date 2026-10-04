@@ -68,7 +68,7 @@ export class CreditsService {
       return
     }
     throw new InsufficientCreditsError(
-      `User "${userId}" has ${balance} credit${balance === 1 ? '' : 's'}, needs ${requiredCredits}`,
+      `Not enough credits: you have ${balance}, this conversion needs ${requiredCredits}`,
     )
   }
 
