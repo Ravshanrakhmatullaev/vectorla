@@ -89,11 +89,12 @@ VECTORIZATION_PROVIDER = "vectorla"
 [env.staging]
 name = "vectorla-api-staging"
 
-# Staging rate limiter (see the production [[ratelimits]] note above):
-# [[env.staging.ratelimits]]
-# name = "API_RATE_LIMITER"
-# namespace_id = "1002"
-# simple = { limit = 120, period = 60 }
+# Staging rate limiter (enabled; production's block above stays off until
+# the production release is approved):
+[[env.staging.ratelimits]]
+name = "API_RATE_LIMITER"
+namespace_id = "1002"
+simple = { limit = 120, period = 60 }
 
 [env.staging.vars]
 ENVIRONMENT = "staging"

@@ -280,8 +280,9 @@ go-ahead.
 4. [ ] **R2 buckets and queues** (§1), if they don't exist yet.
 5. [ ] **Worker secrets** (§3): `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
        `DOWNLOAD_URL_SECRET` per environment. Never commit them.
-6. [ ] **Per-IP rate limiter:** uncomment the `[[ratelimits]]` blocks
-       (Abuse limits, above).
+6. [ ] **Per-IP rate limiter:** enabled for staging in `wrangler.toml`
+       (`[[env.staging.ratelimits]]`, namespace 1002). For production,
+       uncomment the top-level `[[ratelimits]]` block at release time.
 7. [ ] **R2 lifecycle rules:** 35-day expiry on `uploads/` and `conversions/`
        for both buckets (Data retention, above).
 8. [ ] **Pages environment variables** (§5): `VITE_API_BASE_URL`,
