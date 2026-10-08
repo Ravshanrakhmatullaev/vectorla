@@ -61,13 +61,22 @@ In order, in the SQL editor or with `psql`:
    quota). It adds only indexes and one read-only function, and changes no
    data. Until it is applied, the Worker still enforces the quota by paging
    the rows, which is slower but correct.
+5. `backend/supabase/migrations/0004_revoke_handle_new_user_rpc.sql`
+   (removes `handle_new_user()` from the Data API; Supabase security advisor
+   lints 0028/0029). Signup is unaffected.
+
+If a migration tool hangs on the `create trigger ... on auth.users`
+statement in 0002 (seen with the Supabase MCP `apply_migration` call on
+2026-10-08), run that statement on its own in the SQL editor: it completes
+at once there.
 
 Both files are idempotent, and the order is robust. Re-running `schema.sql`
 after 0002 keeps the signup grant, because it lives in its own trigger
 (`on_auth_user_created_grant_credits`) rather than in `handle_new_user`.
 CI runs the stubs, schema, each migration twice,
-`supabase/tests/credit_integrity.test.sql` and
-`supabase/tests/usage_limits.test.sql` against Postgres 16 on every push. The tests cover ledger invariants, anon denial, and a full Worker
+`supabase/tests/credit_integrity.test.sql`,
+`supabase/tests/usage_limits.test.sql` and
+`supabase/tests/hardening_0004.test.sql` against Postgres 16 on every push. The tests cover ledger invariants, anon denial, and a full Worker
 cycle as `service_role`.
 
 **Why the GRANTs:** projects created with automatic Data API grants
@@ -273,9 +282,16 @@ go-ahead.
 
 ### Needs owner approval (🧑): Cloudflare and Supabase
 
-1. [ ] **Resume the Supabase project** (`rvrpuapbeglqmcajsdgm`, paused).
-2. [ ] **Database:** `preflight_0002.sql`, then `schema.sql`, `0002`, `0003`,
-       then the preflight again (§2). Staging first.
+1. [x] **Resume the Supabase project** (`rvrpuapbeglqmcajsdgm`): active
+       since 2026-10-08. It is the only Vectorla project and serves as
+       staging; production needs its own project.
+2. [x] **Staging database (2026-10-08):** preflight clean (0 violations,
+       service_role DML, anon/authenticated none, RLS on all six tables);
+       schema already matched `schema.sql`; 0002, 0003 and 0004 applied;
+       re-check passed 19/19, and a rolled-back live ledger test passed
+       (signup grant, debit, idempotent debit, single refund, overdraw
+       refused, stored bytes, one active job per upload).
+       [ ] Production database: the same steps on the production project.
 3. [ ] **Workers Paid plan** (`cpu_ms = 60000`), §0.
 4. [ ] **R2 buckets and queues** (§1), if they don't exist yet.
 5. [ ] **Worker secrets** (§3): `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,

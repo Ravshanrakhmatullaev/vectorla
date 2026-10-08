@@ -77,8 +77,11 @@ jobs:
           -f migrations/0002_credit_integrity.sql
           -f migrations/0003_usage_limits.sql
           -f migrations/0003_usage_limits.sql
+          -f migrations/0004_revoke_handle_new_user_rpc.sql
+          -f migrations/0004_revoke_handle_new_user_rpc.sql
           -f tests/credit_integrity.test.sql
           -f tests/usage_limits.test.sql
+          -f tests/hardening_0004.test.sql
       - name: Concurrent debits never overdraw
         run: |
           U=00000000-0000-0000-0000-000000000002
