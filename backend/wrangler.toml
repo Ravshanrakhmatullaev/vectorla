@@ -102,7 +102,7 @@ VECTORIZATION_PROVIDER = "vectorla"
 # Exact https origin(s) of the staging frontend (comma-separated), e.g.
 # "https://staging.<pages-project>.pages.dev". Required before staging can be
 # used from a browser: CORS otherwise only allows https://vectorla.app.
-CORS_EXTRA_ORIGINS = ""
+CORS_EXTRA_ORIGINS = "https://vectorla-web-staging.ra-ravshan1998.workers.dev"
 
 [[env.staging.r2_buckets]]
 binding = "UPLOADS_BUCKET"

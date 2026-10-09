@@ -278,8 +278,8 @@ and ornament@160.
   full-resolution tracing plus the existing thin-feature pass keep lines.
 - A signature traced from a small source keeps its stroke, but its outline
   is built from more pieces (9–31 paths for a single curve).
-- Memory was measured in workerd locally. Cloudflare's production isolate
-  has not been measured (no deployment; ROADMAP Q19).
+- Memory was measured in workerd locally. Cloudflare's runtime was measured
+  later on staging (2026-10-09, see "On Cloudflare" under "Upload size").
 - 4 MP artwork takes up to ~2.3 s of CPU, 1.5–2.5× the 1.2 MP time.
 
 ## Optimization round (2026-10-03, branch `claude/bold-newton-y6wsui`)
@@ -405,8 +405,8 @@ What changed:
 
 The 128 MB limit also counts uncollected garbage between GCs. The sampled
 workerd peak for a 4 MP photo in Professional is now ~91 MB, down from ~116 MB.
-Memory cannot be measured on Cloudflare itself without deploying, so a
-production check remains a pre-launch item.
+Memory cannot be measured on Cloudflare itself without deploying; the
+staging measurement (2026-10-09) is under "Upload size" below.
 
 ### Resolution: is 4 MP / 1.2 MP enough for print?
 
@@ -700,6 +700,20 @@ artwork peak from 39.5 to 43.1 MB, within its 46 MB budget.
 **Upload size.** A 15.5 MB 16-bit PNG peaks at about 88 MB in workerd at
 decode time (file, decoder and pixels), and a 25 MB file was estimated at
 about 110 MB. Paid plans are therefore capped at 15 MB.
+
+**On Cloudflare (staging, 2026-10-09).** A temporary probe Worker ran the
+conversion's decode → analysis → trace calls in Cloudflare's runtime while
+holding N MB of extra memory, and a binary search found the largest N that
+still completed. Without an image the isolate was stopped (`exceededMemory`)
+above 252–254 MB of extra memory, so a trace's peak is that ceiling minus
+the ceiling with the trace (±3 MB): 4 MP logo ~41–43 MB, 4 MP noisy 4:4:4
+JPEG ~33 MB, 15.6 MB 16-bit 4 MP PNG ~57 MB, 2000² 8 px checkerboard
+~49 MB, 2000² 16 px checkerboard ~63 MB (the largest). Every case finished
+with `outcome: ok` in 3.6–7.9 s of CPU time. All are below the 88 MB workerd
+figure. Cloudflare enforced at about twice the documented limit here, which
+it may change at any time, so the documented 128 MB stays the design budget.
+The worst case leaves about 65 MB below it.
+Details and the method are in DEPLOYMENT.md, "Memory on Cloudflare".
 
 ## Against professional expectations
 

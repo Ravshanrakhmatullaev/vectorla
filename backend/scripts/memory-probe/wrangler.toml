@@ -1,0 +1,10 @@
+# Temporary staging memory probe (see worker.ts). Not part of the app.
+#   npx wrangler deploy -c scripts/memory-probe/wrangler.toml
+#   openssl rand -base64 32 | npx wrangler secret put PROBE_TOKEN -c scripts/memory-probe/wrangler.toml
+#   ... measure, then: npx wrangler delete -c scripts/memory-probe/wrangler.toml
+name = "vectorla-memprobe-staging"
+main = "worker.ts"
+compatibility_date = "2026-01-01"
+
+[limits]
+cpu_ms = 60000

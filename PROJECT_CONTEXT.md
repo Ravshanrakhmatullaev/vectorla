@@ -343,6 +343,12 @@ See `DEPLOYMENT.md` for the step-by-step runbook (resources, database
 migrations, secrets, staging then production, verification, rollback).
 
 - Frontend target: Cloudflare Pages, build `npm run build`, output `dist`.
+  Staging serves the same build from Workers Static Assets
+  (`wrangler.web-staging.toml`), because the deploy token has no Pages
+  permission.
+- Staging (deployed 2026-10-09): API `https://vectorla-api-staging.ra-ravshan1998.workers.dev`,
+  web `https://vectorla-web-staging.ra-ravshan1998.workers.dev`. The API fails
+  closed until the `SUPABASE_SERVICE_ROLE_KEY` secret is set (DEPLOYMENT.md §3).
 - Backend target: Cloudflare Workers through `backend/wrangler.toml`.
 - Required Worker resources: R2 bucket `vectorla-uploads`, queue
   `vectorla-conversions`, Supabase URL/service-role secret, and download URL
@@ -353,19 +359,18 @@ migrations, secrets, staging then production, verification, rollback).
   Worker, R2 bucket, Queue, or Supabase project is live without external
   verification.
 - Supabase project `rvrpuapbeglqmcajsdgm` (Vectorla, ap-northeast-2, PG 17)
-  is paused. The free org allows 2 active projects, and poligrafiya and
-  safar-taxi are both active. Do not pause other projects or change billing
-  without the owner. Database apply order: preflight_0002.sql → schema.sql →
-  0002 → preflight again (DEPLOYMENT.md §2).
+  is active and serves as staging, with 0002–0004 applied (do not re-apply).
+  Do not pause other projects or change billing without the owner. Database
+  apply order for a new project: preflight_0002.sql → schema.sql → 0002 →
+  preflight again → 0003 → 0004 (DEPLOYMENT.md §2).
 - The owner's local `backend/supabase/schema.sql` has six uncommitted
   `grant select, insert, update, delete ... to service_role` statements
   (profiles, uploads, jobs, conversions, credit_balances,
   credit_transactions). They are needed and must be kept; the owner commits
   them. 0002 carries identical GRANTs, so the two files are compatible in
   either order.
-- Cloudflare Pages CSP permits the intended API host, Workers deployments, and
-  Supabase HTTPS endpoints. Narrow wildcard hosts once final production origins
-  are confirmed.
+- The built CSP's `connect-src` lists exactly the configured API and Supabase
+  origins (scripts/securityHeaders.ts), with no wildcard hosts.
 
 ## Development rules
 

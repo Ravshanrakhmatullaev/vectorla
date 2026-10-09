@@ -216,8 +216,9 @@ Legend: ✅ done · 🔜 next · ⏳ planned · 🧑 needs an owner decision, cr
   - uploads without Content-Length are byte-counted.
 
   Open: patterns above 40,000 regions (8 px checkerboard at 4 MP) are still
-  merged into a few shapes, as the memory guard. Memory is measured in local
-  workerd only (🧑 a staging check on Cloudflare is in the launch checklist).
+  merged into a few shapes, as the memory guard. Memory on Cloudflare was
+  measured on staging (2026-10-09): largest peak ~63 MB (16 px checkerboard),
+  15.6 MB 16-bit PNG ~57 MB (DEPLOYMENT.md "Memory on Cloudflare").
 - ✅ **P8.** CI (`.github/workflows/ci.yml`): lint and build (with a check
   of the generated CSP), typecheck, `npm test` including the quality gate,
   Worker dry-run bundles, and a Postgres 16 job running the schema, migrations
@@ -225,13 +226,12 @@ Legend: ✅ done · 🔜 next · ⏳ planned · 🧑 needs an owner decision, cr
   assertions, and a concurrency check.
 - ⏳ **P9.** Observability: Workers observability and error tracking; a
   health check that probes dependencies.
-- 🧑 **P10.** Supabase project `rvrpuapbeglqmcajsdgm` is **paused** (INACTIVE).
-  The free org already has 2 active projects, so resuming needs an owner
-  decision: pause another project or upgrade. Everything else is prepared
-  offline and verified on Postgres 16: `preflight_0002.sql` (read-only
-  check), service_role GRANTs (needed; kept in the owner's local schema.sql
-  and mirrored in 0002), a signup grant that survives schema.sql re-runs,
-  and an atomic 0002. The apply order is in DEPLOYMENT.md §2.
+- ✅ **P10.** Staging is deployed (2026-10-09): Supabase project
+  `rvrpuapbeglqmcajsdgm` is active with 0002–0004 applied; Workers Paid, R2
+  bucket with lifecycle rules, queues, rate limiter and the API and web
+  Workers are live. 🧑 Remaining for staging: the `SUPABASE_SERVICE_ROLE_KEY`
+  Worker secret (the API fails closed without it) and the Supabase Auth URL
+  settings. Production resources do not exist yet (DEPLOYMENT.md checklist).
 
 ### Tier 3: Product and SaaS (after quality and safety)
 
@@ -260,8 +260,10 @@ Legend: ✅ done · 🔜 next · ⏳ planned · 🧑 needs an owner decision, cr
 2. Provide or approve a set of real sample images for the corpus (Q10).
 3. Vision/ML provider for upscaling and text detection, and its budget (Q12).
 4. Free-tier credit amount and cadence (P5), Stripe setup (S5).
-5. Resume the paused Supabase project when ready to deploy (P10).
-6. Approve the Cloudflare and Supabase changes in the launch checklist
-   (`DEPLOYMENT.md`, "Production launch checklist"): the per-IP rate limiter,
-   R2 lifecycle rules, migrations 0002 and 0003, secrets, Pages variables,
-   and a staging memory check.
+5. Set the staging `SUPABASE_SERVICE_ROLE_KEY` Worker secret without sharing
+   it (DEPLOYMENT.md §3), and add the staging web origin to the Supabase Auth
+   URL settings (P10).
+6. Approve the production changes in the launch checklist (`DEPLOYMENT.md`,
+   "Production launch checklist"): a production Supabase project and
+   migrations, bucket, queues, lifecycle rules, secrets, rate limiter, and
+   Pages variables.

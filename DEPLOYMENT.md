@@ -5,9 +5,13 @@ deploys as a **Cloudflare Worker** with R2, Queues and a cron trigger, backed
 by **Supabase** (Auth + Postgres). Staging and production are fully separate:
 each has its own Worker, bucket, queues and secrets.
 
-> Nothing here has been run against the live accounts yet. The Supabase
-> project `rvrpuapbeglqmcajsdgm` was **paused** at the last audit and must be
-> resumed by the owner before any step touching the database.
+> **Status (2026-10-09):** staging is deployed on Cloudflare: API
+> `https://vectorla-api-staging.ra-ravshan1998.workers.dev`, web
+> `https://vectorla-web-staging.ra-ravshan1998.workers.dev`, database
+> Supabase project `rvrpuapbeglqmcajsdgm` (active, migrations 0002–0004
+> applied). The API fails closed (every route returns 500) until
+> `SUPABASE_SERVICE_ROLE_KEY` is set for staging (§3). Nothing has been
+> created for production.
 
 ## 0. Prerequisites (owner)
 
@@ -16,11 +20,15 @@ each has its own Worker, bucket, queues and secrets.
   takes seconds, and `[limits] cpu_ms = 60000` is a Paid-only setting.
   Queues, the DLQ and cron triggers also work on Free (Queues: 10,000
   operations/day, 24 h retention), so CPU time is the only hard requirement.
+  **Active since 2026-10-09:** Cloudflare accepted `cpu_ms = 60000` on the
+  staging deploy.
 - R2 enabled on the account (free tier: 10 GB-month storage, 1M Class A /
-  10M Class B operations per month). Cloudflare may ask for a payment method
-  when you enable R2 for the first time.
+  10M Class B operations per month). Enabled 2026-10-09.
 - Supabase project, resumed and reachable.
-- `npx wrangler login` on the deploying machine.
+- `npx wrangler login` on the deploying machine, or `CLOUDFLARE_API_TOKEN` +
+  `CLOUDFLARE_ACCOUNT_ID`. The token used for staging has Workers, R2 and
+  Queues permissions but **not Cloudflare Pages**, which is why the staging
+  frontend runs on Workers Static Assets (§5).
 
 ## 1. One-time resources
 
@@ -30,11 +38,17 @@ cd backend
 npx wrangler r2 bucket create vectorla-uploads
 npx wrangler queues create vectorla-conversions
 npx wrangler queues create vectorla-conversions-dlq
-# staging
-npx wrangler r2 bucket create vectorla-uploads-staging
+# staging (all three exist since 2026-10-09)
+npx wrangler r2 bucket create vectorla-uploads-staging --location apac
 npx wrangler queues create vectorla-conversions-staging
 npx wrangler queues create vectorla-conversions-staging-dlq
 ```
+
+The staging bucket uses the `apac` location hint, next to the Supabase
+region (ap-northeast-2), because the queue consumer reads the original from
+R2 and writes to Supabase in the same job. Without a hint, R2 picks the
+region nearest to whoever runs the command. A bucket's location cannot be
+changed later, so choose the production one deliberately.
 
 ## 2. Database (per Supabase project: staging first, then production)
 
@@ -103,6 +117,32 @@ done
 
 Staging and production fail closed (every API call returns an error) if any of these are missing.
 
+**Staging (2026-10-09):** `SUPABASE_URL` (`https://rvrpuapbeglqmcajsdgm.supabase.co`)
+and `DOWNLOAD_URL_SECRET` (64 random bytes from `openssl rand`, piped straight
+into `wrangler secret put` and never shown) are set.
+**`SUPABASE_SERVICE_ROLE_KEY` is not set yet**; the Worker logs
+`Missing required backend secrets for staging: SUPABASE_SERVICE_ROLE_KEY`
+and returns a generic 500.
+
+Supplying the service-role key without exposing it (use the project's
+existing key from Supabase Dashboard → Project Settings → API Keys; do not
+rotate it). Pick one:
+
+- **Owner's terminal:** `cd backend && npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY --env staging`.
+  Wrangler prompts for the value with input hidden, so it never lands in
+  shell history or a chat.
+- **Cloudflare dashboard:** Workers & Pages → `vectorla-api-staging` →
+  Settings → Variables and Secrets → Add → type **Secret**, name
+  `SUPABASE_SERVICE_ROLE_KEY`. Later `wrangler deploy` runs keep it.
+- **For an automated session:** store it as a secret environment variable
+  named `SUPABASE_SERVICE_ROLE_KEY` in the Claude Code cloud environment's
+  settings. A new session can then pipe it into
+  `wrangler secret put SUPABASE_SERVICE_ROLE_KEY --env staging` without
+  printing it, and run §6.
+
+Never paste the key into a chat, an issue, a commit, or a command line
+argument.
+
 ## 4. Deploy the Worker
 
 ```bash
@@ -118,7 +158,8 @@ CORS always allows `https://vectorla.app` and `https://www.vectorla.app`.
 Before staging is used from a browser, set `CORS_EXTRA_ORIGINS` in
 `[env.staging.vars]` (`wrangler.toml`) to the staging frontend's exact
 origin, e.g. `https://staging.<pages-project>.pages.dev`. Only exact
-`https://` origins are accepted, with no wildcards.
+`https://` origins are accepted, with no wildcards. Staging is set to
+`https://vectorla-web-staging.ra-ravshan1998.workers.dev` (§5).
 
 ### Abuse limits
 
@@ -192,6 +233,24 @@ dashboard (also needs approval).
   A production build without `VITE_API_BASE_URL`, or with a non-https URL,
   fails. Changing the API or Supabase host therefore needs a rebuild.
   `style-src` keeps `'unsafe-inline'` (React inline styles).
+
+**Staging frontend (Workers Static Assets).** The deploy token has no Pages
+permission, so staging serves the same `dist/` from an assets-only Worker
+(`wrangler.web-staging.toml`: `dist/_headers` applied, SPA fallback for
+`/account`, `/privacy`, `/terms`). Production can still use Pages once a
+token with Pages permission exists.
+
+```bash
+VITE_API_BASE_URL=https://vectorla-api-staging.ra-ravshan1998.workers.dev \
+VITE_SUPABASE_URL=https://rvrpuapbeglqmcajsdgm.supabase.co \
+VITE_SUPABASE_PUBLISHABLE_KEY=<publishable key> \
+npm run build
+backend/node_modules/.bin/wrangler deploy -c wrangler.web-staging.toml
+```
+
+The publishable key (`sb_publishable_…`, Dashboard → Project Settings → API
+Keys) ships in the browser bundle by design; never use the service-role key
+here.
 
 ## 6. Verify after each deploy
 
@@ -292,40 +351,112 @@ go-ahead.
        (signup grant, debit, idempotent debit, single refund, overdraw
        refused, stored bytes, one active job per upload).
        [ ] Production database: the same steps on the production project.
-3. [ ] **Workers Paid plan** (`cpu_ms = 60000`), §0. **Checked 2026-10-09: the
-       account is on Workers Free.** Cloudflare rejects `limits.cpu_ms` with
-       error 100328 ("CPU limits are not supported for the Free plan"), so no
-       Worker with this `wrangler.toml` can be deployed until the plan is
-       upgraded (owner's billing decision).
-4. [ ] **R2 buckets and queues** (§1). Staging queues `vectorla-conversions-staging`
-       and `vectorla-conversions-staging-dlq` exist (created 2026-10-09).
-       **R2 is not enabled on the account** (the API answers "Please enable R2
-       through the Cloudflare Dashboard"), so neither bucket exists. Enabling
-       R2 is a dashboard action that may ask for a payment method. Nothing is
-       created for production.
-5. [ ] **Worker secrets** (§3): `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
-       `DOWNLOAD_URL_SECRET` per environment. Never commit them.
-6. [ ] **Per-IP rate limiter:** enabled for staging in `wrangler.toml`
-       (`[[env.staging.ratelimits]]`, namespace 1002). For production,
-       uncomment the top-level `[[ratelimits]]` block at release time.
-7. [ ] **R2 lifecycle rules:** 35-day expiry on `uploads/` and `conversions/`
-       for both buckets (Data retention, above).
-8. [ ] **Pages environment variables** (§5): `VITE_API_BASE_URL`,
-       `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`. The production
-       build fails without the API URL.
-9. [ ] **Staging CORS:** `CORS_EXTRA_ORIGINS` set to the staging Pages origin.
-10. [ ] **Supabase Auth URLs**, email confirmation and SMTP (§2).
-11. [ ] **Deploy staging**, run every step in §6, then deploy production and
-        run them again.
-12. [ ] **Memory on Cloudflare:** run a 15 MB, 16-bit PNG and a dense pattern
-        on staging, and watch `wrangler tail` for "exceeded memory". The
-        measurements so far are from local workerd (about 88 MB peak against
-        a 128 MB isolate).
+3. [x] **Workers Paid plan** (`cpu_ms = 60000`), §0. Active since
+       2026-10-09: the staging deploy was accepted and the Worker settings
+       API reports `limits.cpu_ms = 60000` (on Free it failed with error
+       100328).
+4. [x] **Staging R2 bucket and queues** (§1): `vectorla-uploads-staging`
+       (location hint `apac`), `vectorla-conversions-staging` and its DLQ.
+       After the deploy the queue API lists `vectorla-api-staging` as producer
+       and consumer (batch 1, 6 retries, DLQ `vectorla-conversions-staging-dlq`)
+       and as the DLQ's consumer (batch 10).
+       [ ] Production bucket and queues: not created.
+5. [ ] **Worker secrets** (§3). Staging: `SUPABASE_URL` and
+       `DOWNLOAD_URL_SECRET` set; **`SUPABASE_SERVICE_ROLE_KEY` missing**, the
+       one remaining staging blocker (§3 says how to add it safely).
+       Production: none set.
+6. [x] **Per-IP rate limiter, staging:** bound (`API_RATE_LIMITER`,
+       namespace 1002, 120 requests / 60 s, confirmed in the Worker settings).
+       Its 429 can only be exercised once the service-role key is set, because
+       the secret check runs before it.
+       [ ] Production: uncomment the top-level `[[ratelimits]]` block at
+       release time.
+7. [x] **R2 lifecycle rules, staging:** `expire-uploads` (`uploads/`, 35
+       days) and `expire-conversions` (`conversions/`, 35 days), next to
+       Cloudflare's default 7-day incomplete-multipart rule.
+       [ ] Production bucket: the same two rules once it exists.
+8. [x] **Frontend build variables, staging** (§5, Workers Static Assets).
+       [ ] Production Pages environment variables.
+9. [x] **Staging CORS:** `CORS_EXTRA_ORIGINS` is the staging web origin.
+       Preflight from it returns `Access-Control-Allow-Origin`; other origins
+       get none.
+10. [ ] **Supabase Auth settings** (dashboard only, not reachable from the
+        deploy tools): add `https://vectorla-web-staging.ra-ravshan1998.workers.dev`
+        to the Site URL / redirect allowlist (the app sends
+        `emailRedirectTo: window.location.origin`; an origin that is not on
+        the list falls back to the Site URL). Email confirmation is on.
+        Also set the SMTP sender and enable leaked-password protection
+        (Supabase security advisor WARN).
+11. [ ] **Deploy staging and verify (§6).** Deployed 2026-10-09; results are
+        under "Staging verification" below. Steps 1–6 (health included) and
+        the live rate-limit check need the service-role key; step 7 passed.
+        Then production.
+12. [x] **Memory on Cloudflare** (staging, 2026-10-09): every worst-case
+        upload completed in a real Cloudflare isolate. The largest peak was
+        about 63 MB (16 px checkerboard); the 15.6 MB 16-bit PNG was about 57 MB.
+        See "Memory on Cloudflare" below and BENCHMARKS.md.
+        [ ] Re-check through the real upload → queue path with
+        `wrangler tail` once the key is set.
+
+### Staging verification (2026-10-09)
+
+Run against the deployed staging Workers and the staging Supabase project:
+
+- Backend `npm run typecheck` and `npm test`: 37/37 smoke-test files pass.
+  Frontend `npm run lint` and `npm run build` pass. Both Worker dry runs pass.
+- Database (read-only): all 0002/0003/0004 objects present, 0 violations,
+  `service_role` DML on all six tables, anon and authenticated none, RLS on
+  everywhere. Migrations were not re-applied.
+- API with the service-role key missing: every route, health included,
+  returns a generic `500 INTERNAL_ERROR` with no secret names in the body.
+  The log line names the missing secret. The cron fired on schedule
+  (15:00 UTC) and stopped at the same check, as designed; it will fail every
+  15 minutes until the key is set, without touching data.
+- Web: `/`, `/account`, `/privacy` and `/terms` return 200 (SPA fallback);
+  `/_headers` is not served. Security headers and the built CSP are present
+  (`connect-src` lists only the staging API and Supabase origins), with
+  `immutable` caching on `/assets/*` and revalidation on `/`.
+- Real browser (Chromium): no CSP violations or page errors. Sign-in with
+  an unknown account reaches Supabase Auth (400) and shows "Invalid login
+  credentials". An upload reaches the API (500, fail-closed) and the UI shows
+  the translated generic message. No horizontal overflow at 375 px.
+- Supabase security advisor: RLS-without-policy (INFO, intended: only the
+  Worker's service role reads these tables); `public.rls_auto_enable()`
+  executable by anon/authenticated (WARN). That function is created by the
+  Supabase platform (an `event_trigger` function, not in this repo), and
+  Postgres refuses to call an event-trigger function directly, so the RPC is
+  not usable. Leaked-password protection is off (item 10).
+
+### Memory on Cloudflare (staging, 2026-10-09)
+
+Method: a temporary, token-protected probe Worker
+(`backend/scripts/memory-probe/`, deleted after the run) ran the
+conversion's decode → analysis → trace calls (the same functions
+`ConversionService` uses) in Cloudflare's runtime. Each request first held
+N MB of extra memory (in 1 MB chunks); a binary search found the largest N
+that still completed. With no image, Cloudflare stopped the isolate
+(`exceededMemory`, error 1102) above 252–254 MB of extra memory, stable over
+three runs. The trace's peak is that ceiling minus the ceiling with the trace
+running (±3 MB):
+
+| Upload | Mode | Peak on Cloudflare | CPU time |
+|---|---|---:|---:|
+| 4 MP PNG logo (0.1 MB) | Quick / Professional | ~43 / ~41 MB | 3.6 / 4.3 s |
+| 2000² 16 px checkerboard | Professional | ~63 MB | 5.0 s |
+| 2000² 8 px checkerboard | Professional | ~49 MB | 3.6 s |
+| 4 MP noisy progressive 4:4:4 JPEG (3.7 MB) | Quick / Professional | ~33 / ~33 MB | 7.9 s (Pro) |
+| 15.6 MB 16-bit 4 MP PNG (99% of the 15 MiB cap) | Quick / Professional | ~57 / ~57 MB | 5.8 / 7.2 s |
+
+All ran with `outcome: ok`. The worst case leaves about 65 MB below the
+documented 128 MB limit, and the CPU time is far below the 60 s limit.
+Cloudflare enforced at about twice the documented limit here; the 128 MB
+figure stays the design budget. These numbers cover the decode and trace,
+not the Supabase client or R2 transfer.
 
 ### Known limitations (accepted for launch, tracked in ROADMAP.md)
 
 - Checkerboard-like patterns with more than 40,000 regions (e.g. 8 px squares
   at 2000²) are still simplified into a few shapes, to keep memory bounded.
 - `style-src` keeps `'unsafe-inline'` (React inline styles).
-- Memory figures come from local workerd, not from Cloudflare's production
-  runtime.
+- Memory on Cloudflare was measured on the decode and trace path with a
+  probe Worker, not yet through the queue consumer.
