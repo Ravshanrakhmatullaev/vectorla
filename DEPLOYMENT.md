@@ -292,8 +292,17 @@ go-ahead.
        (signup grant, debit, idempotent debit, single refund, overdraw
        refused, stored bytes, one active job per upload).
        [ ] Production database: the same steps on the production project.
-3. [ ] **Workers Paid plan** (`cpu_ms = 60000`), §0.
-4. [ ] **R2 buckets and queues** (§1), if they don't exist yet.
+3. [ ] **Workers Paid plan** (`cpu_ms = 60000`), §0. **Checked 2026-10-09: the
+       account is on Workers Free.** Cloudflare rejects `limits.cpu_ms` with
+       error 100328 ("CPU limits are not supported for the Free plan"), so no
+       Worker with this `wrangler.toml` can be deployed until the plan is
+       upgraded (owner's billing decision).
+4. [ ] **R2 buckets and queues** (§1). Staging queues `vectorla-conversions-staging`
+       and `vectorla-conversions-staging-dlq` exist (created 2026-10-09).
+       **R2 is not enabled on the account** (the API answers "Please enable R2
+       through the Cloudflare Dashboard"), so neither bucket exists. Enabling
+       R2 is a dashboard action that may ask for a payment method. Nothing is
+       created for production.
 5. [ ] **Worker secrets** (§3): `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
        `DOWNLOAD_URL_SECRET` per environment. Never commit them.
 6. [ ] **Per-IP rate limiter:** enabled for staging in `wrangler.toml`
