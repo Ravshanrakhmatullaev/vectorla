@@ -14,9 +14,9 @@ function assertTrue(condition: boolean, message: string): void {
 
 // Budgets sit ~20% above the values measured in BENCHMARKS.md.
 const BUDGETS = {
-  // Measured: ΔE 0.71, edge 0.13 px, 4,767 KB in total.
+  // Measured: ΔE 0.67, edge 0.13 px, 4,529 KB in total.
   quick: { meanDeltaE: 0.85, meanEdgeError: 0.16, totalKb: 5700 },
-  // Measured: ΔE 0.68, edge 0.13 px, 5,351 KB in total.
+  // Measured: ΔE 0.62, edge 0.12 px, 5,517 KB in total.
   professional: { meanDeltaE: 0.8, meanEdgeError: 0.16, totalKb: 6400 },
 }
 

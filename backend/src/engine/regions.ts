@@ -340,3 +340,112 @@ export function dissolveBlendSlivers(
   }
   return out
 }
+
+/**
+ * Spatially coherent labels (Potts-regularized ICM). Per-pixel nearest-color
+ * labeling of a textured or compressed area (brushed metal, a JPEG of a
+ * shaded rim) flips between neighbouring palette levels pixel by pixel; the
+ * fragments then trace as streaks and blotches instead of the few smooth
+ * zones a designer would draw. Each pass re-decides every pixel among its
+ * own and its 8 neighbours' labels by color fit plus `beta` per neighbour
+ * that disagrees, color fit measured in palette steps (OKLab distance /
+ * `step`, squared), and only toward labels within `maxSwitch` of its own.
+ * Pixels of a real edge or a thin line are far from the other side's color,
+ * so the neighbour vote never outweighs them; only near-ties between similar
+ * levels resolve toward the surrounding region.
+ */
+export function regularizeLabels(
+  labels: LabelMap,
+  width: number,
+  height: number,
+  palette: PaletteColor[],
+  lab: OklabSource,
+  options: { beta: number; step: number; passes: number; maxSwitch?: number },
+): number {
+  const inv2 = 1 / (options.step * options.step)
+  const maxSwitch2 = (options.maxSwitch ?? Infinity) ** 2
+  const cand = new Int32Array(9)
+  const votes = new Int32Array(9)
+  // A pixel whose own and neighbours' labels have not changed since it was
+  // last decided would decide the same again: each pass visits only pixels
+  // next to a change (same result as full sweeps, a fraction of the work).
+  // Bit 0: visit in this pass; bit 1: in the next one.
+  const due = new Uint8Array(width * height).fill(1)
+  let changed = 0
+  for (let pass = 0; pass < options.passes; pass++) {
+    let changedPass = 0
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const p = y * width + x
+        if (!(due[p]! & 1)) continue
+        const own = labels[p]!
+        if (own === TRANSPARENT_LABEL) continue
+        let n = 0
+        cand[n] = own
+        votes[n++] = 0
+        for (let dy = -1; dy <= 1; dy++) {
+          const ny = y + dy
+          if (ny < 0 || ny >= height) continue
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue
+            const nx = x + dx
+            if (nx < 0 || nx >= width) continue
+            const l = labels[ny * width + nx]!
+            let k = 0
+            while (k < n && cand[k] !== l) k++
+            if (k === n) {
+              cand[n] = l
+              votes[n++] = 0
+            }
+            votes[k] = votes[k]! + 1
+          }
+        }
+        if (n === 1 || votes[0] === 8) continue
+        const L = lab.L(p)
+        const A = lab.A(p)
+        const B = lab.B(p)
+        let total = 0
+        for (let k = 0; k < n; k++) total += votes[k]!
+        const ownColor = palette[own]
+        let best = own
+        let bestCost = Infinity
+        for (let k = 0; k < n; k++) {
+          const l = cand[k]!
+          if (l === TRANSPARENT_LABEL) continue
+          const c = palette[l]
+          if (!c) continue
+          // Only near-ties between similar levels: an anti-aliased pixel of a
+          // thin stroke fits some third color best by plain distance, and the
+          // vote would spread that color along the stroke.
+          if (l !== own && ownColor && (ownColor.L - c.L) ** 2 + (ownColor.A - c.A) ** 2 + (ownColor.B - c.B) ** 2 > maxSwitch2) continue
+          const cost = ((L - c.L) ** 2 + (A - c.A) ** 2 + (B - c.B) ** 2) * inv2 + options.beta * (total - votes[k]!)
+          if (cost < bestCost) {
+            bestCost = cost
+            best = l
+          }
+        }
+        if (best !== own) {
+          labels[p] = best
+          changedPass++
+          // Neighbours later in this pass see the change when they come up;
+          // the pixel itself and earlier ones are decided again next pass.
+          for (let dy = -1; dy <= 1; dy++) {
+            const ny = y + dy
+            if (ny < 0 || ny >= height) continue
+            for (let dx = -1; dx <= 1; dx++) {
+              const nx = x + dx
+              if (nx < 0 || nx >= width) continue
+              const q = ny * width + nx
+              due[q] = due[q]! | (q > p ? 1 : 2)
+            }
+          }
+        }
+      }
+    }
+    checkpoint('regularizeLabels')
+    changed += changedPass
+    if (changedPass === 0) break
+    for (let p = 0; p < due.length; p++) due[p] = due[p]! >> 1
+  }
+  return changed
+}

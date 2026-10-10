@@ -58,7 +58,7 @@ export interface BenchmarkRow extends ImageDiffMetrics, SvgStructure {
 const EVAL_SCALE = 4
 const MAX_EVAL_SIDE = 2400
 
-function renderSvg(svg: string, width: number): { pixels: Uint8Array; width: number; height: number; png: () => Uint8Array } {
+export function renderSvg(svg: string, width: number): { pixels: Uint8Array; width: number; height: number; png: () => Uint8Array } {
   const resvg = new Resvg(svg, {
     fitTo: { mode: 'width', value: width },
     font: { loadSystemFonts: true, defaultFontFamily: 'DejaVu Sans' },

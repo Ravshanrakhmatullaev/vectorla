@@ -15,6 +15,7 @@ They are never served to users or bundled into the Worker.
 | `photos/rocket.jpg` | scikit-image sample data: SpaceX launch of DSCOVR | Public domain (released by SpaceX) |
 | `photos/horse.png` | scikit-image sample data: silhouette by Andreas Preuss | CC0 |
 | `photos/text.png` | scikit-image sample data: scanned text | Public domain |
+| `customer/emblem-sanoat-radiatsiya-640.webp` | A customer's upload, supplied by the product owner for benchmarking against Vectorizer.AI (`../customerEmblem.ts`) | Benchmark use only; not to be redistributed or used in product imagery |
 
 The photos were re-encoded (JPEG quality 90, or 8-bit grayscale PNG) to keep the repository small.
-All other benchmark images are authored in `corpus.ts` and `realWorldCorpus.ts`.
+All other benchmark images are authored in `corpus.ts`, `realWorldCorpus.ts` and `emblemCorpus.ts`.

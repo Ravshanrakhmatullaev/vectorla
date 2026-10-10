@@ -14,7 +14,7 @@ import { PathBuilder } from './svgWriter'
 import { toShortHex } from './color'
 import { bilateralDenoise, downscaleBox, gaussianBlur, restoreJpegChroma, restoreRidges, ridgeMask, upscaleBilinear, upscaleMaskStrict, type RgbaImage } from './raster'
 import { computeFlatMask, OklabSource, extractDetailColors, extractPalette, labelPixels, TRANSPARENT_LABEL, type PaletteColor } from './palette'
-import { connectedComponents, dissolveBlendSlivers, mergeSmallRegions } from './regions'
+import { connectedComponents, dissolveBlendSlivers, mergeSmallRegions, regularizeLabels } from './regions'
 import { detectGradients, validateGradientGroups, type GradientFill } from './gradients'
 import { refineShading } from './refine'
 import { buildRegionBoundaries, extractChains, OUTSIDE, type RegionLoop } from './planarMap'
@@ -85,6 +85,14 @@ export interface TraceEngineOptions {
   shadingStep: number
   /** Flat inks seed palette clusters down to this fraction of mergeDistance apart (see PaletteOptions.inkSeedFraction). */
   inkSeedFraction: number
+  /**
+   * Line art and metal in textured, compressed artwork (photo-like by flat
+   * fraction, see workingPixelCap: a JPEG of a shaded emblem): restore
+   * hairlines when upsampling, label line pixels as blends of the local ink
+   * and paper (labelPixels), and regularize labels between similar levels
+   * (regularizeLabels). Clean artwork is unaffected.
+   */
+  textureDetail: boolean
   /** Search radial gradient centers instead of using the bands' centroid (gradients.ts). */
   radialCenterSearch: boolean
   /** Gradient grouping only across borders with a mean pixel step (sRGB 0-1) up to this; 0 = any border. */
@@ -146,6 +154,7 @@ export const DEFAULT_ENGINE_OPTIONS: TraceEngineOptions = {
   shadingStep: 0,
   gradientBoundaryStep: 0,
   radialCenterSearch: false,
+  textureDetail: false,
   inkSeedFraction: 1,
   maxRegions: 6000,
   maxRegionsHard: 40_000,
@@ -230,6 +239,14 @@ function autoUpscale(width: number, height: number, maxWorkingPixels: number): n
 const NO_POINTS = new Int32Array(0)
 const NO_BYTES = new Uint8Array(0)
 const NO_IMAGE: RgbaImage = { width: 0, height: 0, data: new Uint8ClampedArray(0) }
+
+/**
+ * Label regularization for textured artwork (regularizeLabels): cost of a
+ * disagreeing neighbour in squared palette steps, and the largest OKLab
+ * distance between levels it may trade (similar tones only, never inks).
+ */
+const REGULARIZE_BETA = 1.0
+const REGULARIZE_MAX_SWITCH = 0.12
 
 /** Palette colors shading refinement may add (refine.ts). */
 const MAX_SHADING_COLORS = 512
@@ -360,7 +377,8 @@ function traceWith(source: { image: RgbaImage | null }, overrides: Partial<Trace
     // a k× box reduction (whose last row/column of blocks may be partial).
     const baseScale = image.scale ?? sourceWidth / image.width
     // Classified before denoising, which flattens photos past the threshold.
-    const hairlines = options.upscaleFilter === 'ridge' && flatFraction(image) >= PHOTO_FLAT_FRACTION
+    const textured = options.textureDetail && inputFlatFraction < PHOTO_FLAT_FRACTION
+    const hairlines = options.upscaleFilter === 'ridge' && (textured || flatFraction(image) >= PHOTO_FLAT_FRACTION)
     let spare: Uint8ClampedArray | undefined
     lap('downscale')
 
@@ -438,7 +456,8 @@ function traceWith(source: { image: RgbaImage | null }, overrides: Partial<Trace
 
     const sourceToWorking = (width / sourceWidth) * (height / sourceHeight)
     const minArea = Math.max(1, Math.round(speckleSource * sourceToWorking))
-    let labels = labelPixels(image, lab, opaque, flat, palette, 2 * upscale + 1, options.mergeDistance * 2, options.thinFeatures ? upscale + 2 : 0, Math.max(1, Math.round(upscale * options.thinPeakScale)))
+    let labels = labelPixels(image, lab, opaque, flat, palette, 2 * upscale + 1, options.mergeDistance * 2, options.thinFeatures ? upscale + 2 : 0, Math.max(1, Math.round(upscale * options.thinPeakScale)), textured)
+    if (textured) regularizeLabels(labels, width, height, palette, lab, { beta: REGULARIZE_BETA, step: options.mergeDistance, passes: 3, maxSwitch: REGULARIZE_MAX_SWITCH })
     // Buffers are released right after their last use (memory at multi-MP sizes).
     baseOpaque = baseFlat = opaque = flat = NO_BYTES
     lap('label')

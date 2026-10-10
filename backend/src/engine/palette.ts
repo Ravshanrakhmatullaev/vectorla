@@ -55,6 +55,9 @@ export interface PaletteOptions {
 
 export const TRANSPARENT_LABEL = -1
 
+/** Lightness range (OKLab) within a labeling window above which its extremes count as ink and paper. */
+const EXTREME_CONTRAST = 0.15
+
 /** Per-pixel palette labels; 2 bytes per pixel (labels stay far below 32767), 4 only for huge palettes. */
 export type LabelMap = Int16Array | Int32Array
 
@@ -446,6 +449,7 @@ export function labelPixels(
   localPreference: number,
   thinRadius = 0,
   thinPeakRadius = thinRadius,
+  extremeCandidates = false,
 ): LabelMap {
   const { width: w, height: h, data } = image
   const n = w * h
@@ -492,6 +496,7 @@ export function labelPixels(
       let ownIsNearby = false
       // Widen the search when the window holds no flat pixels at all (JPEG
       // ringing can leave a noisy band around text wider than the window).
+      let flatInWindow = false
       for (let radius = windowRadius; radius <= windowRadius * 4 && candidates.length === 0; radius *= 2) {
         const stride = radius >= 6 ? Math.max(step, Math.floor(radius / 4)) : step
         for (let dy = -radius; dy <= radius; dy += stride) {
@@ -504,6 +509,47 @@ export function labelPixels(
             if (!flat[q]) continue
             const label = initial[q] ?? 0
             if (label === own) ownIsNearby = true
+            if (radius === windowRadius) flatInWindow = true
+            if (seen[label] !== p) {
+              seen[label] = p
+              candidates.push(label)
+            }
+          }
+        }
+      }
+      // Line art drawn in a texture (feathers, engraving, hatching) has no
+      // flat pixels at all: its lines and the paper between them are only a
+      // few pixels wide. The darkest and lightest colors in the window are
+      // then the ink and the paper, and a pixel between them is their blend.
+      // (With flat paper in the window, a hairline's own ink is found below
+      // as the unseen partner instead; its darkest pixel is only a tint.)
+      if (extremeCandidates && !flatInWindow) {
+        let minL = Infinity
+        let maxL = -Infinity
+        let darkest = -1
+        let lightest = -1
+        for (let dy = -windowRadius; dy <= windowRadius; dy++) {
+          const ny = y + dy
+          if (ny < 0 || ny >= h) continue
+          for (let dx = -windowRadius; dx <= windowRadius; dx++) {
+            const nx = x + dx
+            if (nx < 0 || nx >= w) continue
+            const q = ny * w + nx
+            if (!opaque[q]) continue
+            const L = lab.L(q)
+            if (L < minL) {
+              minL = L
+              darkest = q
+            }
+            if (L > maxL) {
+              maxL = L
+              lightest = q
+            }
+          }
+        }
+        if (darkest >= 0 && maxL - minL >= EXTREME_CONTRAST) {
+          for (const q of [darkest, lightest]) {
+            const label = initial[q] ?? 0
             if (seen[label] !== p) {
               seen[label] = p
               candidates.push(label)

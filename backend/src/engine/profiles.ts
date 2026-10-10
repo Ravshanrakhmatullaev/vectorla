@@ -8,8 +8,10 @@
  *    centers searched, grouped only across posterization cuts) and shading
  *    refinement (shaded regions that are no clean ramp get finer levels).
  *  Both keep small high-contrast details through speckle cleanup, seed flat
- *  inks separately (a pale tint next to white) and share the same
- *  working-resolution caps (memory-bound, see below). BENCHMARKS.md "Emblems".
+ *  inks separately (a pale tint next to white), keep line art and metal
+ *  coherent in textured, compressed artwork (textureDetail) and share the
+ *  same working-resolution caps (memory-bound, see below). BENCHMARKS.md
+ *  "Emblems" and "Customer emblem".
  */
 import { DEFAULT_ENGINE_OPTIONS, type TraceEngineOptions } from './traceImage'
 
@@ -40,6 +42,7 @@ export const PROFESSIONAL_MAX_UPSCALED_PIXELS = 2_000_000
 const DETAIL_OPTIONS: Partial<TraceEngineOptions> = {
   detailContrast: 0.15,
   inkSeedFraction: 0.4,
+  textureDetail: true,
 }
 
 export const QUICK_ENGINE_OPTIONS: Partial<TraceEngineOptions> = {

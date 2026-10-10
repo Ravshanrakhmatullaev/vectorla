@@ -52,6 +52,7 @@ npm run bench -- --corpus=all --engines=quick,professional --memory --compare=be
 npm run bench -- --corpus=emblem --engines=quick,professional --compare  # 28 emblem rasters vs baseline-emblem.json
 npx tsx src/benchmark/emblemGate.smoke-test.ts     # emblem regression gate (also part of npm test)
 npx tsx src/benchmark/emblemDiagnostics.ts --variants=600,1200  # what each engine stage did, per emblem
+npx tsx src/benchmark/customerEmblemGate.smoke-test.ts  # the customer's emblem, scored against its source and Vectorizer.AI (also part of npm test)
 ```
 
 `--out` writes each source raster, traced SVG and 4× render for visual review.
@@ -886,8 +887,198 @@ search, well inside the 60 s CPU limit.
 - **Fine texture** (brushed metal, noise filters) becomes soft blotches in both modes.
 - **Small circles and star tips on JPEG** are slightly polygonal or rounded (curve fitting at a few
   pixels per shape).
-- **Not measured head-to-head.** Comparing on the customer's own emblem needs that file and
-  Vectorizer.AI's output for it; both can be added to the emblem corpus as a raster case.
+- **Head-to-head on the customer's own emblem:** see "Customer emblem" below.
+
+## Customer emblem (2026-10-10)
+
+The emblem round above used look-alike designs. The customer's own file and
+Vectorizer.AI's result for it then arrived, and became the primary benchmark:
+
+- **Source:** the exact upload, a 640 × 640 WebP (shaded gold rim, circular
+  serif text, a silver shield with five hazard symbols, the Uzbek coat of arms
+  with a line-art eagle, cotton and wheat, two eight-point stars). Committed as
+  `backend/src/benchmark/assets/customer/emblem-sanoat-radiatsiya-640.webp`.
+  It is photo-like to the engine: only 32% of its pixels are flat.
+- **Vectorizer.AI:** only a 1358 × 984 screenshot of its result page was
+  available, not the SVG, so its file size, path count and runtime are unknown.
+  The screenshot was registered onto the source (scale 1.3786, offset
+  (304.1, 83.1), residual MSE 0.003) and scored with the same code. Its UI
+  overlays (toolbar, "Vectorizer.AI Result" label, download button) are
+  excluded for every engine. The screenshot is not committed; its scores are
+  recorded in `customerEmblem.ts` (`VECTORIZER_AI_REFERENCE`).
+
+There is no vector truth, so each trace is rendered at 2× (1280 px), averaged
+back to 640 px and compared with the source raster inside the emblem
+(`customerEmblem.ts`):
+
+| Metric | Meaning |
+|---|---|
+| ΔE×100 | Mean OKLab difference from the source. |
+| Edge recall | Share of the source's color edges (OKLab step > 0.1 after a σ 0.7 px blur) that the trace reproduces within 1 px: lost letter outlines, feathers and grains lower it. |
+| Edge precision | Share of the trace's edges that exist in the source: speckle and jagged band boundaries lower it. |
+| Edge-length ratio | Trace edges ÷ source edges (below 1: lost detail; above 1: noise). |
+| Lines kept | Thin dark lines of the source (lightness valleys ≤ 2 px wide and ≥ 0.12 deeper than both sides: letter outlines, feather and grain strokes) that stay dark in the trace. |
+
+Every metric is also reported per region. `customerEmblemGate.smoke-test.ts`
+traces the file through the production decoder and both profiles and fails
+on regression (part of `npm test`).
+
+### Root causes
+
+1. **Photo-like classification switched off hairline restoration.** Only 32%
+   of the pixels are flat (JPEG history and shading), under the 70% threshold,
+   so the ridge upsampler's hairline restoration did not run. Professional's 2×
+   upsampling then softened 1 px letter outlines and feather strokes into gray.
+2. **No flat pixels inside the line art.** Anti-aliasing-aware labeling
+   explains an edge pixel as a blend of the flat colors around it. In the
+   eagle, the cotton bolls and the wheat, lines and the paper between them are
+   both only 1–3 px wide, so there were no candidates, and line pixels took
+   whatever mid-gray palette level was nearest.
+3. **The gray stripes merged into blotches.** Speckle cleanup then joined the
+   alternating gray fragments into the blotchy shapes the customer saw, and
+   neighbouring pixels of brushed or compressed metal flipped between similar
+   levels, tracing as streaks.
+4. **So Professional was worse than Quick on this file** (ΔE 5.13 vs 4.98,
+   lines kept 0.845 vs 0.883): more resolution, but every extra pixel was a
+   blur.
+
+### Changes (`textureDetail`, both profiles; only for photo-like inputs)
+
+- **Hairlines restored for textured artwork too**, when upsampling with the
+  ridge filter.
+- **Ink and paper candidates** (`labelPixels`): where a labeling window holds
+  no flat pixel and its lightness range is at least 0.15, its darkest and
+  lightest pixels' labels join the blend candidates, so a line pixel is
+  labeled as a blend of the local ink and paper instead of the nearest gray.
+- **Label regularization** (`regularizeLabels`, Potts/ICM): each pixel is
+  re-decided among its own and its 8 neighbours' labels, by color fit plus
+  1.0 per disagreeing neighbour, 3 passes. It only trades levels within 0.12
+  OKLab of the pixel's own, so line and edge pixels, far from the other side's
+  color, keep their label. Later passes visit only pixels next to a change
+  (same result as full sweeps).
+
+Clean artwork (≥ 70% flat pixels) is not affected: the core corpus is
+byte-identical.
+
+### Before and after
+
+The exact file, as production traces a WebP upload:
+
+| | Vectorizer.AI | Quick before | Quick after | Professional before | Professional after |
+|---|---:|---:|---:|---:|---:|
+| ΔE×100 | 4.18 | 4.98 | 4.68 | 5.13 | **4.27** |
+| Edge recall | 0.941 | 0.917 | 0.927 | 0.875 | **0.943** |
+| Edge precision | 0.958 | 0.944 | 0.954 | 0.952 | **0.960** |
+| Edge-length ratio | 0.993 | 0.947 | 0.952 | 0.842 | 0.951 |
+| Lines kept | 0.978 | 0.883 | 0.911 | 0.845 | 0.935 |
+| Outer rim radius error (px, mean)¹ | 1.02 | 1.96 | 1.92 | 0.78 | 0.78 |
+| SVG size (KB) | unknown | 1,101 | 886 | 2,018 | 1,916 |
+| Paths | unknown | 7,457 | 6,270 | 9,162 | 9,103 |
+| Trace time (s)² | unknown | 1.89 | 1.93 | 6.68 | 8.05 |
+| Live memory peak (MB)³ | unknown | 17.6 | 14.6 | 27.7 | 26.0 |
+
+¹ Outermost non-white radius along 720 rays, against the source's; the
+screenshot's registration adds a few tenths of a pixel to Vectorizer.AI's.
+² Median of three runs each, same machine, one at a time.
+³ Forced GC at every engine checkpoint, as in `memory.smoke-test.ts`; the
+peak is the finished SVG string in all four runs.
+
+Professional moved from behind Quick to clearly ahead of it: it is now
+Vectorla's best result on every metric (it ties Quick on edge-length ratio),
+matches Vectorizer.AI on edge recall and precision and is 0.09 ΔE behind it. With the original upload's JPEG format hint (the file
+was a JPEG before this WebP), the numbers are within 0.05 ΔE: Professional
+5.18 → 4.24, Quick 4.95 → 4.62.
+
+Per region, Professional before → after (Vectorizer.AI in the last column):
+
+| Region (what it holds) | ΔE×100 | Edge recall | Lines kept | Vectorizer.AI (ΔE / recall / lines) |
+|---|---|---|---|---|
+| text-top (circular serif text) | 4.45 → **3.88** | 0.902 → **0.948** | 0.900 → **0.957** | 3.64 / 0.963 / 0.990 |
+| text-bottom | 5.22 → **4.22** | 0.916 → **0.965** | 0.813 → **0.896** | 3.92 / 0.962 / 0.987 |
+| text-sides | 4.38 → **3.52** | 0.893 → **0.941** | 0.822 → **0.949** | 4.11 / 0.946 / 0.987 |
+| hazard-symbols (small symbols, gold bezels) | 5.93 → **5.01** | 0.908 → **0.951** | 0.871 → **0.948** | 4.51 / 0.964 / 0.984 |
+| coat-of-arms (eagle, cotton, sun, star) | 8.27 → **7.10** | 0.775 → **0.946** | 0.794 → **0.906** | 6.30 / 0.906 / 0.945 |
+| wreath (wheat grains, gold leaves) | 7.46 → **6.12** | 0.808 → **0.933** | 0.816 → **0.918** | 5.46 / 0.899 / 0.959 |
+| metal-shield (radial, light-dark-light silver) | 5.48 → **4.66** | 0.920 → **0.955** | 0.881 → **0.949** | 4.20 / 0.969 / 0.991 |
+| rim-ring (metallic gold ramps) | 4.23 → **3.70** | 0.889 → **0.941** | 0.909 → **0.932** | 4.02 / 0.918 / 1.000 |
+
+Every region improved in ΔE, edge recall and lines kept; edge precision rose
+or held (−0.001 in two regions). Professional is now ahead of Vectorizer.AI
+on ΔE in the rim and side text, and on edge recall in the coat of arms,
+wreath, rim and bottom text (with lower precision in the coat of arms: some of
+those edges are noise); it is behind everywhere else, most in thin lines kept.
+
+Visual review (crops of the coat of arms, text, symbols, star and rim, wreath):
+letters are solid gold on black without the brown smears through them; the
+eagle's feathers are white with dark strokes instead of gray mush; the
+cotton bolls and wheat grains have outlines again.
+
+### Memory, CPU and other corpora
+
+`memory.smoke-test.ts` (live peak with forced GC, all budgets unchanged):
+4 MP artwork 39.5 / 40.0 MB, 4 MP photo 10.7 / 11.9 MB (Quick /
+Professional; was 10.6 / 11.9), shaded 4 MP artwork 43.2 MB, 16 px
+checkerboard 46.9 MB, all as before. The textured path runs at most at about
+2 MP: larger textured uploads are photo-capped to 1 MP (the 4 MP photo case
+above), and Professional upsamples small ones to at most 2 MP, like this
+emblem (1280², live peak 26.0 MB, was 27.7). Regularization adds one byte per
+working pixel (its visit flags), alive only during labeling.
+
+CPU: Professional's labeling stage on the emblem takes 2.1 → 3.9 s (the ink and
+paper window scan and the regularization), the trace 6.7 → 8.1 s; the
+Worker's CPU limit is 60 s. Quick: 1.9 s, unchanged. Clean artwork takes
+neither path.
+
+**Other corpora** (both profiles; baselines refreshed):
+
+- **Core** (25 variants): byte-identical; no image is photo-like.
+- **Real-world** (55 images): every vector-reference image is unchanged; the
+  6 photos and the scanned text, the only photo-like inputs, all improved.
+  Mean ΔE Quick 0.689 → 0.672, Professional 0.643 → 0.624 (photos 2.82 → 2.67
+  and 2.62 → 2.46; e.g. astronaut 3.03 → 2.77); total SVG 4,912 → 4,529 KB and
+  5,950 → 5,517 KB. 0 regressions.
+- **Emblems** (28 rasters): only `seal-embossed`, the brushed-metal texture
+  case, is photo-like. Means unchanged (Quick 0.756 → 0.756, Professional
+  0.495 → 0.493); its segments fell 35–40% (total SVG 5,407 → 4,794 KB and
+  4,704 → 4,308 KB). Five of its eight runs improved (Quick 800 px JPEG
+  1.47 → 1.41, Professional 1200 px 0.87 → 0.82); three got slightly worse:
+  Professional 600 px 1.05 → 1.07, Quick 1200 px 1.05 → 1.08, Quick 2000 px
+  1.15 → 1.18. The regularization smooths part of the truth's fine brushed
+  texture; all gate budgets hold.
+- Trace times on the corpora are unchanged within machine noise.
+
+### Tried and rejected
+
+- **Ink/paper candidates for all artwork.** Clean hairlines regressed
+  (thin-lines@256 ΔE 0.39 → 1.02, a blurred logo 0.69 → 1.02): next to a clean
+  anti-aliased hairline, the window's darkest pixel is itself a tint. Hence
+  only without flat pixels in the window, and only for photo-like inputs.
+- **Regularization without the 0.12 limit.** Thin gold serifs took the
+  gray-taupe of the surrounding blend pixels.
+- **Wider blend tolerance and every palette color as the unseen partner** for
+  line pixels: no visible change on the gray serif bits; worse metrics.
+- **Bilateral smoothing passes before labeling:** turned the eagle into gray
+  mush.
+
+### What still differs from Vectorizer.AI
+
+- **Overall cleanliness.** Vectorizer.AI draws each part as a few clean flat
+  shapes with smooth curves; Vectorla's Professional output is busier
+  (more paths, more jagged boundaries between shading levels; edge-length
+  ratio 0.951 vs 0.993 with lower thin-line retention 0.935 vs 0.978).
+- **Coat of arms:** the eagle and cotton are recognizable but noisy (ΔE 7.10 vs
+  6.30); feathers break into fragments where Vectorizer.AI draws continuous
+  strokes.
+- **Small symbols:** the hazard symbols' black shapes have nicks and blotches
+  and their gold bezels are rough; Vectorizer.AI's are clean geometric shapes.
+- **Letter strokes:** thin serifs are ragged, with a few gray bits on the
+  edges.
+- **Stars:** the eight-point stars keep their tips but with inner shading
+  facets; Vectorizer.AI renders them as one flat star.
+- **Metallic ramps:** Vectorla traces the rim's and shield's light-dark-light
+  ramps as many flat bands; Vectorizer.AI's bands are fewer and smoother.
+- **Unmeasured:** Vectorizer.AI's SVG size, node count and runtime (screenshot
+  only). Its SVG would settle them.
 
 ## Against professional expectations
 
@@ -904,11 +1095,11 @@ Vectorla stands on this benchmark:
 | Small text and hairlines preserved | ✅ Mostly met | Real-world corpus: hairlines down to 0.5 px keep 94–104% of their length; small serif text is legible but serifs still break. The detail-color pass recovers 12 px subtitle text in its exact color `#2563eb`; the first engine version dropped it. |
 | Clean output from JPEG sources | ✅ Mostly met | Luma-guided chroma restoration, blend-sliver dissolve and edge-aware labeling. JPEG variants are now within 0.9–1.6× the nodes of PNG and 1.0–1.4× the edge error (e.g. flat-logo JPEG: 77 segments, 0.11 px). Heavy low-quality JPEGs are not in the corpus yet. |
 | Gradients reproduced as gradients | ✅ Met (Professional) | Linear and radial gradients are reconstructed as SVG gradients: ΔE 0.04–0.23 vs 0.58–1.06 posterized. Off-center radial fills are found by a center search (emblems: metal badge ΔE 1.06 → 0.49). Other shading gets finer flat levels. Quick keeps flat bands for print and cut work. Multi-stop metallic ramps, conic and mesh-like shading are not modeled as one gradient. |
-| Complex emblems, seals and crests | ⚠️ Partial | Emblem corpus (28 rasters): Professional ΔE 0.66 → 0.50, Quick 0.93 → 0.76; Professional 20–57% below Quick on shaded designs. Still weak: 1 px outlines around small text at ≤ 600 px, tiny outlined shapes on low-res JPEG, metallic multi-stop ramps (see "Emblems"). |
+| Complex emblems, seals and crests | ⚠️ Partial | Emblem corpus (28 rasters): Professional ΔE 0.66 → 0.50, Quick 0.93 → 0.76; Professional 20–57% below Quick on shaded designs. The customer's own emblem: Professional ΔE 5.13 → 4.27 (Vectorizer.AI 4.18), thin lines kept 0.845 → 0.935 (0.978). Still weak: noisy line art and small symbols on textured sources, 1 px outlines around small text at ≤ 600 px, metallic multi-stop ramps (see "Emblems" and "Customer emblem"). |
 | Corner-to-corner touching shapes (QR, pixel art, checkerboards) | ⚠️ Partial | Corners are sharp; diagonal "pinch" points still produce slight tilts near them (QR ΔE 0.57, down from 1.11). |
 | Tangent-continuous curves through 3-color junctions | ⚠️ Partial | Junction positions are least-squares refined; tangents are not yet matched across junctions. |
 | Photos / continuous tone | ⚠️ Posterized only | Bounded and clean, but not a photo-realistic vectorization. 6 real photos: ΔE 2.7–3.3 vs the source. |
-| Head-to-head against Vectorizer.ai on the same inputs | ❓ Not measured | Needs a Vectorizer.ai API account (paid). It is an owner decision whether to buy credits for benchmarking. |
+| Head-to-head against Vectorizer.ai on the same inputs | ⚠️ One image | The customer emblem, scored against its source from a screenshot of Vectorizer.AI's result: Vectorizer.AI ΔE 4.18, edge recall 0.941, lines kept 0.978; Vectorla Professional 4.27, 0.943, 0.935 (see "Customer emblem"). A corpus-wide comparison needs a Vectorizer.ai API account (paid); it is an owner decision whether to buy credits for benchmarking. |
 
 ## History
 
@@ -925,3 +1116,4 @@ Vectorla stands on this benchmark:
 | 2026-10-03 | Optimization round: palette separation, ridge promotion for thin strokes, size-relative precision, memory (single decode, early downscale, decoder reset, scoped buffers) | 0.52 (Pro) / 0.58 (Quick), 80 images | 0.13 | 0 |
 | 2026-10-04 | Launch readiness: dense-pattern undo below 40,000 regions (16 px checkerboard 1 → 31,249 paths) | 0.50 (Pro) / 0.57 (Quick), 80 images, 0 regressions, byte-identical | 0.12 | 0 |
 | 2026-10-10 | Emblems: shading refinement, radial center search, gradients only across band cuts (Professional); flat-ink seeding, detail-aware speckle cleanup, photo cap only when it saves memory (both) | Emblems 0.50 (Pro) / 0.76 (Quick), was 0.66 / 0.93; core 0.16 / 0.29 unchanged; real-world 0.64 / 0.69 | 0.23 emblems; 0.11–0.13 others | 0 |
+| 2026-10-10 | Customer emblem: regression case scored against its source and Vectorizer.AI; line art in textured artwork (hairlines, ink/paper blend candidates, label regularization) | Customer emblem 4.27 (Pro) / 4.68 (Quick), was 5.13 / 4.98, Vectorizer.AI 4.18; emblems 0.49 / 0.76; core unchanged; real-world 0.62 / 0.67 | 0.23 emblems; 0.11–0.13 others | 0 |
