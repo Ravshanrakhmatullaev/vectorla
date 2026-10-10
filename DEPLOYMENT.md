@@ -361,7 +361,9 @@ go-ahead.
        After the deploy the queue API lists `vectorla-api-staging` as producer
        and consumer (batch 1, 6 retries, DLQ `vectorla-conversions-staging-dlq`)
        and as the DLQ's consumer (batch 10).
-       [ ] Production bucket and queues: not created.
+       [x] Production (2026-10-10): `vectorla-uploads` (hint `apac`, empty),
+       `vectorla-conversions`, `vectorla-conversions-dlq`. The production
+       Worker attaches as producer and consumer when it is first deployed.
 5. [x] **Worker secrets, staging** (§3): `SUPABASE_URL`,
        `SUPABASE_SERVICE_ROLE_KEY`, `DOWNLOAD_URL_SECRET`.
        [ ] Production: none set.
@@ -372,14 +374,16 @@ go-ahead.
        a new connection per request was not limited (375 requests in 75 s all
        passed). It is a burst guard; the per-user limits are the enforcement.
        For a hard per-IP cap, add a WAF rate-limiting rule (needs approval).
-       [ ] Production: uncomment the top-level `[[ratelimits]]` block at
-       release time.
+       [x] Production: enabled in `wrangler.toml` (namespace 1001, 120 / 60 s);
+       takes effect with the first production deploy.
 7. [x] **R2 lifecycle rules, staging:** `expire-uploads` (`uploads/`, 35
        days) and `expire-conversions` (`conversions/`, 35 days), next to
        Cloudflare's default 7-day incomplete-multipart rule.
-       [ ] Production bucket: the same two rules once it exists.
+       [x] Production bucket (2026-10-10): the same two rules.
 8. [x] **Frontend build variables, staging** (§5, Workers Static Assets).
-       [ ] Production Pages environment variables.
+       [ ] Production: `wrangler.web-production.toml` is ready (Workers Static
+       Assets, see "Production preparation"); the build needs the production
+       Supabase URL and publishable key.
 9. [x] **Staging CORS:** `CORS_EXTRA_ORIGINS` is the staging web origin.
        Preflight from it returns `Access-Control-Allow-Origin`; other origins
        get none.
@@ -462,7 +466,8 @@ because the Workers clock does not advance during CPU work. The first cron
 run with the key (15:30) purged the only pre-existing upload, from 2026-08-27,
 under the 30-day retention.
 
-**Cleanup.** All 65 test objects were deleted from R2 (bucket empty), no
+**Cleanup.** Status 2026-10-10: still pending; the connector held the block
+for approval again and timed out, so nothing was deleted. All 65 test objects were deleted from R2 (bucket empty), no
 job is active, and the ledger matches every balance. The six test accounts
 are banned (`banned_until = 2999-01-01`, sign-in returns `user_banned`). They
 and their rows remain because the Supabase connector holds `DELETE` for an
@@ -497,6 +502,99 @@ documented 128 MB limit, and the CPU time is far below the 60 s limit.
 Cloudflare enforced at about twice the documented limit here; the 128 MB
 figure stays the design budget. These numbers cover the decode and trace,
 not the Supabase client or R2 transfer.
+
+### Production preparation (2026-10-10)
+
+Nothing is deployed to production, and no DNS record or `vectorla.app` route
+was changed.
+
+**Ready**
+
+- R2 `vectorla-uploads` (location hint `apac`, the staging database's region;
+  still empty, so it can be recreated in another region if the production
+  database goes elsewhere) with `expire-uploads` / `expire-conversions`
+  (35 days) and Cloudflare's 7-day multipart rule.
+- Queues `vectorla-conversions` and `vectorla-conversions-dlq`.
+- `wrangler.toml` (production): rate limiter enabled (namespace 1001),
+  `cpu_ms = 60000`, cron, queue consumer with DLQ. `wrangler deploy --dry-run
+  --env=""` binds `vectorla-conversions`, `vectorla-uploads` and
+  `API_RATE_LIMITER`, with `ENVIRONMENT=production`. Workers Paid covers it.
+- Database bootstrap, verified on Postgres 16 in the production order:
+  preflight on the empty database → `schema.sql` → `0002` → preflight
+  (0 failing checks, `service_role` DML, anon/authenticated none, RLS on) →
+  `0003` → `0004` → a second run of 0002–0004 (no-op) → the credit-integrity,
+  usage-limit and hardening tests pass.
+- Frontend: `wrangler.web-production.toml` (`vectorla-web`, SPA fallback,
+  `_headers` applied); its dry run passes.
+- The `vectorla.app` zone is active on this Cloudflare account, so custom
+  domains need no registrar change.
+
+**Blocked: a production Supabase project needs a paid plan (owner
+decision).** The organization is on the Free plan with its two active
+projects (`Vectorla` = staging, `poligrafiya`), the Free limit, and Free
+projects pause after a week of inactivity. Options: upgrade the organization
+to Pro and create `vectorla-production`, or pause `poligrafiya` (not
+recommended: Free projects still auto-pause). Then, in order: run the
+bootstrap above in its SQL editor; set the Worker secrets; set the Auth
+settings below; build and deploy.
+
+**Worker secrets for production** (`--env=""`, after the project exists):
+`SUPABASE_URL` (its API URL), `SUPABASE_SERVICE_ROLE_KEY` (entered by the
+owner at the hidden `wrangler secret put` prompt or in the dashboard, §3),
+and `DOWNLOAD_URL_SECRET`, generated fresh and different from staging:
+`openssl rand -base64 48 | tr -d '\n' | npx wrangler secret put DOWNLOAD_URL_SECRET --env=""`.
+The Worker fails closed until all three exist.
+
+**Production hostnames (at launch, needs the owner's DNS go-ahead).**
+Web on `vectorla.app` and `www.vectorla.app`, API on `api.vectorla.app`, as
+Worker custom domains (the commented `routes` lines in
+`wrangler.web-production.toml` and `backend/wrangler.toml`). CORS already
+allows both web origins, so `CORS_EXTRA_ORIGINS` stays empty in production.
+Build the frontend with `VITE_API_BASE_URL=https://api.vectorla.app`, which
+also sets the CSP `connect-src`.
+
+**Supabase Auth settings (dashboard → Authentication → URL Configuration).**
+
+| Setting | Production | Staging |
+|---|---|---|
+| Site URL | `https://vectorla.app` | `https://vectorla-web-staging.ra-ravshan1998.workers.dev` |
+| Redirect URLs | `https://vectorla.app`, `https://www.vectorla.app` | the staging web origin |
+
+The app passes `emailRedirectTo` / `redirectTo` =
+`window.location.origin` (`src/lib/auth.tsx`), so the exact origins are
+enough; any other origin falls back to the Site URL. Keep email
+confirmation on. On Pro, enable leaked-password protection and set a
+minimum password length.
+
+**SMTP requirements.** Supabase's built-in email only sends to the
+organization's team members, at about 2 messages an hour, so public signup
+and password reset need custom SMTP before launch:
+
+- A provider account (Resend, Postmark, Amazon SES, Brevo or similar;
+  most have a free tier). Choosing one is the owner's decision.
+- Sender `no-reply@vectorla.app`, name "Vectorla". The provider gives SPF,
+  DKIM and DMARC records for `vectorla.app` (a DNS change, at launch).
+- Dashboard → Authentication → SMTP Settings: host, port (465 or 587),
+  username, password (entered by the owner; never in the repository).
+- Raise the Auth email rate limit after enabling custom SMTP, and review
+  the confirm-signup and reset-password templates (one template per type,
+  so write them in all three languages or in the primary market language).
+
+**Frontend: Workers Static Assets, not Pages (recommendation).** The same
+`dist/` and `_headers` passed the staging verification on Workers Static
+Assets, including the CSP, SPA routes and EN/UZ/RU flows. The current token
+can deploy it (it has no Pages permission). It uses the same `wrangler`
+deploy and rollback as the API, takes custom domains directly, and Cloudflare
+recommends Workers for new projects. Pages would add Git-connected preview
+deployments, which `wrangler versions upload` preview URLs also cover.
+
+**Final production deploy (after the blockers):**
+
+1. Bootstrap the production database; set the three Worker secrets.
+2. `cd backend && npx wrangler deploy --env=""` (API).
+3. Build with the production values; `wrangler deploy -c wrangler.web-production.toml`.
+4. Owner-approved: enable the custom-domain `routes` and redeploy both.
+5. Set the Auth URLs and SMTP; run every step in §6 against production.
 
 ### Known limitations (accepted for launch, tracked in ROADMAP.md)
 

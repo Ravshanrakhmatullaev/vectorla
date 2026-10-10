@@ -2,6 +2,11 @@ name = "vectorla-api"
 main = "src/index.ts"
 compatibility_date = "2026-01-01"
 
+# At launch (adds a DNS record in the vectorla.app zone, so it needs the
+# owner's go-ahead): serve the production API on its own hostname. The
+# frontend's VITE_API_BASE_URL and CSP connect-src must use the same origin.
+# routes = [{ pattern = "api.vectorla.app", custom_domain = true }]
+
 # R2 bucket binding — create the bucket with:
 #   wrangler r2 bucket create vectorla-uploads
 [[r2_buckets]]
@@ -44,15 +49,15 @@ crons = ["*/15 * * * *"]
 [limits]
 cpu_ms = 60000
 
-# Per-client-IP request limit (Cloudflare Workers Rate Limiting) — REQUIRES
-# OWNER APPROVAL before enabling (DEPLOYMENT.md "Launch checklist"). Until it
-# is enabled the code runs without it (env.ts API_RATE_LIMITER is optional);
-# the per-user upload/quota/concurrency limits apply either way. Pick an
-# account-unique namespace_id when enabling:
-# [[ratelimits]]
-# name = "API_RATE_LIMITER"
-# namespace_id = "1001"
-# simple = { limit = 120, period = 60 }
+# Per-client-IP request limit (Cloudflare Workers Rate Limiting), enabled for
+# production on 2026-10-10 (staging uses namespace 1002). Cloudflare counts
+# per server within a location, so this is a burst guard; the per-user
+# upload/quota/concurrency limits are the enforcement (DEPLOYMENT.md,
+# checklist item 6). A limiter error never blocks a request (src/index.ts).
+[[ratelimits]]
+name = "API_RATE_LIMITER"
+namespace_id = "1001"
+simple = { limit = 120, period = 60 }
 
 [vars]
 # Safe deployment default. `npm run dev` overrides this value explicitly;

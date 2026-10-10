@@ -1,0 +1,22 @@
+# Production frontend on Workers Static Assets (no Worker script), the same
+# setup as wrangler.web-staging.toml, which passed the staging verification.
+# NOT DEPLOYED YET. Build first with the production values (DEPLOYMENT.md §5):
+#   VITE_API_BASE_URL=https://api.vectorla.app \
+#   VITE_SUPABASE_URL=https://<production-ref>.supabase.co \
+#   VITE_SUPABASE_PUBLISHABLE_KEY=<production publishable key> \
+#   npm run build
+#   backend/node_modules/.bin/wrangler deploy -c wrangler.web-production.toml
+name = "vectorla-web"
+compatibility_date = "2026-01-01"
+
+[assets]
+directory = "./dist"
+not_found_handling = "single-page-application"
+
+# At launch (adds DNS records in the vectorla.app zone, so it needs the
+# owner's go-ahead): serve the apex and www. The API allows both origins
+# (backend/src/api/cors.ts).
+# routes = [
+#   { pattern = "vectorla.app", custom_domain = true },
+#   { pattern = "www.vectorla.app", custom_domain = true },
+# ]

@@ -233,7 +233,10 @@ Legend: ✅ done · 🔜 next · ⏳ planned · 🧑 needs an owner decision, cr
   passed on 2026-10-09 (DEPLOYMENT.md "Staging end-to-end verification").
   🧑 Remaining for staging: Supabase Auth URL/SMTP settings and deleting the
   six banned test accounts (a guarded SQL file is provided). Production
-  resources do not exist yet (DEPLOYMENT.md checklist).
+  (2026-10-10): R2 bucket with lifecycle rules, queue and DLQ created; rate
+  limiter enabled; frontend config ready. 🧑 Blocked on a production Supabase
+  project (paid plan), custom SMTP, Auth URLs and the DNS go-ahead
+  (DEPLOYMENT.md "Production preparation").
 
 ### Tier 3: Product and SaaS (after quality and safety)
 
