@@ -13,6 +13,7 @@
 import { Resvg } from '@resvg/resvg-js'
 import { BENCHMARK_CORPUS, type BenchmarkVariant } from './corpus'
 import { REAL_WORLD_CORPUS } from './realWorldCorpus'
+import { EMBLEM_CORPUS } from './emblemCorpus'
 import { compareImages, measureSvgStructure, type ImageDiffMetrics, type SvgStructure } from './metrics'
 import { traceImage } from '../engine/traceImage'
 import { runQuickTrace, runProfessionalTrace } from '../pipeline/ProfessionalTracePipeline'
@@ -103,7 +104,7 @@ async function traceWith(engine: EngineName, imageData: ImageData, format: 'png'
   }
 }
 
-export type CorpusName = 'core' | 'real' | 'all'
+export type CorpusName = 'core' | 'real' | 'all' | 'emblem'
 
 /** One raster exactly as a customer would upload it, plus what it is judged against. */
 export interface PreparedSource {
@@ -191,6 +192,8 @@ interface CaseSpec {
 
 async function corpusCases(corpus: CorpusName): Promise<CaseSpec[]> {
   const specs: CaseSpec[] = []
+  // The adversarial emblem corpus runs on its own (not part of 'all' or its baselines).
+  if (corpus === 'emblem') return EMBLEM_CORPUS.map((c) => ({ id: c.id, category: c.category, svg: c.svg, variants: c.variants }))
   if (corpus !== 'real') specs.push(...BENCHMARK_CORPUS)
   if (corpus !== 'core') {
     for (const c of REAL_WORLD_CORPUS) {
@@ -466,7 +469,8 @@ async function main(): Promise<void> {
 export const BASELINE_PATH = 'src/benchmark/baseline.json'
 /** The real-world corpus keeps its own baseline so the core quality gate stays unchanged. */
 export const REAL_WORLD_BASELINE_PATH = 'src/benchmark/baseline-realworld.json'
-const baselinePathFor = (corpus: CorpusName) => (corpus === 'core' ? BASELINE_PATH : REAL_WORLD_BASELINE_PATH)
+export const EMBLEM_BASELINE_PATH = 'src/benchmark/baseline-emblem.json'
+const baselinePathFor = (corpus: CorpusName) => (corpus === 'core' ? BASELINE_PATH : corpus === 'emblem' ? EMBLEM_BASELINE_PATH : REAL_WORLD_BASELINE_PATH)
 
 function roundRow(row: BenchmarkRow): BenchmarkRow {
   const out = { ...row } as Record<string, unknown>

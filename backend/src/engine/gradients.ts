@@ -68,10 +68,21 @@ export interface GradientOptions {
    * inflate the residual of every region.
    */
   edgeMargin: number
+  /**
+   * Regions join a gradient only across borders whose mean pixel step
+   * (sRGB 0-1, largest channel) is at most this: a posterization cut, not a
+   * real edge. Undefined: any border.
+   */
+  maxBoundaryStep?: number
+  /** Search radial gradient centers (searchRadialCenters) instead of using the bands' centroid. */
+  radialCenterSearch?: boolean
 }
 
-/** Chessboard distance (in pixels) to the nearest pixel of a different region, capped at `cap`. */
-function interiorDistance(regionIds: Int32Array, w: number, h: number, cap: number): Uint8Array {
+/**
+ * Chessboard distance (in pixels) to the nearest pixel of a different region,
+ * capped at `cap`. With `isEdge`, those pixels count as boundary too.
+ */
+export function interiorDistance(regionIds: Int32Array, w: number, h: number, cap: number, isEdge?: (p: number) => boolean): Uint8Array {
   const d = new Uint8Array(w * h)
   const limit = Math.min(255, cap)
   for (let y = 0; y < h; y++) {
@@ -79,6 +90,7 @@ function interiorDistance(regionIds: Int32Array, w: number, h: number, cap: numb
       const p = y * w + x
       const r = regionIds[p]!
       const edge =
+        (isEdge !== undefined && isEdge(p)) ||
         (x > 0 && regionIds[p - 1] !== r) ||
         (x < w - 1 && regionIds[p + 1] !== r) ||
         (y > 0 && regionIds[p - w] !== r) ||
@@ -267,24 +279,42 @@ export function detectGradients(
     return fit !== null && fit !== undefined && stats[r * STAT_SIZE]! >= options.minArea && fit.ramp >= options.minRegionRamp && fit.rms <= options.maxResidual
   }
 
-  // Adjacent region pairs with shared border length.
-  const borders = new Map<number, number>()
-  const addPair = (a: number, b: number) => {
+  // Adjacent region pairs with shared border length, and the mean pixel
+  // step across that border: where posterization cut a smooth ramp into
+  // bands, neighbouring pixels across the cut differ by the ramp's slope only;
+  // across a real edge (an outline, a shape on a background) they jump.
+  const pairIndex = new Map<number, number>()
+  const pairLength: number[] = []
+  const pairStep: number[] = []
+  const addPair = (p: number, q: number) => {
+    const a = regionIds[p]!
+    const b = regionIds[q]!
     if (a === b) return
     const key = a < b ? a * regionCount + b : b * regionCount + a
-    borders.set(key, (borders.get(key) ?? 0) + 1)
+    let i = pairIndex.get(key)
+    if (i === undefined) {
+      i = pairLength.length
+      pairIndex.set(key, i)
+      pairLength.push(0)
+      pairStep.push(0)
+    }
+    pairLength[i] = pairLength[i]! + 1
+    pairStep[i] =
+      pairStep[i]! +
+      Math.max(Math.abs((data[p * 4] ?? 0) - (data[q * 4] ?? 0)), Math.abs((data[p * 4 + 1] ?? 0) - (data[q * 4 + 1] ?? 0)), Math.abs((data[p * 4 + 2] ?? 0) - (data[q * 4 + 2] ?? 0))) / 255
   }
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const p = y * w + x
-      if (x + 1 < w) addPair(regionIds[p]!, regionIds[p + 1]!)
-      if (y + 1 < h) addPair(regionIds[p]!, regionIds[p + w]!)
+      if (x + 1 < w) addPair(p, p + 1)
+      if (y + 1 < h) addPair(p, p + w)
     }
   }
-  const allPairs = Array.from(borders.entries())
-    .map(([key, length]) => ({ a: Math.floor(key / regionCount), b: key % regionCount, length }))
+  const maxStep = options.maxBoundaryStep ?? Infinity
+  const allPairs = Array.from(pairIndex.entries())
+    .map(([key, i]) => ({ a: Math.floor(key / regionCount), b: key % regionCount, length: pairLength[i]!, weak: pairStep[i]! / pairLength[i]! <= maxStep }))
     .sort((p, q) => q.length - p.length)
-  const pairs = allPairs.filter(({ a, b }) => hasRamp(a) && hasRamp(b))
+  const pairs = allPairs.filter(({ a, b, weak }) => weak && hasRamp(a) && hasRamp(b))
   // Radial candidates need internal color variation, not a linear fit: a
   // ring-shaped band of a radial gradient is not a linear ramp.
   const varies = (r: number) => {
@@ -299,7 +329,7 @@ export function detectGradients(
     }
     return Math.sqrt(variance) >= options.minRegionRamp / 4
   }
-  const radialPairs = allPairs.filter(({ a, b }) => varies(a) && varies(b))
+  const radialPairs = allPairs.filter(({ a, b, weak }) => weak && varies(a) && varies(b))
 
   // --- Radial gradients -----------------------------------------------------
   // Concentric bands (a glow, a spherical highlight) are not one linear ramp.
@@ -487,7 +517,7 @@ function detectRadialClusters(
   if (candidates.length === 0) return []
 
   const clusterOf = new Int32Array(regionCount).fill(-1)
-  const centers: { cx: number; cy: number; linearRms: number }[] = []
+  const centers: { cx: number; cy: number; linearRms: number; ux: number; uy: number }[] = []
   const summed = new Float64Array(STAT_SIZE)
   candidates.forEach((list, k) => {
     summed.fill(0)
@@ -496,8 +526,9 @@ function detectRadialClusters(
       for (let j = 0; j < STAT_SIZE; j++) summed[j] = summed[j]! + stats[r * STAT_SIZE + j]!
     }
     const linear = fitStats(summed, 0)
-    centers.push({ cx: summed[1]! / summed[0]!, cy: summed[2]! / summed[0]!, linearRms: linear ? linear.rms : Infinity })
+    centers.push({ cx: summed[1]! / summed[0]!, cy: summed[2]! / summed[0]!, linearRms: linear ? linear.rms : Infinity, ux: linear ? linear.ux : 1, uy: linear ? linear.uy : 0 })
   })
+  const profileRms = options.radialCenterSearch ? searchRadialCenters(candidates, centers, clusterOf, stats, regionIds, w, h, originX, originY, data, distance, margin) : null
 
   // Per cluster: n, Sr, Srr, rMax, then per channel Sc, Scr, Scc.
   const R = 4 + 9
@@ -550,7 +581,10 @@ function detectRadialClusters(
     }
     const rms = Math.sqrt(rss / (3 * n))
     const ramp = Math.hypot(slope[0], slope[1], slope[2]) * acc[o + 3]!
-    if (rms <= options.maxResidual && rms < centers[k]!.linearRms * 0.7 && ramp >= options.minRamp) {
+    // With a searched center, the fit is judged by its radial color profile
+    // (piecewise, like the emitted stops): multi-stop glows are not linear in r.
+    const fitRms = profileRms ? profileRms[k]! : rms
+    if (fitRms <= options.maxResidual && fitRms < centers[k]!.linearRms * 0.7 && ramp >= options.minRamp) {
       accepted.push({ k, slope, intercept })
     }
   })
@@ -599,6 +633,189 @@ function detectRadialClusters(
       fill: { kind: 'radial' as const, cx: originX + c.cx, cy: originY + c.cy, r: rMax, stops: simplifyStops(samples, 3.0), mean },
     }
   })
+}
+
+const PROFILE_BINS = 16
+const MAX_PROFILE_SAMPLES = 3000
+/** A radial profile must rise from 10% to 90% of its color change over at least this share of its bins. */
+const MIN_RISE_WIDTH = 0.35
+
+/**
+ * Radial centers by search. A glow's center is rarely the centroid of its
+ * visible bands (a shield clips a radial fill off-center, a highlight sits
+ * up and left), and with the wrong center no radial model fits. For each
+ * candidate cluster, a sample of its interior pixels is fitted with a
+ * piecewise color profile over the distance from a center (PROFILE_BINS
+ * bins, as the emitted stops are), and the center minimizing the residual is
+ * found by a coarse grid then a halving local search around the centroid.
+ * Updates `centers` in place (center, and linearRms lowered to the residual
+ * of the same piecewise profile along the linear direction); returns each
+ * cluster's radial profile RMS (sRGB 0-1).
+ */
+function searchRadialCenters(
+  candidates: number[][],
+  centers: { cx: number; cy: number; linearRms: number; ux: number; uy: number }[],
+  clusterOf: Int32Array,
+  stats: Float64Array,
+  regionIds: Int32Array,
+  w: number,
+  h: number,
+  originX: number,
+  originY: number,
+  data: Uint8ClampedArray,
+  distance: Uint8Array,
+  margin: number,
+): Float64Array {
+  const result = new Float64Array(candidates.length).fill(Infinity)
+  const stride = new Int32Array(candidates.length)
+  const samples: Float32Array[] = []
+  const filled = new Int32Array(candidates.length)
+  const seen = new Int32Array(candidates.length)
+  candidates.forEach((list, k) => {
+    let n = 0
+    for (const r of list) n += stats[r * STAT_SIZE]!
+    stride[k] = Math.max(1, Math.floor(n / MAX_PROFILE_SAMPLES))
+    samples.push(new Float32Array((Math.floor(n / stride[k]!) + 1) * 5))
+  })
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const p = y * w + x
+      const k = clusterOf[regionIds[p]!]!
+      if (k < 0 || distance[p]! <= margin) continue
+      if (seen[k]!++ % stride[k]! !== 0) continue
+      const buf = samples[k]!
+      const o = filled[k]! * 5
+      if (o + 5 > buf.length) continue
+      buf[o] = x + 0.5 - originX
+      buf[o + 1] = y + 0.5 - originY
+      buf[o + 2] = (data[p * 4] ?? 0) / 255
+      buf[o + 3] = (data[p * 4 + 1] ?? 0) / 255
+      buf[o + 4] = (data[p * 4 + 2] ?? 0) / 255
+      filled[k] = filled[k]! + 1
+    }
+  }
+  const sums = new Float64Array(PROFILE_BINS * 7)
+  const radii = new Float64Array(MAX_PROFILE_SAMPLES * 2 + 2)
+  candidates.forEach((_, k) => {
+    const count = filled[k]!
+    if (count < 16) return
+    const buf = samples[k]!
+    const r = count > radii.length ? new Float64Array(count) : radii
+    // Residual of a piecewise color profile over the coordinate in r[].
+    const profile = (): number => {
+      let rMin = Infinity
+      let rMax = -Infinity
+      for (let i = 0; i < count; i++) {
+        if (r[i]! < rMin) rMin = r[i]!
+        if (r[i]! > rMax) rMax = r[i]!
+      }
+      const span = Math.max(1e-9, rMax - rMin)
+      sums.fill(0)
+      for (let i = 0; i < count; i++) {
+        const b = Math.min(PROFILE_BINS - 1, Math.floor(((r[i]! - rMin) / span) * PROFILE_BINS)) * 7
+        sums[b] = sums[b]! + 1
+        for (let ch = 0; ch < 3; ch++) {
+          const v = buf[i * 5 + 2 + ch]!
+          sums[b + 1 + ch] = sums[b + 1 + ch]! + v
+          sums[b + 4 + ch] = sums[b + 4 + ch]! + v * v
+        }
+      }
+      let rss = 0
+      for (let b = 0; b < PROFILE_BINS; b++) {
+        const o = b * 7
+        const m = sums[o]!
+        if (m === 0) continue
+        for (let ch = 0; ch < 3; ch++) rss += Math.max(0, sums[o + 4 + ch]! - (sums[o + 1 + ch]! * sums[o + 1 + ch]!) / m)
+      }
+      return Math.sqrt(rss / (3 * count))
+    }
+    // Width of the profile's rise, for the bins `profile()` left in `sums`:
+    // the share of the bins between the first reaching 10% and the first
+    // reaching 90% of the net color change (center to rim). A glow changes
+    // across most of its radius; a flat disk whose blurred rim reads as
+    // concentric bands changes within a bin or two. Noise in the flat parts
+    // adds steps but no net change, so it does not widen the rise.
+    const riseWidth = (): number => {
+      const means: number[][] = []
+      for (let b = 0; b < PROFILE_BINS; b++) {
+        const m = sums[b * 7]!
+        if (m > 0) means.push([0, 1, 2].map((ch) => sums[b * 7 + 1 + ch]! / m))
+      }
+      if (means.length < 3) return 0
+      const first = means[0]!
+      const last = means[means.length - 1]!
+      const d = [last[0]! - first[0]!, last[1]! - first[1]!, last[2]! - first[2]!]
+      const len2 = d[0]! * d[0]! + d[1]! * d[1]! + d[2]! * d[2]!
+      if (len2 < 1e-6) return 1
+      const t = means.map((m) => ((m[0]! - first[0]!) * d[0]! + (m[1]! - first[1]!) * d[1]! + (m[2]! - first[2]!) * d[2]!) / len2)
+      const i10 = t.findIndex((v) => v >= 0.1)
+      const i90 = t.findIndex((v) => v >= 0.9)
+      return (i90 - i10 + 1) / means.length
+    }
+    const evaluate = (cx: number, cy: number): number => {
+      for (let i = 0; i < count; i++) r[i] = Math.hypot(buf[i * 5]! - cx, buf[i * 5 + 1]! - cy)
+      return profile()
+    }
+    // Spatial extent of the cluster sets the search range and steps.
+    let mx = 0
+    let my = 0
+    for (let i = 0; i < count; i++) {
+      mx += buf[i * 5]!
+      my += buf[i * 5 + 1]!
+    }
+    mx /= count
+    my /= count
+    let spread = 0
+    for (let i = 0; i < count; i++) spread += (buf[i * 5]! - mx) ** 2 + (buf[i * 5 + 1]! - my) ** 2
+    spread = Math.sqrt(spread / count)
+    const atCentroid = evaluate(centers[k]!.cx, centers[k]!.cy)
+    let bestX = centers[k]!.cx
+    let bestY = centers[k]!.cy
+    let best = atCentroid
+    const range = 1.5 * spread
+    for (let gy = -3; gy <= 3; gy++) {
+      for (let gx = -3; gx <= 3; gx++) {
+        const cx = mx + (gx / 3) * range
+        const cy = my + (gy / 3) * range
+        const e = evaluate(cx, cy)
+        if (e < best) {
+          best = e
+          bestX = cx
+          bestY = cy
+        }
+      }
+    }
+    for (let step = range / 3; step > spread / 64; step /= 2) {
+      let moved = true
+      while (moved) {
+        moved = false
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const e = evaluate(bestX + dx * step, bestY + dy * step)
+          if (e < best - 1e-6) {
+            best = e
+            bestX += dx * step
+            bestY += dy * step
+            moved = true
+          }
+        }
+      }
+    }
+    // A far center turns circles into near-parallel lines, so the radial
+    // profile also fits a multi-stop *linear* ramp; it only counts as radial
+    // if it clearly beats the same piecewise profile along the linear direction.
+    const c = centers[k]!
+    for (let i = 0; i < count; i++) r[i] = buf[i * 5]! * c.ux + buf[i * 5 + 1]! * c.uy
+    c.linearRms = Math.min(c.linearRms, profile())
+    // A centered glow keeps its centroid: sampling noise alone moves the optimum a little.
+    if (best < atCentroid * 0.9) {
+      c.cx = bestX
+      c.cy = bestY
+      result[k] = best
+    } else result[k] = atCentroid
+    evaluate(c.cx, c.cy)
+    if (riseWidth() < MIN_RISE_WIDTH) result[k] = Infinity
+  })
+  return result
 }
 
 /** Douglas-Peucker on the color-vs-offset curve: fewest stops within `tolerance` (8-bit levels). */

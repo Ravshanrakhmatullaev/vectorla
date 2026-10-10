@@ -123,6 +123,39 @@ for (const mode of ['quick', 'professional'] as const) {
   console.log(`PASS: ${mode} 4 MP photo at ${ph.working}: live peak ${ph.peak.toFixed(1)} MB (${ph.where}) <= ${BUDGET_PHOTO_4MP_MB} MB`)
 }
 
+// Shaded 4 MP emblem-like artwork (Professional): an off-center radial disk,
+// a gradient ring and flat bars. Exercises gradient reconstruction and the
+// shading refinement stage (refine.ts), whose interior-distance map is alive
+// on top of the label and id buffers. Measured 43.2 MB (refineShading).
+const BUDGET_SHADED_4MP_MB = 50
+{
+  const shaded = () => {
+    const n = 2000
+    const data = new Uint8ClampedArray(n * n * 4)
+    for (let y = 0; y < n; y++) {
+      for (let x = 0; x < n; x++) {
+        const d = Math.hypot(x - 1000, y - 1000)
+        let rgb: [number, number, number] = [255, 255, 255]
+        if (d < 960 && d >= 820) {
+          // Angular metal shading: no linear or radial fit, so it is refined.
+          const t = 0.5 + 0.5 * Math.sin(3 * Math.atan2(y - 1000, x - 1000))
+          rgb = [235 - 110 * t, 200 - 120 * t, 90 - 70 * t]
+        } else if (d < 820) {
+          const t = Math.min(1, Math.hypot(x - 820, y - 760) / 1100)
+          rgb = [60 - 45 * t, 125 - 85 * t, 215 - 120 * t]
+        }
+        if (y > 950 && y < 1050 && x > 500 && x < 1500 && (x >> 5) % 3 !== 0) rgb = [245, 245, 245]
+        data.set([Math.round(rgb[0]), Math.round(rgb[1]), Math.round(rgb[2]), 255], (y * n + x) * 4)
+      }
+    }
+    return { width: n, height: n, data }
+  }
+  const sh = peakOf(shaded, 'professional')
+  assertTrue(sh.working === '2000x2000', `shaded 4 MP artwork is traced at full resolution (got ${sh.working})`)
+  assertTrue(sh.peak <= BUDGET_SHADED_4MP_MB, `professional: shaded 4 MP artwork live peak ${sh.peak.toFixed(1)} MB at ${sh.where} exceeds ${BUDGET_SHADED_4MP_MB} MB`)
+  console.log(`PASS: professional shaded 4 MP artwork: live peak ${sh.peak.toFixed(1)} MB (${sh.where}) <= ${BUDGET_SHADED_4MP_MB} MB`)
+}
+
 // Dense regular pattern: a 2000² checkerboard of 16 px squares has 15,625
 // regions per colour, above the soft region budget. The budget pass no longer
 // collapses it (traceImage.ts maxRegionsHard), so every square is kept, at a

@@ -84,9 +84,24 @@ function colorDistance(palette: PaletteColor[], a: number, b: number): number {
 }
 
 /**
+ * Small regions that `mergeSmallRegions` keeps although they are under its
+ * area threshold: real detail stands out from what surrounds it, noise does not.
+ */
+export interface DetailProtection {
+  /** OKLab distance to the merge target at or above which a small region counts as detail. */
+  contrast: number
+  /** Detail regions at least this large (working px) are kept. */
+  minArea: number
+}
+
+/**
  * Merges every component smaller than `minArea` into its best neighbour
  * (longest shared border, ties broken by color similarity). Updates `labels`
  * in place and returns it; callers re-run connectedComponents on it.
+ * With `protect`, a small component that contrasts strongly with that
+ * neighbour (a light gap between two dark outlines, a dot, a highlight) is
+ * kept once it reaches `protect.minArea`. With `only`, just components
+ * whose label passes it merge, and only into neighbours that pass it too.
  */
 export function mergeSmallRegions(
   labels: LabelMap,
@@ -95,10 +110,15 @@ export function mergeSmallRegions(
   palette: PaletteColor[],
   minArea: number,
   scratch?: Int32Array,
+  protect?: DetailProtection,
+  only?: (label: number) => boolean,
 ): LabelMap {
   const comps = connectedComponents(labels, width, height, scratch)
-  const { ids, count, areas } = comps
+  const { ids, count } = comps
   const compLabel = comps.labels.slice()
+  // With `only`, components of other labels never merge and never absorb
+  // (they count as large, and are skipped as targets below).
+  const areas = only ? comps.areas.map((a, c) => (only(compLabel[c]!) ? a : Math.max(a, minArea))) : comps.areas
 
   let smallCount = 0
   for (let c = 0; c < count; c++) if (areas[c]! < minArea) smallCount++
@@ -172,6 +192,7 @@ export function mergeSmallRegions(
     let bestLength = -1
     let bestDistance = Infinity
     for (const [root, length] of byRoot) {
+      if (only && !only(compLabel[root]!)) continue
       const distance = colorDistance(palette, compLabel[c]!, compLabel[root]!)
       if (length > bestLength || (length === bestLength && distance < bestDistance)) {
         best = root
@@ -180,6 +201,7 @@ export function mergeSmallRegions(
       }
     }
     if (best < 0) continue
+    if (protect && area[c]! >= protect.minArea && bestDistance >= protect.contrast) continue
 
     parent[c] = best
     area[best] = area[best]! + area[c]!

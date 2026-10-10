@@ -3,7 +3,8 @@
  *
  *   decode → (denoise) → (resample: upscale small / downscale huge)
  *     → OKLab → flat-pixel palette → AA-aware labeling → speckle merge
- *     → connected regions → planar-map chains (shared boundaries)
+ *     → connected regions → (gradient fills, shading refinement)
+ *     → planar-map chains (shared boundaries)
  *     → Potrace-grade curve fitting per chain → stacked or cutout SVG
  *
  * Pure TypeScript over typed arrays: no DOM, no WASM, no native deps, so it
@@ -15,6 +16,7 @@ import { bilateralDenoise, downscaleBox, gaussianBlur, restoreJpegChroma, restor
 import { computeFlatMask, OklabSource, extractDetailColors, extractPalette, labelPixels, TRANSPARENT_LABEL, type PaletteColor } from './palette'
 import { connectedComponents, dissolveBlendSlivers, mergeSmallRegions } from './regions'
 import { detectGradients, validateGradientGroups, type GradientFill } from './gradients'
+import { refineShading } from './refine'
 import { buildRegionBoundaries, extractChains, OUTSIDE, type RegionLoop } from './planarMap'
 import { buildCurve, buildPolygon, refineJunctions, reverseFitted, type FittedChain } from './curveFit'
 import { checkpoint } from './memoryCheckpoint'
@@ -68,6 +70,25 @@ export interface TraceEngineOptions {
   thinPeakScale: number
   /** Alpha below which pixels are treated as transparent. */
   alphaThreshold: number
+  /**
+   * Speckle removal keeps a region under the speckle area when it contrasts
+   * with the neighbour it would merge into by at least this OKLab distance
+   * and covers at least detailAreaFraction of the speckle area (small
+   * symbols, dots, gaps between outlines). 0 disables.
+   */
+  detailContrast: number
+  detailAreaFraction: number
+  /**
+   * Hierarchical shading refinement (refine.ts): OKLab distance between the
+   * levels shaded region interiors are re-quantized into. 0 disables.
+   */
+  shadingStep: number
+  /** Flat inks seed palette clusters down to this fraction of mergeDistance apart (see PaletteOptions.inkSeedFraction). */
+  inkSeedFraction: number
+  /** Search radial gradient centers instead of using the bands' centroid (gradients.ts). */
+  radialCenterSearch: boolean
+  /** Gradient grouping only across borders with a mean pixel step (sRGB 0-1) up to this; 0 = any border. */
+  gradientBoundaryStep: number
   /** Upper bound on output regions; speckle removal coarsens adaptively above it. */
   maxRegions: number
   /** Regions kept when merging down to maxRegions would collapse a regular dense pattern (memory-bound). */
@@ -120,6 +141,12 @@ export const DEFAULT_ENGINE_OPTIONS: TraceEngineOptions = {
   thinFeatures: true,
   thinPeakScale: 1,
   alphaThreshold: 128,
+  detailContrast: 0,
+  detailAreaFraction: 0.25,
+  shadingStep: 0,
+  gradientBoundaryStep: 0,
+  radialCenterSearch: false,
+  inkSeedFraction: 1,
   maxRegions: 6000,
   maxRegionsHard: 40_000,
   snapCorners: true,
@@ -140,7 +167,27 @@ export interface TraceEngineStats {
   chainCount: number
   pathCount: number
   gradientCount: number
+  /** What each simplifying stage did (diagnostics; see BENCHMARKS.md "Emblems"). */
+  diagnostics: TraceDiagnostics
   timingsMs: Record<string, number>
+}
+
+export interface TraceDiagnostics {
+  /** Share of flat pixels; below PHOTO_FLAT_FRACTION the photo working-size cap applies. */
+  flatFraction: number
+  /** True when the input was reduced for being photo-like (photoMaxWorkingPixels). */
+  photoCap: boolean
+  /** Speckle merge threshold (working px). */
+  minArea: number
+  /** Regions after speckle cleanup, before the region budget, gradients and shading refinement. */
+  regionsAfterSpeckle: number
+  /** Region-budget passes run (each doubles the merge area) and the final merge area (working px). */
+  budgetPasses: number
+  budgetArea: number
+  /** Gradient groups found, and kept after validation against the flat colors. */
+  gradientGroupsFound: number
+  /** Regions re-quantized by shading refinement. */
+  shadedRegions: number
 }
 
 export interface TraceEngineResult {
@@ -184,6 +231,9 @@ const NO_POINTS = new Int32Array(0)
 const NO_BYTES = new Uint8Array(0)
 const NO_IMAGE: RgbaImage = { width: 0, height: 0, data: new Uint8ClampedArray(0) }
 
+/** Palette colors shading refinement may add (refine.ts). */
+const MAX_SHADING_COLORS = 512
+
 /** Below this share of flat pixels an image is treated as photo-like (see workingPixelCap). */
 const PHOTO_FLAT_FRACTION = 0.7
 
@@ -216,10 +266,33 @@ export function flatFraction(image: RgbaImage): number {
  * Working-size cap for an input: maxWorkingPixels for artwork (logos, text,
  * illustrations), photoMaxWorkingPixels for photo-like images. Inputs within
  * the photo cap are never classified (nothing to decide).
+ *
+ * The photo cap is skipped when auto-upsampling (maxUpscaledPixels) would
+ * bring the reduced image back to at least its own size: a 1200² input would
+ * be reduced to 600² and traced at 2x, i.e. at the same 1.44 MP working size
+ * and memory, only with half the detail (a textured metal seal measured ΔE
+ * 1.24 reduced vs 0.92 at full size, both 15.5 MB live; BENCHMARKS.md "Emblems").
  */
-export function workingPixelCap(image: RgbaImage, options: Pick<TraceEngineOptions, 'maxWorkingPixels' | 'photoMaxWorkingPixels'>): number {
-  if (image.width * image.height <= Math.min(options.maxWorkingPixels, options.photoMaxWorkingPixels)) return options.maxWorkingPixels
-  return flatFraction(image) < PHOTO_FLAT_FRACTION ? options.photoMaxWorkingPixels : options.maxWorkingPixels
+export function workingPixelCap(
+  image: RgbaImage,
+  options: Pick<TraceEngineOptions, 'maxWorkingPixels' | 'photoMaxWorkingPixels'> & Partial<Pick<TraceEngineOptions, 'maxUpscaledPixels'>>,
+): number {
+  const { width: w, height: h } = image
+  if (w * h <= Math.min(options.maxWorkingPixels, options.photoMaxWorkingPixels)) return options.maxWorkingPixels
+  if (flatFraction(image) >= PHOTO_FLAT_FRACTION) return options.maxWorkingPixels
+  if (options.maxUpscaledPixels !== undefined && w * h <= options.maxWorkingPixels) {
+    const k = reductionFactor(w, h, options.photoMaxWorkingPixels)
+    if (autoUpscale(Math.ceil(w / k), Math.ceil(h / k), options.maxUpscaledPixels) >= k) return options.maxWorkingPixels
+  }
+  return options.photoMaxWorkingPixels
+}
+
+/** The whole factor fitWorkingSize reduces a w×h image by to fit maxWorkingPixels (> 1 only above it). */
+function reductionFactor(w: number, h: number, maxWorkingPixels: number): number {
+  if (w * h <= maxWorkingPixels) return 1
+  let k = Math.max(2, Math.ceil(Math.sqrt((w * h) / maxWorkingPixels)))
+  while (Math.ceil(w / k) * Math.ceil(h / k) > maxWorkingPixels) k++
+  return k
 }
 
 /**
@@ -233,11 +306,8 @@ export function workingPixelCap(image: RgbaImage, options: Pick<TraceEngineOptio
  * result with `sourceSize` set to the original size.
  */
 export function fitWorkingSize(image: RgbaImage, maxWorkingPixels: number): RgbaImage {
-  const { width: w, height: h } = image
-  if (w * h <= maxWorkingPixels) return image
-  let k = Math.max(2, Math.ceil(Math.sqrt((w * h) / maxWorkingPixels)))
-  while (Math.ceil(w / k) * Math.ceil(h / k) > maxWorkingPixels) k++
-  return downscaleBox(image, k)
+  const k = reductionFactor(image.width, image.height, maxWorkingPixels)
+  return k > 1 ? downscaleBox(image, k) : image
 }
 
 export function traceImage(input: ImageData | RgbaImage, overrides: Partial<TraceEngineOptions> = {}): TraceEngineResult {
@@ -281,7 +351,10 @@ function traceWith(source: { image: RgbaImage | null }, overrides: Partial<Trace
     // the caller's buffer is remembered, so an owned input is not kept alive).
     const foreign = owned ? null : source.image!.data
     const reusable = (img: RgbaImage) => img.data !== foreign
-    let image = fitWorkingSize(source.image!, workingPixelCap(source.image!, options))
+    const inputFlatFraction = flatFraction(source.image!)
+    const cap = workingPixelCap(source.image!, options)
+    const photoCap = cap < options.maxWorkingPixels && source.image!.width * source.image!.height > cap
+    let image = fitWorkingSize(source.image!, cap)
     source.image = null
     // Source pixels per working pixel before any upsampling: exactly k after
     // a k× box reduction (whose last row/column of blocks may be partial).
@@ -326,6 +399,7 @@ function traceWith(source: { image: RgbaImage | null }, overrides: Partial<Trace
       minClusterFraction: Math.max(3e-5, (speckleSource * 2) / baseToSource / Math.max(1, baseN)),
       alphaThreshold: options.alphaThreshold,
       separation: options.paletteSeparation,
+      inkSeedFraction: options.inkSeedFraction,
     })
     palette.push(
       ...extractDetailColors(image, baseLab, baseOpaque, baseFlat, palette, {
@@ -373,12 +447,19 @@ function traceWith(source: { image: RgbaImage | null }, overrides: Partial<Trace
     // One id buffer shared by every region pass (each would otherwise
     // allocate 4 bytes per pixel of garbage).
     const scratch = new Int32Array(n)
-    labels = mergeSmallRegions(labels, width, height, palette, minArea, scratch)
+    // Detail is at least a few source pixels; a lone pixel is noise however much it contrasts.
+    const protect = options.detailContrast > 0 ? { contrast: options.detailContrast, minArea: Math.max(2, minArea * options.detailAreaFraction, 3 * sourceToWorking) } : undefined
+    labels = mergeSmallRegions(labels, width, height, palette, minArea, scratch, protect)
     labels = dissolveBlendSlivers(labels, width, height, palette, lab, 0.75 * Math.sqrt(sourceToWorking), scratch)
-    lab = null
-    if (!options.gradients) image = NO_IMAGE
-    labels = mergeSmallRegions(labels, width, height, palette, minArea, scratch)
+    const refine = options.shadingStep > 0
+    if (!refine) {
+      lab = null
+      if (!options.gradients) image = NO_IMAGE
+    }
+    labels = mergeSmallRegions(labels, width, height, palette, minArea, scratch, protect)
     let regions = connectedComponents(labels, width, height, scratch)
+    const regionsAfterSpeckle = regions.count
+    let budgetPasses = 0
     // Region budget: pathological inputs (pure noise, dithering, halftones)
     // would otherwise produce tens of thousands of paths and megabyte SVGs.
     // Coarsen speckle removal until the region count is sane.
@@ -393,6 +474,7 @@ function traceWith(source: { image: RgbaImage | null }, overrides: Partial<Trace
     let budgetArea = minArea
     while (regions.count > options.maxRegions && budgetArea < n / 50) {
       budgetArea *= 2
+      budgetPasses++
       const undo = regions.count <= options.maxRegionsHard ? labels.slice() : null
       const countBefore = regions.count
       labels = mergeSmallRegions(labels, width, height, palette, budgetArea, scratch)
@@ -408,7 +490,12 @@ function traceWith(source: { image: RgbaImage | null }, overrides: Partial<Trace
 
     // 5b. Gradient reconstruction: merge posterized bands back into regions
     //     filled with fitted linear gradients (labels >= palette.length).
+    //     With shading refinement (5c) still to add palette colors, gradient
+    //     groups are labeled past room for them and renumbered afterwards.
     let gradientFills: GradientFill[] = []
+    let gradientGroupsFound = 0
+    const coarsePaletteSize = palette.length
+    const gradientBase = coarsePaletteSize + (refine ? MAX_SHADING_COLORS : 0)
     if (options.gradients && regions.count > 1) {
       const detected = detectGradients(image, regions.ids, regions.count, (r) => regions.labels[r] === TRANSPARENT_LABEL, {
         maxResidual: 0.02,
@@ -416,22 +503,72 @@ function traceWith(source: { image: RgbaImage | null }, overrides: Partial<Trace
         minRegionRamp: 0.02,
         minArea: minArea * 4,
         edgeMargin: Math.ceil(1.5 * upscale) + 1,
+        maxBoundaryStep: options.gradientBoundaryStep > 0 ? options.gradientBoundaryStep : undefined,
+        radialCenterSearch: options.radialCenterSearch,
       })
+      gradientGroupsFound = detected.fills.length
       const gradient = validateGradientGroups(image, regions.ids, regions.count, (r) => {
         const color = palette[regions.labels[r]!]
         return color ? [color.r, color.g, color.b] : null
       }, detected)
       if (gradient.fills.length > 0) {
-        const base = palette.length
         for (let p = 0; p < n; p++) {
           const g = gradient.groupOfRegion[regions.ids[p]!]!
-          if (g >= 0) labels[p] = base + g
+          if (g >= 0) labels[p] = gradientBase + g
         }
         regions = connectedComponents(labels, width, height, scratch)
         gradientFills = gradient.fills
       }
     }
     lap('gradients')
+
+    // 5c. Shading refinement (refine.ts): shaded regions that did not become
+    //     gradients are re-quantized into finer levels inside their interior;
+    //     level fragments under the speckle area join neighbouring levels.
+    let shadedRegions = 0
+    if (refine && lab && regions.count < options.maxRegions) {
+      const minLevel = Math.max(minArea * 2, 8 * upscale * upscale)
+      shadedRegions = refineShading(labels, regions.ids, regions.count, regions.labels, image, lab, palette, {
+        step: options.shadingStep,
+        margin: Math.max(Math.ceil(1.5 * upscale) + 1, Math.round(2.5 * Math.sqrt(sourceToWorking))),
+        minInterior: minArea * 8,
+        minLevel,
+        maxNewColors: MAX_SHADING_COLORS,
+        maxLevels: options.maxRegions - regions.count,
+        maxColorDistance: 2 * options.mergeDistance,
+        smoothRadius: upscale,
+      })
+      // Levels are bands across shaded areas; small islands of a level are
+      // noise or texture lifted by the finer steps, and rejoin a neighbouring level.
+      if (shadedRegions > 0) {
+        const levels = palette.length
+        labels = mergeSmallRegions(labels, width, height, palette, minLevel * 2, scratch, undefined, (label) => label >= coarsePaletteSize && label < levels)
+        // Drop levels left without pixels and renumber the rest.
+        const used = new Uint8Array(levels - coarsePaletteSize)
+        for (let p = 0; p < n; p++) {
+          const label = labels[p]!
+          if (label >= coarsePaletteSize && label < levels) used[label - coarsePaletteSize] = 1
+        }
+        const remap = new Int32Array(used.length)
+        let next = coarsePaletteSize
+        for (let i = 0; i < used.length; i++) {
+          remap[i] = next
+          if (used[i]) palette[next++] = palette[coarsePaletteSize + i]!
+        }
+        palette.length = next
+        for (let p = 0; p < n; p++) {
+          const label = labels[p]!
+          if (label >= coarsePaletteSize && label < levels) labels[p] = remap[label - coarsePaletteSize]!
+        }
+      }
+    }
+    lab = null
+    if (gradientFills.length > 0 && palette.length < gradientBase) {
+      const shift = gradientBase - palette.length
+      for (let p = 0; p < n; p++) if (labels[p]! >= gradientBase) labels[p] = labels[p]! - shift
+    }
+    if (shadedRegions > 0 || (gradientFills.length > 0 && refine)) regions = connectedComponents(labels, width, height, scratch)
+    lap('shading')
 
     image = NO_IMAGE
     labels = NO_POINTS
@@ -441,9 +578,10 @@ function traceWith(source: { image: RgbaImage | null }, overrides: Partial<Trace
     regions.ids = NO_POINTS
     const boundaries = buildRegionBoundaries(chains, regions.count)
     lap('chains')
-    return { width, height, upscale, denoise, noiseSigma, sourceToWorking, coordinateScale: baseScale / upscale, palette, regionLabels: regions.labels, regionCount: regions.count, chains, boundaries, gradientFills }
+    const diagnostics: TraceDiagnostics = { flatFraction: inputFlatFraction, photoCap, minArea, regionsAfterSpeckle, budgetPasses, budgetArea, gradientGroupsFound, shadedRegions }
+    return { width, height, upscale, denoise, noiseSigma, sourceToWorking, coordinateScale: baseScale / upscale, palette, regionLabels: regions.labels, regionCount: regions.count, chains, boundaries, gradientFills, diagnostics }
   })()
-  const { width, height, upscale, denoise, noiseSigma, sourceToWorking, coordinateScale, palette, chains, boundaries, gradientFills } = seg
+  const { width, height, upscale, denoise, noiseSigma, sourceToWorking, coordinateScale, palette, chains, boundaries, gradientFills, diagnostics } = seg
   const regions = { labels: seg.regionLabels, count: seg.regionCount }
   const workingPerSource = Math.sqrt(sourceToWorking)
   const fitOptions = {
@@ -588,6 +726,7 @@ function traceWith(source: { image: RgbaImage | null }, overrides: Partial<Trace
       chainCount: chains.length,
       pathCount: paths.length,
       gradientCount: gradientFills.length,
+      diagnostics,
       timingsMs: timings,
     },
   }

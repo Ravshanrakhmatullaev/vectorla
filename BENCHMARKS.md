@@ -49,6 +49,9 @@ npx tsx src/benchmark/qualityGate.smoke-test.ts  # regression gate (also part of
 npm run bench -- --corpus=real --memory --compare # real-world corpus, peak memory, vs baseline-realworld.json
 npx tsx src/benchmark/realWorldGate.smoke-test.ts  # real-world regression gate (also part of npm test)
 npm run bench -- --corpus=all --engines=quick,professional --memory --compare=before.json  # all 80 images
+npm run bench -- --corpus=emblem --engines=quick,professional --compare  # 28 emblem rasters vs baseline-emblem.json
+npx tsx src/benchmark/emblemGate.smoke-test.ts     # emblem regression gate (also part of npm test)
+npx tsx src/benchmark/emblemDiagnostics.ts --variants=600,1200  # what each engine stage did, per emblem
 ```
 
 `--out` writes each source raster, traced SVG and 4× render for visual review.
@@ -715,6 +718,177 @@ it may change at any time, so the documented 128 MB stays the design budget.
 The worst case leaves about 65 MB below it.
 Details and the method are in DEPLOYMENT.md, "Memory on Cloudflare".
 
+## Emblems (2026-10-10)
+
+A customer compared a complex state emblem traced by Vectorla and by
+Vectorizer.AI. Vectorizer.AI kept the text, shield contours, central emblem,
+small symbols, shading and silhouette much better; Vectorla Quick and
+Professional both broke the image into coarse color regions, and
+Professional was hardly better than Quick. The customer's file was not
+available, so an adversarial corpus of the same class was built.
+
+`backend/src/benchmark/emblemCorpus.ts`: 7 designs × 4 variants (PNG 600,
+1200, 2000 px; JPEG q85 at 1200 or q75 at 800) = 28 rasters per engine.
+
+| Case | What it stresses |
+|---|---|
+| seal-circular | Navy/gold seal: circular serif text, laurel, shield, cream disk on white |
+| crest-gold | Metallic gold gradients, off-center radial red/blue fields, crown jewels, motto on a banner |
+| badge-metal | 48-point silver rosette, bevels, off-center radial disk, gold-gradient "100%", circular text |
+| emblem-engraved | Hatching, rays, open book, torch with a flame gradient |
+| patch-mountain | Stitched border, sky gradient, mountains, outlined arc text |
+| wreath-emblem | State-emblem style: ~160 wheat grains with outlines, striped ribbon, sun glow with 36 rays and texture, bird, 8-point star with crescent, soft shadows, small text |
+| seal-embossed | Brushed-metal texture, 72 rivets, embossed circular text, crossed keys |
+
+`npm run bench -- --corpus=emblem --engines=quick,professional --out=DIR` writes
+the renders; `src/benchmark/emblemDiagnostics.ts` prints what each stage did
+(palette size, regions after speckle cleanup, region-budget passes, gradients
+found and kept, regions refined, photo cap). `emblemGate.smoke-test.ts` is the
+regression gate (part of `npm test`); `baseline-emblem.json` is the committed run.
+
+### Root causes
+
+Measured on the corpus before any change, with the stage diagnostics and
+crops of every case:
+
+1. **One coarse palette for everything.** The palette merges colors closer
+   than `mergeDistance` (0.05 OKLab, about 2.5 just-noticeable differences),
+   so shading came out as 3–5 hard bands and a gradient's dark end merged
+   with whatever similar color touched it (wheat grains melted into their
+   stalk). Palettes held 4–35 colors, far under the 32/64 caps.
+   Professional's only palette difference (0.045) added 1–3 colors: Quick
+   and Professional differed on 0.79% of pixels.
+2. **Greedy palette seeding absorbed flat inks.** Any color within
+   `mergeDistance` of a more common one joined it before the separation test
+   (two tight, well-separated inks stay apart) could run. Quick painted the
+   seal's cream inner disk and the white background one color (ΔE 1.38 vs 0.37).
+3. **Radial gradients were missed.** Radial clusters joined every adjacent
+   pair of varying regions, across real edges, and took the bands' centroid
+   as the center. Off-center glows (a highlight up and left, a field clipped
+   by a shield) never fitted, so Professional posterized them like Quick.
+4. **The photo cap halved textured emblems for nothing.** Below 70% flat
+   pixels an image counts as photo-like and is reduced to 1.2 MP. A 1200²
+   textured seal was halved to 600² and then auto-upsampled back to 1200²:
+   same working size and memory (15.5 MB live), half the detail.
+5. **Speckle cleanup judged by area only.** It merged over 90% of labeled
+   regions on the heavy cases, including small details that contrast with
+   everything around them (light gaps between dark outlines).
+
+Neither the 4 MP working cap (no emblem variant exceeds it except 2000 px,
+traced at full size) nor the region budget (never triggered: 0 passes) was a
+cause.
+
+### Changes
+
+| Change | Where | Modes |
+|---|---|---|
+| **Shading refinement.** After gradients, each region whose interior colors spread smoothly along one color direction is re-quantized into levels 0.02 apart; the edge band and merged specks take the nearest interior level, and level islands under twice the level size rejoin a neighbour. Noise is left alone: foreign-colored specks are excluded, and a spread that does not survive local averaging is not refined. | `engine/refine.ts` | Professional |
+| **Radial center search.** A radial cluster's center is searched (grid, then halving local search) to minimize a piecewise radial color profile. The cluster counts as radial only if that profile clearly beats the same piecewise profile along the linear direction (otherwise a far center imitates a multi-stop linear ramp) and its color rises over at least 35% of the radius (a flat disk whose blurred rim reads as concentric bands rises within a bin or two). | `engine/gradients.ts` | Professional |
+| **Gradients only across posterization cuts.** Regions join a gradient group only across borders whose mean pixel step is at most 0.03 (sRGB): the bands of one ramp, not a shape on a background. | `engine/gradients.ts` | Professional |
+| **Flat-ink seeding.** A heavy histogram bin that towers over its neighbours (a flat ink) seeds its own cluster down to 0.4 × `mergeDistance` from an earlier one, so the Ward pass decides with its separation test. | `engine/palette.ts` | both |
+| **Detail-aware speckle cleanup.** A region under the speckle area is kept when it contrasts with the region it would merge into by at least 0.15 OKLab and covers at least a quarter of the speckle area and 3 source pixels. | `engine/regions.ts`, `traceImage.ts` | both |
+| **Photo cap only when it saves something.** The cap is skipped when auto-upsampling would bring the reduced image back to at least its own size. | `engine/traceImage.ts` (`workingPixelCap`) | both |
+
+Tried and rejected (each measured on the full emblem corpus, and on the
+core and real-world corpora where it got that far):
+
+- **A finer global palette for Professional** (`mergeDistance` 0.03 or 0.022). Shading improved
+  (badge ΔE 1.25 → 0.94), but on JPEG the halos and ringing around hairlines became palette
+  colors: hatching broke into dashes (emblem-engraved JPEG ΔE 0.51 → 1.33).
+- **Seeding every cluster at half the merge distance.** Fixed the cream disk, but the Ward pass
+  then spaced gradient levels up to twice as far apart (core gradient-banner Quick ΔE 1.04 → 1.32)
+  and a blurred logo grew halo colors (1.1k → 4.6k segments).
+- **Refining from each pixel's own color, or refining before gradient detection.** Halos of merged
+  noise came back as level islands (a 64 px salt-and-pepper test went from 2 paths to 253), and
+  finer flat levels beat partial gradient fills in the per-region validation, leaving seams.
+- **Shading step 0.015.** ΔE 0.58 → 0.55 on the emblems for +28% bytes and +34% time.
+- **`mergeDistance` 0.04 for Professional, half the speckle area.** Mixed or worse.
+- **Blending edge pixels with palette colors not in reach** (for the thin outline around small
+  text, which mixes three colors). No visible change.
+
+### Before and after (28 emblem rasters per engine)
+
+| Metric | Quick before | Quick after | Professional before | Professional after |
+|---|---:|---:|---:|---:|
+| Mean ΔE×100 | 0.93 | **0.76** | 0.66 | **0.50** |
+| Mean edge error (px) | 0.25 | **0.23** | 0.26 | **0.23** |
+| Worst edge error (px) | 0.52 | **0.49** | 0.51 | **0.48** |
+| Edge recall¹ | 0.953 | 0.971 | 0.952 | 0.971 |
+| Small regions kept¹ | 8,516 / 8,751 | 8,588 / 8,751 | 8,532 / 8,751 | 8,616 / 8,751 |
+| Segments | 200,775 | 217,891 | 205,516 | **186,837** |
+| Total SVG (KB) | 4,969 | 5,407 | 5,161 | **4,704** |
+| Trace time, all 28 (s)² | 59.3 | 59.6 | 67.0 | 88.4 |
+| Seams | 0 | 0 | 0 | 0 |
+
+¹ From the 4× renders, ±1 source px tolerance: edge recall is the share of true
+color edges (OKLab step > 0.08) the trace reproduces; a small region is a
+6–600 source-px area of one quantized truth color whose core keeps its color
+(mean ΔE < 0.08). ² One process, nothing else running.
+
+Professional's mean ΔE is now 0.65× Quick's (0.71× before). Per case (mean
+of the 4 variants), the lead grew where emblems need it, in shading:
+
+| Case | Quick before | Professional before | Quick after | Professional after |
+|---|---:|---:|---:|---:|
+| badge-metal | 1.32 | 1.06 | 1.31 | **0.56** |
+| crest-gold | 0.61 | 0.45 | 0.61 | **0.31** |
+| seal-embossed | 1.38 | 1.30 | 1.26 | **0.98** |
+| wreath-emblem | 0.92 | 0.78 | 0.90 | **0.72** |
+| patch-mountain | 0.88 | 0.40 | 0.62 | **0.32** |
+| seal-circular | 1.04 | 0.28 | **0.28** | 0.28 |
+| emblem-engraved | 0.32 | 0.31 | 0.32 | 0.31 |
+
+On the four shaded designs Professional is now 20–57% below Quick (6–26%
+before). On flat line art (engraved, seal-circular) the modes are equal, as
+intended: both keep the same detail. The raw share of pixels where the two
+modes differ by more than ΔE 0.05 fell from 0.79% to 0.64%, because Quick's
+cream-disk error (whole-background differences) is gone; gradients differ
+from bands by less than 0.05 per pixel, over large areas. No variant got
+worse by more than 0.001 ΔE in either mode.
+
+Visual review (crops of every case, both modes, before and after): radial
+fields and glows (crest, badge disk, sun) are now smooth SVG gradients with
+the highlight in the right place; metallic and textured shading has more,
+finer levels instead of hard bands (badge-metal@1200: 17 → 36 flat colors
+plus 12 gradients); the 1200² embossed seal is traced at full
+size; the cream disk is its own color in Quick. Hairlines and hatching on
+JPEG are unchanged (no new halo colors).
+
+**Other corpora.** Core (25 variants): unchanged (Professional ΔE 0.16,
+Quick 0.29; no variant moved by more than 0.001). Real-world (55 images):
+Quick ΔE 0.696 → 0.689, Professional 0.663 → 0.643, edge error unchanged, no
+seams; the largest single loss is +0.007 (emoji-fox@256). Total SVG size +3%
+(Quick) and +11% (Professional), mostly photos, which gain finer tone levels
+(Professional ΔE 2.71 → 2.62). The core and real-world baselines were
+refreshed with these runs. All gates pass.
+
+**Memory and time.** Live peak with forced GC at every checkpoint
+(`memory.smoke-test.ts`, same method as above): 4 MP artwork 39.5 MB Quick,
+40.0 MB Professional (budget 46); a new shaded 4 MP case that exercises
+shading refinement peaks at 43.2 MB inside it (budget 50). On the 4 MP
+emblems: Quick 39.5 → 39.5–39.9 MB, Professional 39.5 → 43.7–43.9 MB, the
+refinement's one byte per pixel (an interior-distance map) alive beside the
+label, id and image buffers. No memory or CPU limit was changed. Trace time on the emblems: Quick unchanged (59.6 s for all 28),
+Professional +32% (67.0 → 88.4 s; about 2 s more per 4 MP trace, 3.5–4.3 →
+5.5–6.2 s), mostly the window-averaged level choice and the radial center
+search, well inside the 60 s CPU limit.
+
+### Remaining gap to Vectorizer.AI
+
+- **Thin outlines around small text at ≤ 600 px.** A 1 px dark outline between a white letter and
+  a blue field blends three colors; the labeler explains pixels as two-color blends, so the
+  outline comes out as an offset, dotted shadow (patch-mountain@600).
+- **Tiny repeated shapes on low-resolution JPEG.** Wheat grains about 9 px wide at 800 px q75 lose
+  their 1 px outlines and merge with the stalk; detail protection keeps more of the gaps, but the
+  grains stay blobby.
+- **Multi-stop metallic linear gradients** (a crown's light-dark-light gold) are finer bands, not
+  one gradient: linear grouping still requires one straight ramp per group.
+- **Fine texture** (brushed metal, noise filters) becomes soft blotches in both modes.
+- **Small circles and star tips on JPEG** are slightly polygonal or rounded (curve fitting at a few
+  pixels per shape).
+- **Not measured head-to-head.** Comparing on the customer's own emblem needs that file and
+  Vectorizer.AI's output for it; both can be added to the emblem corpus as a raster case.
+
 ## Against professional expectations
 
 What a professional tool such as Vectorizer.ai is expected to deliver, and where
@@ -729,7 +903,8 @@ Vectorla stands on this benchmark:
 | Smooth curves with few nodes | ✅ Met | Potrace-grade fitting + curve optimization; 6× fewer segments than legacy. A 33 px-radius circle is 3 cubics. |
 | Small text and hairlines preserved | ✅ Mostly met | Real-world corpus: hairlines down to 0.5 px keep 94–104% of their length; small serif text is legible but serifs still break. The detail-color pass recovers 12 px subtitle text in its exact color `#2563eb`; the first engine version dropped it. |
 | Clean output from JPEG sources | ✅ Mostly met | Luma-guided chroma restoration, blend-sliver dissolve and edge-aware labeling. JPEG variants are now within 0.9–1.6× the nodes of PNG and 1.0–1.4× the edge error (e.g. flat-logo JPEG: 77 segments, 0.11 px). Heavy low-quality JPEGs are not in the corpus yet. |
-| Gradients reproduced as gradients | ✅ Met (Professional) | Linear and radial gradients are reconstructed as SVG gradients: ΔE 0.04–0.23 vs 0.58–1.06 posterized. Quick keeps flat bands for print and cut work. Multi-center, conic and mesh-like shading are not modeled. |
+| Gradients reproduced as gradients | ✅ Met (Professional) | Linear and radial gradients are reconstructed as SVG gradients: ΔE 0.04–0.23 vs 0.58–1.06 posterized. Off-center radial fills are found by a center search (emblems: metal badge ΔE 1.06 → 0.49). Other shading gets finer flat levels. Quick keeps flat bands for print and cut work. Multi-stop metallic ramps, conic and mesh-like shading are not modeled as one gradient. |
+| Complex emblems, seals and crests | ⚠️ Partial | Emblem corpus (28 rasters): Professional ΔE 0.66 → 0.50, Quick 0.93 → 0.76; Professional 20–57% below Quick on shaded designs. Still weak: 1 px outlines around small text at ≤ 600 px, tiny outlined shapes on low-res JPEG, metallic multi-stop ramps (see "Emblems"). |
 | Corner-to-corner touching shapes (QR, pixel art, checkerboards) | ⚠️ Partial | Corners are sharp; diagonal "pinch" points still produce slight tilts near them (QR ΔE 0.57, down from 1.11). |
 | Tangent-continuous curves through 3-color junctions | ⚠️ Partial | Junction positions are least-squares refined; tangents are not yet matched across junctions. |
 | Photos / continuous tone | ⚠️ Posterized only | Bounded and clean, but not a photo-realistic vectorization. 6 real photos: ΔE 2.7–3.3 vs the source. |
@@ -749,3 +924,4 @@ Vectorla stands on this benchmark:
 | 2026-10-03 | Real-world corpus (55 images); gradient validation, seam underlay, thin-feature labeling, blend-tint filter, memory limits | 0.17 (Pro) / 0.29 (Quick) core; 0.68 / 0.74 real-world | 0.12 / 0.13 | 0 |
 | 2026-10-03 | Optimization round: palette separation, ridge promotion for thin strokes, size-relative precision, memory (single decode, early downscale, decoder reset, scoped buffers) | 0.52 (Pro) / 0.58 (Quick), 80 images | 0.13 | 0 |
 | 2026-10-04 | Launch readiness: dense-pattern undo below 40,000 regions (16 px checkerboard 1 → 31,249 paths) | 0.50 (Pro) / 0.57 (Quick), 80 images, 0 regressions, byte-identical | 0.12 | 0 |
+| 2026-10-10 | Emblems: shading refinement, radial center search, gradients only across band cuts (Professional); flat-ink seeding, detail-aware speckle cleanup, photo cap only when it saves memory (both) | Emblems 0.50 (Pro) / 0.76 (Quick), was 0.66 / 0.93; core 0.16 / 0.29 unchanged; real-world 0.64 / 0.69 | 0.23 emblems; 0.11–0.13 others | 0 |

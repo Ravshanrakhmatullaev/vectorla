@@ -105,7 +105,7 @@ export async function decodeForTrace(
   mimeType: string,
   fileBytes: ArrayBuffer,
   wasm: RasterDecoderWasm,
-  caps: Pick<TraceEngineOptions, 'maxWorkingPixels' | 'photoMaxWorkingPixels'>,
+  caps: Pick<TraceEngineOptions, 'maxWorkingPixels' | 'photoMaxWorkingPixels'> & Partial<Pick<TraceEngineOptions, 'maxUpscaledPixels'>>,
   inspect?: (full: ImageData) => void,
 ): Promise<DecodedForTrace> {
   const full = await decodeImage(mimeType, fileBytes, wasm)

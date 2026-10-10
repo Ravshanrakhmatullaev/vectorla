@@ -3,11 +3,15 @@
  * adjustments for callers that request one of the legacy named presets.
  *
  *  - Quick Trace: a 32-color palette; colors stay flat (good for print and cutting).
- *  - Professional Trace: a 64-color palette, a finer color-merge distance and
- *    gradient reconstruction (smooth ramps become real SVG gradients).
- *  Both share the same working-resolution caps (memory-bound, see below).
+ *  - Professional Trace: a 64-color palette, a finer color-merge distance,
+ *    gradient reconstruction (smooth ramps become real SVG gradients, radial
+ *    centers searched, grouped only across posterization cuts) and shading
+ *    refinement (shaded regions that are no clean ramp get finer levels).
+ *  Both keep small high-contrast details through speckle cleanup, seed flat
+ *  inks separately (a pale tint next to white) and share the same
+ *  working-resolution caps (memory-bound, see below). BENCHMARKS.md "Emblems".
  */
-import type { TraceEngineOptions } from './traceImage'
+import { DEFAULT_ENGINE_OPTIONS, type TraceEngineOptions } from './traceImage'
 
 /**
  * Working-resolution caps for both modes (memory-bound; BENCHMARKS.md
@@ -18,7 +22,8 @@ import type { TraceEngineOptions } from './traceImage'
  * Photo-like images (see workingPixelCap) stay at 1.2 MP (~19 MB live):
  * posterized photos gain nothing from more pixels, while their region count,
  * SVG size, time and garbage grow with it (a 4 MP photo at full resolution
- * measured 61 MB live, ~129 MB without forced GC in Professional). Larger
+ * measured 61 MB live, ~129 MB without forced GC in Professional), unless
+ * auto-upsampling would bring the reduced image back to its own size. Larger
  * images are reduced by a whole factor (exact k×k blocks).
  */
 export const MAX_WORKING_PIXELS = 4_000_000
@@ -31,11 +36,18 @@ export const PHOTO_MAX_WORKING_PIXELS = 1_200_000
 export const QUICK_MAX_UPSCALED_PIXELS = 1_500_000
 export const PROFESSIONAL_MAX_UPSCALED_PIXELS = 2_000_000
 
+/** Segmentation settings both modes share (see TraceEngineOptions). */
+const DETAIL_OPTIONS: Partial<TraceEngineOptions> = {
+  detailContrast: 0.15,
+  inkSeedFraction: 0.4,
+}
+
 export const QUICK_ENGINE_OPTIONS: Partial<TraceEngineOptions> = {
   maxWorkingPixels: MAX_WORKING_PIXELS,
   photoMaxWorkingPixels: PHOTO_MAX_WORKING_PIXELS,
   maxUpscaledPixels: QUICK_MAX_UPSCALED_PIXELS,
   maxColors: 32,
+  ...DETAIL_OPTIONS,
 }
 
 export const PROFESSIONAL_ENGINE_OPTIONS: Partial<TraceEngineOptions> = {
@@ -45,6 +57,10 @@ export const PROFESSIONAL_ENGINE_OPTIONS: Partial<TraceEngineOptions> = {
   maxColors: 64,
   mergeDistance: 0.045,
   gradients: true,
+  gradientBoundaryStep: 0.03,
+  radialCenterSearch: true,
+  shadingStep: 0.02,
+  ...DETAIL_OPTIONS,
 }
 
 /**
@@ -82,6 +98,10 @@ export function engineOptionsFor(mode: 'quick' | 'professional', preset?: string
 }
 
 /** The working-size caps of a profile, for decodeForTrace. */
-export function workingCaps(options: Partial<TraceEngineOptions>): Pick<TraceEngineOptions, 'maxWorkingPixels' | 'photoMaxWorkingPixels'> {
-  return { maxWorkingPixels: options.maxWorkingPixels ?? MAX_WORKING_PIXELS, photoMaxWorkingPixels: options.photoMaxWorkingPixels ?? PHOTO_MAX_WORKING_PIXELS }
+export function workingCaps(options: Partial<TraceEngineOptions>): Pick<TraceEngineOptions, 'maxWorkingPixels' | 'photoMaxWorkingPixels' | 'maxUpscaledPixels'> {
+  return {
+    maxWorkingPixels: options.maxWorkingPixels ?? MAX_WORKING_PIXELS,
+    photoMaxWorkingPixels: options.photoMaxWorkingPixels ?? PHOTO_MAX_WORKING_PIXELS,
+    maxUpscaledPixels: options.maxUpscaledPixels ?? DEFAULT_ENGINE_OPTIONS.maxUpscaledPixels,
+  }
 }

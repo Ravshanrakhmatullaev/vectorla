@@ -46,6 +46,11 @@ export interface PaletteOptions {
    * e.g. a pale tint on white, rather than one noisy ink). 0 disables.
    */
   separation?: number
+  /**
+   * A flat ink (a heavy, peaked histogram bin) seeds its own cluster down to
+   * this fraction of mergeDistance from an earlier seed (default 1: never).
+   */
+  inkSeedFraction?: number
 }
 
 export const TRANSPARENT_LABEL = -1
@@ -213,14 +218,35 @@ export function extractPalette(
     bin.weight++
   }
 
-  const binList = Array.from(bins.values(), (bin) => ({
+  const binList = Array.from(bins.entries(), ([key, bin]) => ({
     ...bin,
+    key,
     L: bin.L / bin.weight,
     A: bin.A / bin.weight,
     B: bin.B / bin.weight,
   })).sort((a, b) => b.weight - a.weight)
 
   const merge2 = options.mergeDistance * options.mergeDistance
+  // Flat inks: a heavy bin that towers over its neighbouring bins (one color
+  // plus a little noise), unlike the even spread of a ramp or a blurred edge.
+  // Such a bin seeds its own cluster even within mergeDistance of an earlier
+  // one (down to inkSeedFraction of it), so the Ward pass below — which keeps
+  // two tight, well-separated inks apart — decides about a pale tint next to
+  // white instead of the greedy seeding silently absorbing it.
+  const inkSeed2 = merge2 * (options.inkSeedFraction ?? 1) ** 2
+  let flatTotal = 0
+  for (const bin of binList) flatTotal += bin.weight
+  const isInk = (bin: Cluster & { key: number }): boolean => {
+    if (bin.weight < flatTotal * 0.002) return false
+    for (let dl = -1; dl <= 1; dl++)
+      for (let da = -1; da <= 1; da++)
+        for (let db = -1; db <= 1; db++) {
+          if (dl === 0 && da === 0 && db === 0) continue
+          const other = bins.get(bin.key + dl * 1_000_000 + da * 1000 + db)
+          if (other && other.weight * 4 > bin.weight) return false
+        }
+    return true
+  }
 
   // Greedy seeding: most populous bins become cluster centers first, so a
   // brand color's exact value wins over its noisy neighbours.
@@ -236,7 +262,7 @@ export function extractPalette(
         best = c
       }
     }
-    if (best >= 0 && bestD <= merge2) continue
+    if (best >= 0 && bestD <= merge2 && (bestD <= inkSeed2 || !isInk(bin))) continue
     clusters.push({ L: bin.L, A: bin.A, B: bin.B, weight: 0, sr: 0, sg: 0, sb: 0, ss: 0 })
     if (clusters.length > 1024) break
   }
