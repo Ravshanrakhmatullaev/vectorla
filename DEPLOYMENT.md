@@ -9,9 +9,9 @@ each has its own Worker, bucket, queues and secrets.
 > `https://vectorla-api-staging.ra-ravshan1998.workers.dev`, web
 > `https://vectorla-web-staging.ra-ravshan1998.workers.dev`, database
 > Supabase project `rvrpuapbeglqmcajsdgm` (active, migrations 0002–0004
-> applied). The API fails closed (every route returns 500) until
-> `SUPABASE_SERVICE_ROLE_KEY` is set for staging (§3). Nothing has been
-> created for production.
+> applied). All three Worker secrets are set, and the full end-to-end
+> verification passed on 2026-10-09 ("Staging end-to-end verification"
+> below). Nothing has been created for production.
 
 ## 0. Prerequisites (owner)
 
@@ -120,9 +120,10 @@ Staging and production fail closed (every API call returns an error) if any of t
 **Staging (2026-10-09):** `SUPABASE_URL` (`https://rvrpuapbeglqmcajsdgm.supabase.co`)
 and `DOWNLOAD_URL_SECRET` (64 random bytes from `openssl rand`, piped straight
 into `wrangler secret put` and never shown) are set.
-**`SUPABASE_SERVICE_ROLE_KEY` is not set yet**; the Worker logs
-`Missing required backend secrets for staging: SUPABASE_SERVICE_ROLE_KEY`
-and returns a generic 500.
+`SUPABASE_SERVICE_ROLE_KEY` was set by the owner as a Worker secret on
+2026-10-09 (confirmed by name only; health then returned 200). Before that,
+the Worker logged `Missing required backend secrets for staging:
+SUPABASE_SERVICE_ROLE_KEY` and returned a generic 500, as designed.
 
 Supplying the service-role key without exposing it (use the project's
 existing key from Supabase Dashboard → Project Settings → API Keys; do not
@@ -361,14 +362,16 @@ go-ahead.
        and consumer (batch 1, 6 retries, DLQ `vectorla-conversions-staging-dlq`)
        and as the DLQ's consumer (batch 10).
        [ ] Production bucket and queues: not created.
-5. [ ] **Worker secrets** (§3). Staging: `SUPABASE_URL` and
-       `DOWNLOAD_URL_SECRET` set; **`SUPABASE_SERVICE_ROLE_KEY` missing**, the
-       one remaining staging blocker (§3 says how to add it safely).
-       Production: none set.
+5. [x] **Worker secrets, staging** (§3): `SUPABASE_URL`,
+       `SUPABASE_SERVICE_ROLE_KEY`, `DOWNLOAD_URL_SECRET`.
+       [ ] Production: none set.
 6. [x] **Per-IP rate limiter, staging:** bound (`API_RATE_LIMITER`,
-       namespace 1002, 120 requests / 60 s, confirmed in the Worker settings).
-       Its 429 can only be exercised once the service-role key is set, because
-       the secret check runs before it.
+       namespace 1002, 120 requests / 60 s). Verified: on one connection the
+       123rd request got 429 with `Retry-After: 60`, and health stayed 200.
+       Cloudflare counts per server within a location, so a client that opens
+       a new connection per request was not limited (375 requests in 75 s all
+       passed). It is a burst guard; the per-user limits are the enforcement.
+       For a hard per-IP cap, add a WAF rate-limiting rule (needs approval).
        [ ] Production: uncomment the top-level `[[ratelimits]]` block at
        release time.
 7. [x] **R2 lifecycle rules, staging:** `expire-uploads` (`uploads/`, 35
@@ -387,16 +390,15 @@ go-ahead.
         the list falls back to the Site URL). Email confirmation is on.
         Also set the SMTP sender and enable leaked-password protection
         (Supabase security advisor WARN).
-11. [ ] **Deploy staging and verify (§6).** Deployed 2026-10-09; results are
-        under "Staging verification" below. Steps 1–6 (health included) and
-        the live rate-limit check need the service-role key; step 7 passed.
-        Then production.
+11. [x] **Deploy staging and verify (§6):** every step passed on
+        2026-10-09 ("Staging end-to-end verification" below).
+        [ ] Production: deploy, then run §6 again.
 12. [x] **Memory on Cloudflare** (staging, 2026-10-09): every worst-case
         upload completed in a real Cloudflare isolate. The largest peak was
         about 63 MB (16 px checkerboard); the 15.6 MB 16-bit PNG was about 57 MB.
         See "Memory on Cloudflare" below and BENCHMARKS.md.
-        [ ] Re-check through the real upload → queue path with
-        `wrangler tail` once the key is set.
+        The real upload → queue path then ran the same worst-case files:
+        every invocation finished `ok`, the most CPU was 9.9 s.
 
 ### Staging verification (2026-10-09)
 
@@ -426,6 +428,49 @@ Run against the deployed staging Workers and the staging Supabase project:
   Supabase platform (an `event_trigger` function, not in this repo), and
   Postgres refuses to call an event-trigger function directly, so the RPC is
   not usable. Leaked-password protection is off (item 10).
+
+### Staging end-to-end verification (2026-10-09)
+
+Run against the deployed staging Workers, queues, R2 bucket and Supabase
+project with six throwaway accounts (tagged `vectorla_e2e = 2026-10-09`,
+created directly in `auth.users` with bcrypt hashes, so no confirmation
+e-mail was sent). Each signed in through Supabase Auth with the publishable
+key. `wrangler tail` captured all 993 Worker events of the run: every
+outcome `ok`, with no exception, `exceededMemory` or `exceededCpu`.
+
+| Area | Result |
+|---|---|
+| Secret binding by name; API no longer fails closed | Pass: health 200, no token 401, forged token 401 |
+| Signup credits (signup triggers on `auth.users` insert) | Pass: profile `free`, balance 10, one `credit` entry with `grant_key = signup` |
+| Upload → queue → conversion → SVG download (PNG and JPEG) | Pass 21/21: job done in ~8 s; download is `image/svg+xml`, attachment, `no-store`, valid XML; list, detail and history endpoints |
+| Debit and refund | Pass: Quick −1; Professional on the same upload refunds the Quick job (+1) and charges 2; the old result returns 404; the ledger reconciles |
+| Insufficient credits | Pass: after balance 0, jobs fail "Not enough credits", no charge, never negative |
+| Failed-job refund | Pass: corrupt PNG fails at once with the "could not be read" message (410, no charge). A charged job stuck in `processing` was failed and refunded once by the 16:00 cron. A charged job sent to the DLQ was failed and refunded once |
+| Queue retry | Pass: a job whose lease was still held got a delayed retry; the redelivery logged "Taking over job" and completed it with one charge |
+| Cron | Pass: 8 runs, all `ok`. Retention purged a 31-day-old upload, its job, conversion and both R2 objects. A fresh orphan in the swept shard was kept (24 h grace) |
+| Upload size and format | Pass 13/13: free 5 MiB + 1 → 413, just under → 201; pro 15 MiB + 1 → 413, 15.6 MB 16-bit PNG → 201 and converted; 17 MB body → 413 with and without Content-Length; 30000² header and 4.2 MP → 413 before decoding; text-as-PNG and GIF → 415; duplicate name → 409; rejects cost nothing |
+| Dense patterns, real queue | Pass: 16 px checkerboard keeps 31,249 paths; 8 px collapses to 1 path (known limitation) |
+| Rate limits | Pass: free user's 3rd concurrent job → 429 `Retry-After: 30`; 21st upload in 10 min → 429 `Retry-After: 600`; other users unaffected; per-IP limiter see checklist item 6 |
+| User isolation | Pass 17/17: another user's job, result, conversion, download (even with the owner's signed URL) and job creation → 403; lists empty; tampered, extended or missing signature → 401, past expiry → 410; no storage keys in any response |
+| Browser EN/UZ/RU (Chromium) | Pass 30/30: language switch and `<html lang>`, UI sign-in, translated dialog and labels, upload, Quick and Professional SVG downloads, live balance with correct plurals, `/account`; no CSP, page or console errors |
+| Real queue CPU and memory | Pass: 51 queue/DLQ invocations, max CPU 9.9 s (noisy 4 MP JPEG, Professional) of 60 s, max wall 16.7 s; none exceeded memory |
+
+Findings, not defects: Cloudflare's browser check blocks the default
+`Python-urllib` User-Agent (error 1010), so API clients need their own
+User-Agent. Stage timings in the `[professional-trace]` log read 0 ms,
+because the Workers clock does not advance during CPU work. The first cron
+run with the key (15:30) purged the only pre-existing upload, from 2026-08-27,
+under the 30-day retention.
+
+**Cleanup.** All 65 test objects were deleted from R2 (bucket empty), no
+job is active, and the ledger matches every balance. The six test accounts
+are banned (`banned_until = 2999-01-01`, sign-in returns `user_banned`). They
+and their rows remain because the Supabase connector holds `DELETE` for an
+interactive approval. To remove them, run
+`backend/supabase/cleanup/2026-10-09_staging_e2e_users.sql` in the SQL
+editor. It deletes only those six accounts and aborts without deleting
+anything if any safety check fails. It was tested on Postgres 16 with the
+repo schema (happy path plus five failing checks).
 
 ### Memory on Cloudflare (staging, 2026-10-09)
 
@@ -458,5 +503,7 @@ not the Supabase client or R2 transfer.
 - Checkerboard-like patterns with more than 40,000 regions (e.g. 8 px squares
   at 2000²) are still simplified into a few shapes, to keep memory bounded.
 - `style-src` keeps `'unsafe-inline'` (React inline styles).
-- Memory on Cloudflare was measured on the decode and trace path with a
-  probe Worker, not yet through the queue consumer.
+- The per-IP limiter counts per Cloudflare server, so it is a burst guard
+  rather than a hard per-IP cap (checklist item 6).
+- The public signup e-mail (confirmation link) was not exercised on staging:
+  Auth URL and SMTP settings are dashboard items (checklist item 10).

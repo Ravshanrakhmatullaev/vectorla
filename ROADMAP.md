@@ -229,9 +229,11 @@ Legend: ✅ done · 🔜 next · ⏳ planned · 🧑 needs an owner decision, cr
 - ✅ **P10.** Staging is deployed (2026-10-09): Supabase project
   `rvrpuapbeglqmcajsdgm` is active with 0002–0004 applied; Workers Paid, R2
   bucket with lifecycle rules, queues, rate limiter and the API and web
-  Workers are live. 🧑 Remaining for staging: the `SUPABASE_SERVICE_ROLE_KEY`
-  Worker secret (the API fails closed without it) and the Supabase Auth URL
-  settings. Production resources do not exist yet (DEPLOYMENT.md checklist).
+  Workers are live, all secrets are set, and the end-to-end verification
+  passed on 2026-10-09 (DEPLOYMENT.md "Staging end-to-end verification").
+  🧑 Remaining for staging: Supabase Auth URL/SMTP settings and deleting the
+  six banned test accounts (a guarded SQL file is provided). Production
+  resources do not exist yet (DEPLOYMENT.md checklist).
 
 ### Tier 3: Product and SaaS (after quality and safety)
 
@@ -260,9 +262,8 @@ Legend: ✅ done · 🔜 next · ⏳ planned · 🧑 needs an owner decision, cr
 2. Provide or approve a set of real sample images for the corpus (Q10).
 3. Vision/ML provider for upscaling and text detection, and its budget (Q12).
 4. Free-tier credit amount and cadence (P5), Stripe setup (S5).
-5. Set the staging `SUPABASE_SERVICE_ROLE_KEY` Worker secret without sharing
-   it (DEPLOYMENT.md §3), and add the staging web origin to the Supabase Auth
-   URL settings (P10).
+5. Add the staging web origin to the Supabase Auth URL settings, set SMTP,
+   and run the staging test-account cleanup SQL (P10).
 6. Approve the production changes in the launch checklist (`DEPLOYMENT.md`,
    "Production launch checklist"): a production Supabase project and
    migrations, bucket, queues, lifecycle rules, secrets, rate limiter, and

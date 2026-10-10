@@ -347,8 +347,8 @@ migrations, secrets, staging then production, verification, rollback).
   (`wrangler.web-staging.toml`), because the deploy token has no Pages
   permission.
 - Staging (deployed 2026-10-09): API `https://vectorla-api-staging.ra-ravshan1998.workers.dev`,
-  web `https://vectorla-web-staging.ra-ravshan1998.workers.dev`. The API fails
-  closed until the `SUPABASE_SERVICE_ROLE_KEY` secret is set (DEPLOYMENT.md §3).
+  web `https://vectorla-web-staging.ra-ravshan1998.workers.dev`. Verified end to
+  end on 2026-10-09 (DEPLOYMENT.md "Staging end-to-end verification").
 - Backend target: Cloudflare Workers through `backend/wrangler.toml`.
 - Required Worker resources: R2 bucket `vectorla-uploads`, queue
   `vectorla-conversions`, Supabase URL/service-role secret, and download URL
