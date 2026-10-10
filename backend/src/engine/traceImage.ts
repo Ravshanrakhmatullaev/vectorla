@@ -93,6 +93,12 @@ export interface TraceEngineOptions {
    * (regularizeLabels). Clean artwork is unaffected.
    */
   textureDetail: boolean
+  /**
+   * Content class (classifyContent): measured with 'auto'; benchmarks may
+   * force one. Photo-like inputs ('photo', 'emblem') get textureDetail; only
+   * 'photo' gets the photo working-size cap (photoMaxWorkingPixels).
+   */
+  contentClass: 'auto' | ContentClass
   /** Search radial gradient centers instead of using the bands' centroid (gradients.ts). */
   radialCenterSearch: boolean
   /** Gradient grouping only across borders with a mean pixel step (sRGB 0-1) up to this; 0 = any border. */
@@ -155,6 +161,7 @@ export const DEFAULT_ENGINE_OPTIONS: TraceEngineOptions = {
   gradientBoundaryStep: 0,
   radialCenterSearch: false,
   textureDetail: false,
+  contentClass: 'auto',
   inkSeedFraction: 1,
   maxRegions: 6000,
   maxRegionsHard: 40_000,
@@ -182,8 +189,9 @@ export interface TraceEngineStats {
 }
 
 export interface TraceDiagnostics {
-  /** Share of flat pixels; below PHOTO_FLAT_FRACTION the photo working-size cap applies. */
+  /** Share of flat pixels (below PHOTO_FLAT_FRACTION an input is photo-like) and the content class (classifyContent). */
   flatFraction: number
+  contentClass: ContentClass
   /** True when the input was reduced for being photo-like (photoMaxWorkingPixels). */
   photoCap: boolean
   /** Speckle merge threshold (working px). */
@@ -248,11 +256,39 @@ const NO_IMAGE: RgbaImage = { width: 0, height: 0, data: new Uint8ClampedArray(0
 const REGULARIZE_BETA = 1.0
 const REGULARIZE_MAX_SWITCH = 0.12
 
+/** Working size from which a JPEG's colors are read after its light blur (traceWith, memory). */
+const LAB_FROM_WORKING_PIXELS = 2_500_000
+
+/** Detail-protected region-budget passes go up to this multiple of the speckle area (traceWith). */
+const BUDGET_DETAIL_FACTOR = 16
+
 /** Palette colors shading refinement may add (refine.ts). */
 const MAX_SHADING_COLORS = 512
 
-/** Below this share of flat pixels an image is treated as photo-like (see workingPixelCap). */
+/** Below this share of flat pixels an image is photo-like (classifyContent). */
 const PHOTO_FLAT_FRACTION = 0.7
+/** A photo-like input with a plain border band and crisp outlines is an emblem (emblemFeatures). */
+const EMBLEM_MIN_BORDER = 0.85
+const EMBLEM_MIN_CRISPNESS = 0.3
+
+/**
+ * - artwork: mostly flat pixels (logos, icons, text, illustrations,
+ *   gradient art);
+ * - emblem: photo-like by flat fraction (shading, texture, compression) but
+ *   drawn on a plain background with crisp outlines: an emblem, badge, seal
+ *   or medal;
+ * - photo: the rest.
+ * Emblems and photos share the texture path (textureDetail); only photos
+ * get the photo working-size cap, as an emblem's text and line art need the
+ * resolution (BENCHMARKS.md "Content classes").
+ */
+export type ContentClass = 'artwork' | 'emblem' | 'photo'
+
+export function classifyContent(image: RgbaImage, flat = flatFraction(image)): ContentClass {
+  if (flat >= PHOTO_FLAT_FRACTION) return 'artwork'
+  const { border, crispness } = emblemFeatures(image)
+  return border >= EMBLEM_MIN_BORDER && crispness >= EMBLEM_MIN_CRISPNESS ? 'emblem' : 'photo'
+}
 
 /**
  * Share of (sampled) opaque pixels whose right and lower neighbours differ by
@@ -280,9 +316,81 @@ export function flatFraction(image: RgbaImage): number {
 }
 
 /**
+ * Emblem-likeness of a photo-like input, measured on block means at most
+ * 512 px across (noise and compression texture average out):
+ *  - border: share of the outer band (2% of the short side) within 0.04
+ *    OKLab of its median color; transparency counts as white. Emblems
+ *    0.86–1.0, photos 0.05–0.47 (a few on a dark sky or a plain slide
+ *    0.75–0.91);
+ *  - crispness: neighbouring block steps above 0.15 OKLab ÷ steps above
+ *    0.04, i.e. how much of the image's structure is crisp outline. Emblems
+ *    from 1200 px 0.40–0.78 (0.30–0.73 at 640 px), photos 0.0–0.31 (a
+ *    scanned text page 0.54), at most 0.27 among those with a plain border.
+ * Measured on 52 photo-like images (BENCHMARKS.md "Content classes").
+ */
+export function emblemFeatures(image: RgbaImage): { border: number; crispness: number } {
+  const { width: w, height: h, data } = image
+  const k = Math.max(1, Math.ceil(Math.max(w, h) / 512))
+  const W = Math.max(1, Math.floor(w / k))
+  const H = Math.max(1, Math.floor(h / k))
+  const lab = new Float32Array(W * H * 3)
+  const lin = (v: number) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
+  for (let by = 0; by < H; by++) {
+    for (let bx = 0; bx < W; bx++) {
+      let r = 0
+      let g = 0
+      let b = 0
+      for (let y = by * k; y < by * k + k; y++) {
+        for (let x = bx * k; x < bx * k + k; x++) {
+          const p = (y * w + x) * 4
+          const a = data[p + 3]! / 255
+          r += data[p]! * a + 255 * (1 - a)
+          g += data[p + 1]! * a + 255 * (1 - a)
+          b += data[p + 2]! * a + 255 * (1 - a)
+        }
+      }
+      const s = 255 * k * k
+      const lr = lin(r / s)
+      const lg = lin(g / s)
+      const lb = lin(b / s)
+      const l = Math.cbrt(0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb)
+      const m = Math.cbrt(0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb)
+      const q = Math.cbrt(0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb)
+      const o = (by * W + bx) * 3
+      lab[o] = 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * q
+      lab[o + 1] = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * q
+      lab[o + 2] = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * q
+    }
+  }
+  const band = Math.max(2, Math.floor(0.02 * Math.min(W, H)))
+  const borderPixels: number[] = []
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (y < band || y >= H - band || x < band || x >= W - band) borderPixels.push(y * W + x)
+  const median = [0, 1, 2].map((c) => {
+    const v = borderPixels.map((p) => lab[p * 3 + c]!).sort((a, b) => a - b)
+    return v[v.length >> 1] ?? 0
+  })
+  let uniform = 0
+  for (const p of borderPixels) if (Math.hypot(lab[p * 3]! - median[0]!, lab[p * 3 + 1]! - median[1]!, lab[p * 3 + 2]! - median[2]!) < 0.04) uniform++
+  let strong = 0
+  let medium = 0
+  const step = (p: number, q: number) => Math.hypot(lab[p * 3]! - lab[q * 3]!, lab[p * 3 + 1]! - lab[q * 3 + 1]!, lab[p * 3 + 2]! - lab[q * 3 + 2]!)
+  for (let y = 0; y + 1 < H; y++) {
+    for (let x = 0; x + 1 < W; x++) {
+      const p = y * W + x
+      const d = Math.max(step(p, p + 1), step(p, p + W))
+      if (d > 0.15) strong++
+      if (d > 0.04) medium++
+    }
+  }
+  return { border: borderPixels.length > 0 ? uniform / borderPixels.length : 0, crispness: medium > 0 ? strong / medium : 0 }
+}
+
+/**
  * Working-size cap for an input: maxWorkingPixels for artwork (logos, text,
- * illustrations), photoMaxWorkingPixels for photo-like images. Inputs within
- * the photo cap are never classified (nothing to decide).
+ * illustrations) and emblems, photoMaxWorkingPixels for photos
+ * (classifyContent). Inputs within the photo cap are never classified
+ * (nothing to decide). A 2000 px shaded emblem reduced to 1000 px lost its
+ * lettering and line art (BENCHMARKS.md "Content classes").
  *
  * The photo cap is skipped when auto-upsampling (maxUpscaledPixels) would
  * bring the reduced image back to at least its own size: a 1200² input would
@@ -292,15 +400,19 @@ export function flatFraction(image: RgbaImage): number {
  */
 export function workingPixelCap(
   image: RgbaImage,
-  options: Pick<TraceEngineOptions, 'maxWorkingPixels' | 'photoMaxWorkingPixels'> & Partial<Pick<TraceEngineOptions, 'maxUpscaledPixels'>>,
+  options: Pick<TraceEngineOptions, 'maxWorkingPixels' | 'photoMaxWorkingPixels'> & Partial<Pick<TraceEngineOptions, 'maxUpscaledPixels' | 'contentClass'>>,
 ): number {
   const { width: w, height: h } = image
   if (w * h <= Math.min(options.maxWorkingPixels, options.photoMaxWorkingPixels)) return options.maxWorkingPixels
-  if (flatFraction(image) >= PHOTO_FLAT_FRACTION) return options.maxWorkingPixels
+  const forced = options.contentClass && options.contentClass !== 'auto' ? options.contentClass : null
+  const flat = forced ? 0 : flatFraction(image)
+  if (forced ? forced !== 'photo' : flat >= PHOTO_FLAT_FRACTION) return options.maxWorkingPixels
   if (options.maxUpscaledPixels !== undefined && w * h <= options.maxWorkingPixels) {
     const k = reductionFactor(w, h, options.photoMaxWorkingPixels)
     if (autoUpscale(Math.ceil(w / k), Math.ceil(h / k), options.maxUpscaledPixels) >= k) return options.maxWorkingPixels
   }
+  // Last: classifying an emblem takes a pass over the image.
+  if (!forced && classifyContent(image, flat) === 'emblem') return options.maxWorkingPixels
   return options.photoMaxWorkingPixels
 }
 
@@ -369,7 +481,8 @@ function traceWith(source: { image: RgbaImage | null }, overrides: Partial<Trace
     const foreign = owned ? null : source.image!.data
     const reusable = (img: RgbaImage) => img.data !== foreign
     const inputFlatFraction = flatFraction(source.image!)
-    const cap = workingPixelCap(source.image!, options)
+    const contentClass = options.contentClass !== 'auto' ? options.contentClass : classifyContent(source.image!, inputFlatFraction)
+    const cap = workingPixelCap(source.image!, { ...options, contentClass })
     const photoCap = cap < options.maxWorkingPixels && source.image!.width * source.image!.height > cap
     let image = fitWorkingSize(source.image!, cap)
     source.image = null
@@ -377,8 +490,9 @@ function traceWith(source: { image: RgbaImage | null }, overrides: Partial<Trace
     // a k× box reduction (whose last row/column of blocks may be partial).
     const baseScale = image.scale ?? sourceWidth / image.width
     // Classified before denoising, which flattens photos past the threshold.
-    const textured = options.textureDetail && inputFlatFraction < PHOTO_FLAT_FRACTION
-    const hairlines = options.upscaleFilter === 'ridge' && (textured || flatFraction(image) >= PHOTO_FLAT_FRACTION)
+    const photoLike = contentClass !== 'artwork'
+    const textured = options.textureDetail && photoLike
+    const hairlines = options.upscaleFilter === 'ridge' && (textured || !photoLike || flatFraction(image) >= PHOTO_FLAT_FRACTION)
     let spare: Uint8ClampedArray | undefined
     lap('downscale')
 
@@ -448,7 +562,12 @@ function traceWith(source: { image: RgbaImage | null }, overrides: Partial<Trace
     // again: overwrite it instead of allocating a second one.
     let opaque = upscale > 1 ? new Uint8Array(n) : baseOpaque
     for (let p = 0; p < n; p++) opaque[p] = (image.data[p * 4 + 3] ?? 0) >= options.alphaThreshold ? 1 : 0
-    let lab: OklabSource | null = upscale > 1 ? new OklabSource(image.data) : baseLab
+    // Without upsampling, colors come from the palette stage's image: for a
+    // JPEG that is the sharper one before its light blur (ΔE 0.01-0.04 better
+    // than the blurred one on the emblem JPEGs). From LAB_FROM_WORKING_PIXELS
+    // the blurred working image is read instead, so the earlier buffer is
+    // freed here (16 MB at 4 MP: a textured 4 MP emblem's peak 63 -> 47 MB).
+    let lab: OklabSource | null = upscale > 1 || (lossy && n >= LAB_FROM_WORKING_PIXELS) ? new OklabSource(image.data) : baseLab
     baseLab = null
     let flat = upscaleMaskStrict(baseFlat, baseWidth, baseHeight, upscale)
     for (let p = 0; p < n; p++) if (!opaque[p]) flat[p] = 0
@@ -490,13 +609,25 @@ function traceWith(source: { image: RgbaImage | null }, overrides: Partial<Trace
     // and the detailed result is kept, up to maxRegionsHard regions: a
     // 2000² 16 px checkerboard (31k regions) peaks at ~51 MB live, an 8 px
     // one (125k) at ~122 MB, so beyond the hard cap the cascade is accepted.
+    //
+    // Detail first: passes up to BUDGET_DETAIL_FACTOR × the speckle area keep
+    // small regions that contrast with their neighbour (detail protection),
+    // so texture and shading fragments go before text and line art; only if
+    // that misses the budget do plain passes restart from the speckle area.
+    // Merging every small region alike erased the eagle of a shaded emblem
+    // at 2000 px (BENCHMARKS.md "Content classes").
     let budgetArea = minArea
+    let detailFirst = protect !== undefined
     while (regions.count > options.maxRegions && budgetArea < n / 50) {
       budgetArea *= 2
+      if (detailFirst && budgetArea > minArea * BUDGET_DETAIL_FACTOR) {
+        detailFirst = false
+        budgetArea = minArea * 2
+      }
       budgetPasses++
       const undo = regions.count <= options.maxRegionsHard ? labels.slice() : null
       const countBefore = regions.count
-      labels = mergeSmallRegions(labels, width, height, palette, budgetArea, scratch)
+      labels = mergeSmallRegions(labels, width, height, palette, budgetArea, scratch, detailFirst ? protect : undefined)
       regions = connectedComponents(labels, width, height, scratch)
       if (undo && regions.count < options.maxRegions / 4) {
         labels = undo
@@ -597,7 +728,7 @@ function traceWith(source: { image: RgbaImage | null }, overrides: Partial<Trace
     regions.ids = NO_POINTS
     const boundaries = buildRegionBoundaries(chains, regions.count)
     lap('chains')
-    const diagnostics: TraceDiagnostics = { flatFraction: inputFlatFraction, photoCap, minArea, regionsAfterSpeckle, budgetPasses, budgetArea, gradientGroupsFound, shadedRegions }
+    const diagnostics: TraceDiagnostics = { flatFraction: inputFlatFraction, contentClass, photoCap, minArea, regionsAfterSpeckle, budgetPasses, budgetArea, gradientGroupsFound, shadedRegions }
     return { width, height, upscale, denoise, noiseSigma, sourceToWorking, coordinateScale: baseScale / upscale, palette, regionLabels: regions.labels, regionCount: regions.count, chains, boundaries, gradientFills, diagnostics }
   })()
   const { width, height, upscale, denoise, noiseSigma, sourceToWorking, coordinateScale, palette, chains, boundaries, gradientFills, diagnostics } = seg

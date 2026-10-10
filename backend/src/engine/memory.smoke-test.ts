@@ -83,7 +83,7 @@ function photo(): { width: number; height: number; data: Uint8ClampedArray } {
   return { width: w, height: h, data }
 }
 
-function peakOf(make: () => { width: number; height: number; data: Uint8ClampedArray }, mode: 'quick' | 'professional') {
+function peakOf(make: () => { width: number; height: number; data: Uint8ClampedArray }, mode: 'quick' | 'professional', sourceFormat: 'png' | 'jpeg' = 'png') {
   gc!()
   const base = mb()
   let image: { width: number; height: number; data: Uint8ClampedArray } | null = make()
@@ -99,9 +99,9 @@ function peakOf(make: () => { width: number; height: number; data: Uint8ClampedA
   }
   const holder = { image }
   image = null
-  const result = traceOwnedImage(holder, { ...engineOptionsFor(mode), sourceFormat: 'png' })
+  const result = traceOwnedImage(holder, { ...engineOptionsFor(mode), sourceFormat })
   memoryCheckpoints.hook = null
-  return { peak, where, working: `${result.stats.workingWidth}x${result.stats.workingHeight}` }
+  return { peak, where, working: `${result.stats.workingWidth}x${result.stats.workingHeight}`, contentClass: result.stats.diagnostics.contentClass }
 }
 
 // Measured: 39.3 MB (artwork, Professional), 43.1 MB (artwork, Quick: includes
@@ -154,6 +154,49 @@ const BUDGET_SHADED_4MP_MB = 50
   assertTrue(sh.working === '2000x2000', `shaded 4 MP artwork is traced at full resolution (got ${sh.working})`)
   assertTrue(sh.peak <= BUDGET_SHADED_4MP_MB, `professional: shaded 4 MP artwork live peak ${sh.peak.toFixed(1)} MB at ${sh.where} exceeds ${BUDGET_SHADED_4MP_MB} MB`)
   console.log(`PASS: professional shaded 4 MP artwork: live peak ${sh.peak.toFixed(1)} MB (${sh.where}) <= ${BUDGET_SHADED_4MP_MB} MB`)
+}
+
+// Textured 4 MP emblem (JPEG path): a noisy, shaded metal disk with crisp
+// rings, stroke lettering and line art on a plain background. Photo-like by
+// flat fraction, but classified as an emblem, so it is traced at full
+// resolution instead of the 1.2 MP photo cap (traceImage.ts classifyContent),
+// with the texture path (label regularization) and the region budget's
+// detail-first passes. Measured 39.4 MB (Quick), 43.3 MB (Professional);
+// before the emblem class it was traced at 1000² (photo cap). Its own
+// budget; the artwork budget above is unchanged.
+const BUDGET_TEXTURED_EMBLEM_4MP_MB = 54
+{
+  const emblem = () => {
+    const n = 2000
+    const data = new Uint8ClampedArray(n * n * 4)
+    let seed = 11
+    const noise = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) % 25) - 12
+    for (let y = 0; y < n; y++) {
+      for (let x = 0; x < n; x++) {
+        const d = Math.hypot(x - 1000, y - 1000)
+        const angle = Math.atan2(y - 1000, x - 1000)
+        let rgb: [number, number, number] = [255, 255, 255]
+        if (d < 940) {
+          const t = d / 940
+          const e = noise()
+          rgb = [205 - 70 * t + e, 175 - 60 * t + e, 95 - 45 * t + e]
+          const ring = (d > 860 && d < 880) || (d > 700 && d < 712)
+          const letter = d > 740 && d < 840 && Math.floor((angle * 360) / Math.PI) % 3 === 0 && ((x >> 3) + (y >> 3)) % 2 === 0
+          const spoke = d < 600 && Math.abs(((angle * 12) / Math.PI) % 1) < 0.02
+          if (ring || letter || spoke) rgb = [30 + e, 30 + e, 40 + e]
+        }
+        data.set([rgb[0], rgb[1], rgb[2], 255], (y * n + x) * 4)
+      }
+    }
+    return { width: n, height: n, data }
+  }
+  for (const mode of ['quick', 'professional'] as const) {
+    const em = peakOf(emblem, mode, 'jpeg')
+    assertTrue(em.contentClass === 'emblem', `${mode}: textured emblem classified as ${em.contentClass}`)
+    assertTrue(em.working === '2000x2000', `${mode}: textured 4 MP emblem is traced at full resolution (got ${em.working})`)
+    assertTrue(em.peak <= BUDGET_TEXTURED_EMBLEM_4MP_MB, `${mode}: textured 4 MP emblem live peak ${em.peak.toFixed(1)} MB at ${em.where} exceeds ${BUDGET_TEXTURED_EMBLEM_4MP_MB} MB`)
+    console.log(`PASS: ${mode} textured 4 MP emblem at ${em.working}: live peak ${em.peak.toFixed(1)} MB (${em.where}) <= ${BUDGET_TEXTURED_EMBLEM_4MP_MB} MB`)
+  }
 }
 
 // Dense regular pattern: a 2000² checkerboard of 16 px squares has 15,625

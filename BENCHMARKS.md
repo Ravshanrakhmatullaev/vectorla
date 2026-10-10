@@ -53,6 +53,9 @@ npm run bench -- --corpus=emblem --engines=quick,professional --compare  # 28 em
 npx tsx src/benchmark/emblemGate.smoke-test.ts     # emblem regression gate (also part of npm test)
 npx tsx src/benchmark/emblemDiagnostics.ts --variants=600,1200  # what each engine stage did, per emblem
 npx tsx src/benchmark/customerEmblemGate.smoke-test.ts  # the customer's emblem, scored against its source and Vectorizer.AI (also part of npm test)
+npm run bench -- --corpus=emblem-photo --engines=quick,professional --compare  # photo-like emblems (21 rasters) vs baseline-emblem-photo.json
+npx tsx src/benchmark/emblemPhotoGate.smoke-test.ts  # photo-like emblems at 2000 px: emblem class, full resolution (also part of npm test)
+npx tsx src/engine/contentClass.smoke-test.ts      # artwork / emblem / photo classification on real files (also part of npm test)
 ```
 
 `--out` writes each source raster, traced SVG and 4× render for visual review.
@@ -1080,6 +1083,176 @@ neither path.
 - **Unmeasured:** Vectorizer.AI's SVG size, node count and runtime (screenshot
   only). Its SVG would settle them.
 
+## Content classes (2026-10-10)
+
+The customer emblem is photo-like to the engine (32% flat pixels, under the
+0.7 threshold). This round tested whether that classification sends detailed
+emblems, badges and seals down the wrong resolution and segmentation path,
+with the customer's file as the primary case.
+
+### What the classification changed
+
+Production sends every image type to the Vectorla engine (the image-type
+analysis only labels jobs), so the engine's flat fraction is the only class
+that matters. Photo-like inputs differ in two ways:
+
+- **Resolution:** above 1.2 MP they are reduced to the photo working-size cap
+  (unless upsampling would restore the size anyway). A 2000 px emblem is
+  traced at 1000 px, a 1280 px one at 640 px in Quick.
+- **Texture path:** hairline restoration, ink/paper blend candidates and
+  label regularization (BENCHMARKS.md "Customer emblem").
+
+At the customer's 640 px neither the cap nor anything else is wrong: the
+texture path is what made the emblem traceable, and forcing the artwork path
+there is worse (below). Two other problems showed up instead:
+
+1. **The photo cap misroutes large uploads of emblems.** Their lettering and
+   line art need the resolution; photos do not.
+2. **The region budget erased detail.** Texture inflates the region count
+   (15,725 regions in Professional for a 1280 px copy of the emblem, budget
+   6,000), and the budget passes merged every small region alike, text and
+   line art as readily as shading noise: three passes up to 64 px wiped the
+   eagle (coat-of-arms edge recall 0.67). JPEG photos get a 3× speckle area
+   and never reach the budget; this lossless upload with a JPEG history did.
+
+Only 11 of the 108 benchmark rasters were photo-like (6 photos, a text scan
+and the 4 textured `seal-embossed` variants), so the class was barely covered.
+New test sets: the 7 emblem designs as photographed, scanned or re-rendered
+uploads (corpus `emblem-photo`: blur, sensor noise σ 7, JPEG q90, at 640,
+1200 and 2000 px; flat fraction 0.10–0.34, scored against the clean vector),
+the customer emblem re-uploaded (JPEG q80, 480 px, enlarged to 1280 and
+2000 px; scored against the original 640 px file), and 16 more photos and
+textures as a guard (scikit-image sample data, kept out of the repository).
+
+### Three paths compared
+
+- **Photo-like path** (current): photo cap above 1.2 MP, texture path.
+- **Forced artwork:** no cap, no texture path.
+- **Emblem path** (hybrid): no cap, texture path, detail-first region budget.
+
+The customer emblem (ΔE×100 against the original; Quick / Professional):
+
+| Upload | Photo-like path | Forced artwork | Emblem path |
+|---|---:|---:|---:|
+| 640 px WebP (the file) | 4.67 / 4.27 | 4.98 / 5.59 | **4.61 / 4.21** |
+| 640 px JPEG q80 | 4.73 / 4.28 | 5.04 / 5.21 | 4.73 / 4.28 |
+| 480 px | 5.20 / 5.04 | 5.69 / 6.02 | 5.20 / 5.04 |
+| 1280 px | 4.65 / 5.32 | 3.83 / 5.48 | **3.76 / 3.80** |
+| 2000 px JPEG q90 | 3.69 / 4.86 | 3.26 / 4.74 | **3.25 / 3.58** |
+
+Professional on the 2000 px upload, by region (photo-like → emblem path):
+coat of arms ΔE 8.76 → 5.85, edge recall 0.751 → 0.921, thin lines kept
+0.670 → 0.896; top text 4.24 → 3.27, recall 0.883 → 0.965. Visually the
+eagle was gray blotches with a gradient smeared across it; it is now drawn
+with its feathers, close to Quick and to Vectorizer.AI's result.
+
+The photo-like emblem set (7 designs, mean; ΔE / edge recall / text-region
+recall / center-region recall / KB):
+
+| Size, mode | Photo-like path | Forced artwork | Emblem path |
+|---|---|---|---|
+| 640, Professional | 1.243 / 0.949 / 0.960 / 0.932 / 259 | 1.241 / 0.939 / 0.945 / 0.921 / 295 | same as photo-like |
+| 640, Quick | 1.568 / 0.911 / 0.944 / 0.903 / 142 | 1.590 / 0.900 / 0.931 / 0.894 / 200 | same as photo-like |
+| 1200, Professional | 0.907 / 0.976 / 0.971 / 0.972 / 236 | 0.955 / 0.967 / 0.960 / 0.968 / 313 | same as photo-like |
+| 1200, Quick | 1.107 / 0.976 / 0.969 / 0.973 / 255 | 1.120 / 0.970 / 0.963 / 0.971 / 365 | same as photo-like |
+| 2000, Professional | 0.909 / 0.951 / 0.951 / 0.935 / 166 | 0.761 / 0.977 / 0.977 / 0.977 / 399 | **0.751 / 0.977 / 0.980 / 0.978 / 352** |
+| 2000, Quick | 1.168 / 0.953 / 0.949 / 0.942 / 193 | 0.975 / 0.979 / 0.977 / 0.979 / 657 | **0.968 / 0.980 / 0.979 / 0.979 / 474** |
+
+At 640 and 1200 px the emblem path traces byte-identically to the photo-like
+path (neither the cap nor the region budget applies); forced artwork loses
+edges and text there. At 2000 px both uncapped paths gain about 0.2 ΔE and
+recover lettering and line art; the emblem path does it with 12–28% smaller
+SVGs than forced artwork.
+
+Photos (14 photo-like photos, textures and scans at their own size, both
+modes): forced artwork is worse in 27 of 28 runs (ΔE up to +0.4; one texture
+in Quick is slightly better), so the texture path is right for them. On 2000
+px enlargements of photos, lifting the cap improves ΔE (e.g. 2.31 → 2.04)
+but doubles the SVG and raises memory, so photos keep it.
+
+### Changes
+
+- **Emblem class** (`classifyContent`, `emblemFeatures` in traceImage.ts). A
+  photo-like input is an emblem when, measured on block means at most 512 px
+  across (noise and JPEG texture average out), its outer band is plain (≥ 85%
+  within 0.04 OKLab of the band's median) and its structure is crisp outline
+  (steps > 0.15 ÷ steps > 0.04 ≥ 0.30). Measured on 52 photo-like images:
+  every emblem from 1200 px is detected (crispness 0.40–0.78; 0.30–0.73 at
+  640 px, where the class changes nothing) and no photo or scan is (border
+  0.05–0.47 for most; the few with a plain dark sky or slide, Hubble deep
+  field, moon, cell, retina, have crispness 0.0–0.27). Emblems skip the photo
+  cap and keep the texture path. The decoder's early reduction
+  (`decodeForTrace`) uses the same rule. 40–250 ms per photo-like image.
+- **Detail-first region budget** (all images). Budget passes up to 16× the
+  speckle area keep small regions that contrast with their neighbour (the
+  speckle pass's detail protection), so texture and shading fragments go
+  before text and line art; only if that misses the budget do plain passes
+  restart from the speckle area. Only images over the budget change: the
+  customer emblem at 640 px (Professional 4.27 → 4.21, Quick 4.67 → 4.61),
+  its large copies (above), and heavy textures among the photos (gravel
+  3.87 → 3.67, grass 5.39 → 5.22, Hubble 3.08 → 2.90, Professional). A 2000²
+  16 px checkerboard takes four extra passes (about +1 s) and still keeps its
+  31,249 paths.
+- **Memory on large JPEGs.** Without upsampling, a JPEG's colors were read
+  from the image before its light blur, which kept a second full-size buffer
+  alive (16 MB at 4 MP). From a 2.5 MP working size the blurred working image
+  is read instead (smaller JPEGs keep the sharper colors, byte-identical).
+
+### Other corpora
+
+- **Core** (25) and **real-world** (55): no variant changed (`--compare`
+  against the committed baselines).
+- **Emblems** (28): only `seal-embossed@2000`, the one photo-like emblem
+  large enough to be capped, changed: now traced at 2000 px, Quick ΔE
+  1.18 → 0.90 (edge error 0.50 → 0.10 px), Professional 0.89 → 0.65
+  (0.49 → 0.11 px), SVG 425 → 740 KB and 329 → 494 KB. Means: Quick
+  0.756 → 0.75, Professional 0.493 → 0.48; all budgets hold. Baseline
+  refreshed.
+- **Photo-like emblems** (21, new): Quick ΔE 1.21, Professional 0.97 over all
+  three sizes; `baseline-emblem-photo.json`.
+
+### Runtime and memory
+
+Same machine, one trace at a time, median of three (Quick / Professional):
+
+| Upload | Before | After | Live peak before → after |
+|---|---:|---:|---:|
+| Customer emblem, 640 px | 1.85 / 7.15 s | 2.05 / 7.69 s | 14.6 / 26.0 MB (unchanged) |
+| Same, 2000 px JPEG copy | 4.9 / 6.4 s (traced at 1000 px) | 16.2 / 20.9 s (2000 px) | 22.5 / 18.7 → 39.7 / 47.4 MB |
+
+At 640 px the classification and the detail-first budget passes add 0.2 s
+(Quick) and 0.5 s (Professional); the 2000 px increase is the 4× working
+size. Both stay well inside the Worker's 60 s CPU limit (Cloudflare
+measured CPU times close to these local ones, DEPLOYMENT.md). SVGs of large
+emblem uploads roughly double (1.5–1.7 → 3.3–3.4 MB for this emblem).
+
+`memory.smoke-test.ts` has a new case, a textured 4 MP emblem JPEG traced at
+full resolution: live peak 39.4 MB (Quick) and 43.3 MB (Professional), budget
+54 MB. All other cases are unchanged (4 MP artwork 39.5 / 40.0 MB, 4 MP
+photo 10.7 / 11.9 MB, shaded 43.2 MB, checkerboard 37.7–46.9 MB). No limit
+was raised.
+
+### Regression tests
+
+- `contentClass.smoke-test.ts`: the customer emblem and its 2× and 3×
+  enlargements are emblems and keep full resolution in both modes; the six
+  photos, at their size and enlarged 4× with sensor noise, stay photos with
+  the photo class's working size; a clean silhouette is artwork.
+- `emblemPhotoGate.smoke-test.ts`: the 2000 px photo-like emblems are
+  classified as emblems, keep full resolution, and stay within ΔE budgets
+  (Professional 0.85, measured 0.75; Quick 1.08, measured 0.97; with the cap
+  0.91 and 1.17). `baseline-emblem-photo.json` holds the whole corpus.
+- `customerEmblemGate.smoke-test.ts`: unchanged budgets; measured
+  Professional 4.21, Quick 4.61.
+
+### What still differs from Vectorizer.AI
+
+The same as in "Customer emblem": Vectorizer.AI's shapes are cleaner and
+smoother. On large uploads Professional is still not better than Quick on
+the customer emblem (2000 px: 3.58 vs 3.25; 1280 px: 3.80 vs 3.76): its
+finer palette fills the region budget sooner. Budget merging by contrast ×
+area (rather than area with a contrast guard) is the next step.
+
 ## Against professional expectations
 
 What a professional tool such as Vectorizer.ai is expected to deliver, and where
@@ -1095,7 +1268,7 @@ Vectorla stands on this benchmark:
 | Small text and hairlines preserved | ✅ Mostly met | Real-world corpus: hairlines down to 0.5 px keep 94–104% of their length; small serif text is legible but serifs still break. The detail-color pass recovers 12 px subtitle text in its exact color `#2563eb`; the first engine version dropped it. |
 | Clean output from JPEG sources | ✅ Mostly met | Luma-guided chroma restoration, blend-sliver dissolve and edge-aware labeling. JPEG variants are now within 0.9–1.6× the nodes of PNG and 1.0–1.4× the edge error (e.g. flat-logo JPEG: 77 segments, 0.11 px). Heavy low-quality JPEGs are not in the corpus yet. |
 | Gradients reproduced as gradients | ✅ Met (Professional) | Linear and radial gradients are reconstructed as SVG gradients: ΔE 0.04–0.23 vs 0.58–1.06 posterized. Off-center radial fills are found by a center search (emblems: metal badge ΔE 1.06 → 0.49). Other shading gets finer flat levels. Quick keeps flat bands for print and cut work. Multi-stop metallic ramps, conic and mesh-like shading are not modeled as one gradient. |
-| Complex emblems, seals and crests | ⚠️ Partial | Emblem corpus (28 rasters): Professional ΔE 0.66 → 0.50, Quick 0.93 → 0.76; Professional 20–57% below Quick on shaded designs. The customer's own emblem: Professional ΔE 5.13 → 4.27 (Vectorizer.AI 4.18), thin lines kept 0.845 → 0.935 (0.978). Still weak: noisy line art and small symbols on textured sources, 1 px outlines around small text at ≤ 600 px, metallic multi-stop ramps (see "Emblems" and "Customer emblem"). |
+| Complex emblems, seals and crests | ⚠️ Partial | Emblem corpus (28 rasters): Professional ΔE 0.66 → 0.50, Quick 0.93 → 0.76; Professional 20–57% below Quick on shaded designs. The customer's own emblem: Professional ΔE 5.13 → 4.21 (Vectorizer.AI 4.18), thin lines kept 0.845 → 0.941 (0.978). Shaded, compressed emblems are their own content class: full resolution instead of the photo cap (2000 px uploads: Professional 4.86 → 3.58 on the customer emblem, 0.91 → 0.75 on photo-like emblems; see "Content classes"). Still weak: noisy line art and small symbols on textured sources, 1 px outlines around small text at ≤ 600 px, metallic multi-stop ramps (see "Emblems" and "Customer emblem"). |
 | Corner-to-corner touching shapes (QR, pixel art, checkerboards) | ⚠️ Partial | Corners are sharp; diagonal "pinch" points still produce slight tilts near them (QR ΔE 0.57, down from 1.11). |
 | Tangent-continuous curves through 3-color junctions | ⚠️ Partial | Junction positions are least-squares refined; tangents are not yet matched across junctions. |
 | Photos / continuous tone | ⚠️ Posterized only | Bounded and clean, but not a photo-realistic vectorization. 6 real photos: ΔE 2.7–3.3 vs the source. |
@@ -1117,3 +1290,4 @@ Vectorla stands on this benchmark:
 | 2026-10-04 | Launch readiness: dense-pattern undo below 40,000 regions (16 px checkerboard 1 → 31,249 paths) | 0.50 (Pro) / 0.57 (Quick), 80 images, 0 regressions, byte-identical | 0.12 | 0 |
 | 2026-10-10 | Emblems: shading refinement, radial center search, gradients only across band cuts (Professional); flat-ink seeding, detail-aware speckle cleanup, photo cap only when it saves memory (both) | Emblems 0.50 (Pro) / 0.76 (Quick), was 0.66 / 0.93; core 0.16 / 0.29 unchanged; real-world 0.64 / 0.69 | 0.23 emblems; 0.11–0.13 others | 0 |
 | 2026-10-10 | Customer emblem: regression case scored against its source and Vectorizer.AI; line art in textured artwork (hairlines, ink/paper blend candidates, label regularization) | Customer emblem 4.27 (Pro) / 4.68 (Quick), was 5.13 / 4.98, Vectorizer.AI 4.18; emblems 0.49 / 0.76; core unchanged; real-world 0.62 / 0.67 | 0.23 emblems; 0.11–0.13 others | 0 |
+| 2026-10-10 | Content classes: emblem class (no photo cap for shaded, compressed emblems), detail-first region budget, large-JPEG memory fix | Customer emblem 4.21 (Pro) / 4.61 (Quick), 2000 px copy 3.58 / 3.25 (was 4.86 / 3.69); photo-like emblems at 2000 px 0.75 / 0.97 (was 0.91 / 1.17); other corpora unchanged except budget-bound textures | unchanged | 0 |

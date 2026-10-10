@@ -13,7 +13,7 @@
 import { Resvg } from '@resvg/resvg-js'
 import { BENCHMARK_CORPUS, type BenchmarkVariant } from './corpus'
 import { REAL_WORLD_CORPUS } from './realWorldCorpus'
-import { EMBLEM_CORPUS } from './emblemCorpus'
+import { EMBLEM_CORPUS, PHOTO_EMBLEM_VARIANTS } from './emblemCorpus'
 import { compareImages, measureSvgStructure, type ImageDiffMetrics, type SvgStructure } from './metrics'
 import { traceImage } from '../engine/traceImage'
 import { runQuickTrace, runProfessionalTrace } from '../pipeline/ProfessionalTracePipeline'
@@ -104,7 +104,7 @@ async function traceWith(engine: EngineName, imageData: ImageData, format: 'png'
   }
 }
 
-export type CorpusName = 'core' | 'real' | 'all' | 'emblem'
+export type CorpusName = 'core' | 'real' | 'all' | 'emblem' | 'emblem-photo'
 
 /** One raster exactly as a customer would upload it, plus what it is judged against. */
 export interface PreparedSource {
@@ -169,6 +169,25 @@ function gaussianBlur(image: { pixels: Uint8Array; width: number; height: number
   return result
 }
 
+/** Seeded per-channel Gaussian noise (sigma in 8-bit levels) on opaque pixels. */
+function addNoise(pixels: Uint8Array, sigma: number, seedText: string): Uint8Array {
+  let seed = 2166136261
+  for (let i = 0; i < seedText.length; i++) seed = Math.imul(seed ^ seedText.charCodeAt(i), 16777619)
+  const random = () => {
+    seed = (seed + 0x6d2b79f5) | 0
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+  const gauss = () => Math.sqrt(-2 * Math.log(1 - random())) * Math.cos(2 * Math.PI * random())
+  const out = new Uint8Array(pixels)
+  for (let i = 0; i < out.length; i += 4) {
+    if (out[i + 3]! === 0) continue
+    for (let c = 0; c < 3; c++) out[i + c] = Math.max(0, Math.min(255, Math.round(out[i + c]! + sigma * gauss())))
+  }
+  return out
+}
+
 /** JPEG has no alpha: composite transparent sources over white, like any export to JPEG. */
 function flattenOnWhite(pixels: Uint8Array): Uint8Array {
   const out = new Uint8Array(pixels.length)
@@ -194,6 +213,8 @@ async function corpusCases(corpus: CorpusName): Promise<CaseSpec[]> {
   const specs: CaseSpec[] = []
   // The adversarial emblem corpus runs on its own (not part of 'all' or its baselines).
   if (corpus === 'emblem') return EMBLEM_CORPUS.map((c) => ({ id: c.id, category: c.category, svg: c.svg, variants: c.variants }))
+  // The same designs degraded until they read as photo-like (emblemCorpus.ts).
+  if (corpus === 'emblem-photo') return EMBLEM_CORPUS.map((c) => ({ id: c.id, category: c.category, svg: c.svg, variants: PHOTO_EMBLEM_VARIANTS }))
   if (corpus !== 'real') specs.push(...BENCHMARK_CORPUS)
   if (corpus !== 'core') {
     for (const c of REAL_WORLD_CORPUS) {
@@ -205,12 +226,13 @@ async function corpusCases(corpus: CorpusName): Promise<CaseSpec[]> {
 }
 
 /** Renders, degrades, encodes and decodes every corpus raster once. */
-export async function prepareSources(options: { corpus?: CorpusName; cases?: string[] }): Promise<PreparedSource[]> {
+export async function prepareSources(options: { corpus?: CorpusName; cases?: string[]; variants?: string[] }): Promise<PreparedSource[]> {
   const wasm = await loadDecoderWasmModules()
   const prepared: PreparedSource[] = []
   for (const spec of await corpusCases(options.corpus ?? 'core')) {
     if (options.cases && !options.cases.includes(spec.id)) continue
     for (const variant of spec.variants) {
+      if (options.variants && !options.variants.includes(variant.size === 0 ? 'original' : variantLabel(variant))) continue
       if (spec.raster) {
         const bytes = await readFileSync(`${ASSETS_DIR}/${spec.raster}`)
         const format = spec.raster.endsWith('.png') ? 'png' : 'jpeg'
@@ -234,6 +256,7 @@ export async function prepareSources(options: { corpus?: CorpusName; cases?: str
       const srcWidth = aspect >= 1 ? variant.size : Math.round(variant.size * aspect)
       const source = renderSvg(svgText, srcWidth)
       let pixels = variant.blur ? gaussianBlur(source, variant.blur) : source.pixels
+      if (variant.noise) pixels = addNoise(pixels, variant.noise, `${spec.id}@${variantLabel(variant)}`)
       if (variant.format === 'jpeg') pixels = flattenOnWhite(pixels)
       const sourceImage = { width: source.width, height: source.height, data: new Uint8ClampedArray(pixels) } as ImageData
       const encoded = variant.format === 'png' ? await encodeTestPng(sourceImage) : await encodeTestJpeg(sourceImage, variant.quality ?? 75)
@@ -260,6 +283,7 @@ export async function prepareSources(options: { corpus?: CorpusName; cases?: str
 export async function runBenchmark(options: {
   engines: EngineName[]
   cases?: string[]
+  variants?: string[]
   corpus?: CorpusName
   outDir?: string
 }): Promise<BenchmarkRow[]> {
@@ -341,6 +365,7 @@ function variantLabel(variant: BenchmarkVariant): string {
   let label = `${variant.size}${variant.format === 'jpeg' ? 'jpg' : ''}`
   if (variant.quality !== undefined) label += `q${variant.quality}`
   if (variant.blur) label += `blur${variant.blur}`
+  if (variant.noise) label += `n${variant.noise}`
   return label
 }
 
@@ -439,10 +464,11 @@ async function main(): Promise<void> {
   )
   const engines = (args.get('engines') || 'quick,professional,legacy').split(',') as EngineName[]
   const cases = args.get('cases') ? args.get('cases')!.split(',') : undefined
+  const variants = args.get('variants') ? args.get('variants')!.split(',') : undefined
   const outDir = args.get('out') || undefined
   const corpus = (args.get('corpus') || 'core') as CorpusName
-  const rows = await runBenchmark({ engines, cases, corpus, outDir })
-  if (args.has('memory')) await measureMemory(rows, await prepareSources({ corpus, cases }))
+  const rows = await runBenchmark({ engines, cases, variants, corpus, outDir })
+  if (args.has('memory')) await measureMemory(rows, await prepareSources({ corpus, cases, variants }))
   console.log(formatTable(rows))
   console.log('')
   console.log(formatSummary(rows))
@@ -470,7 +496,9 @@ export const BASELINE_PATH = 'src/benchmark/baseline.json'
 /** The real-world corpus keeps its own baseline so the core quality gate stays unchanged. */
 export const REAL_WORLD_BASELINE_PATH = 'src/benchmark/baseline-realworld.json'
 export const EMBLEM_BASELINE_PATH = 'src/benchmark/baseline-emblem.json'
-const baselinePathFor = (corpus: CorpusName) => (corpus === 'core' ? BASELINE_PATH : corpus === 'emblem' ? EMBLEM_BASELINE_PATH : REAL_WORLD_BASELINE_PATH)
+export const EMBLEM_PHOTO_BASELINE_PATH = 'src/benchmark/baseline-emblem-photo.json'
+const baselinePathFor = (corpus: CorpusName) =>
+  corpus === 'core' ? BASELINE_PATH : corpus === 'emblem' ? EMBLEM_BASELINE_PATH : corpus === 'emblem-photo' ? EMBLEM_PHOTO_BASELINE_PATH : REAL_WORLD_BASELINE_PATH
 
 function roundRow(row: BenchmarkRow): BenchmarkRow {
   const out = { ...row } as Record<string, unknown>

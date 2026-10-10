@@ -28,6 +28,19 @@ const EMBLEM_VARIANTS: BenchmarkVariant[] = [
   { size: 2000, format: 'png' },
 ]
 
+/**
+ * Photo-like renditions of the same designs (corpus 'emblem-photo'): a light
+ * blur, sensor-like noise and JPEG, as a photographed, scanned or re-rendered
+ * emblem arrives (a customer's shaded state emblem measured 32% flat pixels).
+ * All of them fall below the engine's photo threshold (flatFraction < 0.7);
+ * the truth is still the clean vector.
+ */
+export const PHOTO_EMBLEM_VARIANTS: BenchmarkVariant[] = [
+  { size: 640, format: 'jpeg', quality: 90, blur: 0.5, noise: 7 },
+  { size: 1200, format: 'jpeg', quality: 90, blur: 0.6, noise: 7 },
+  { size: 2000, format: 'jpeg', quality: 90, blur: 0.7, noise: 7 },
+]
+
 const svg = (defs: string, body: string) =>
   `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1000" height="1000" viewBox="0 0 1000 1000"><defs>${defs}</defs>${body}</svg>`
 

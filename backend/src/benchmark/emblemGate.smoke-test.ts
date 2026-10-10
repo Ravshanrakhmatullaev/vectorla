@@ -15,9 +15,9 @@ function assertTrue(condition: boolean, message: string): void {
 
 // Budgets sit ~20% above the values measured in BENCHMARKS.md "Emblems".
 const BUDGETS = {
-  // Measured: ΔE 0.76, edge 0.23 px, 4,794 KB in total (before the emblem round: 0.93, 0.25 px, 4,969 KB).
+  // Measured: ΔE 0.75, edge 0.22 px, 5,109 KB in total (before the emblem round: 0.93, 0.25 px, 4,969 KB).
   quick: { meanDeltaE: 0.9, meanEdgeError: 0.28, totalKb: 6500 },
-  // Measured: ΔE 0.49, edge 0.23 px, 4,308 KB in total (before the emblem round: 0.66, 0.26 px, 5,161 KB).
+  // Measured: ΔE 0.48, edge 0.22 px, 4,473 KB in total (before the emblem round: 0.66, 0.26 px, 5,161 KB).
   professional: { meanDeltaE: 0.6, meanEdgeError: 0.28, totalKb: 5700 },
 }
 

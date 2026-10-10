@@ -18,6 +18,8 @@ export interface BenchmarkVariant {
   quality?: number
   /** Gaussian blur sigma in source pixels, applied before encoding (out-of-focus / upscaled uploads). */
   blur?: number
+  /** Gaussian noise sigma in 8-bit levels per channel, after the blur (photographed, scanned or re-rendered artwork). Seeded: the same raster every run. */
+  noise?: number
 }
 
 export interface BenchmarkCase {

@@ -18,8 +18,9 @@ function assertTrue(condition: boolean, message: string): void {
   if (!condition) throw new Error(message)
 }
 
-// Measured (Professional / Quick): ΔE 4.27 / 4.68, edge recall 0.943 / 0.927,
-// precision 0.960 / 0.954, lines kept 0.935 / 0.911, 1,916 / 886 KB. Before
+// Measured (Professional / Quick): ΔE 4.21 / 4.61, edge recall 0.947 / 0.936,
+// precision 0.960 / 0.954, lines kept 0.941 / 0.917, 1,853 / 942 KB (with the
+// detail-first region budget; 4.27 / 4.68 without). Before
 // the texture-detail round: Professional 5.13, 0.875, 0.952, 0.845, 2,018 KB;
 // Quick 4.98, 0.917, 0.944, 0.883, 1,101 KB. Vectorizer.AI: 4.18, 0.941,
 // 0.958, 0.978 lines kept.
