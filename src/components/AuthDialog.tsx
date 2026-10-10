@@ -5,14 +5,18 @@ import { useAuth } from '@/lib/useAuth'
 import { useLanguage } from '@/lib/language'
 
 export type AuthDialogMode = 'sign-in' | 'sign-up' | 'recovery' | 'update-password'
+/** Shown above the form after an e-mail link: confirmed, or rejected by Supabase. */
+export type AuthNotice = 'email-confirmed' | 'link-invalid'
 
 interface AuthDialogProps {
   open: boolean
   initialMode: AuthDialogMode
+  initialEmail?: string
+  notice?: AuthNotice | null
   onClose: () => void
 }
 
-export function AuthDialog({ open, initialMode, onClose }: AuthDialogProps) {
+export function AuthDialog({ open, initialMode, initialEmail = '', notice = null, onClose }: AuthDialogProps) {
   const { t } = useLanguage()
   const auth = useAuth()
   const [mode, setMode] = useState<AuthDialogMode>(initialMode)
@@ -22,13 +26,17 @@ export function AuthDialog({ open, initialMode, onClose }: AuthDialogProps) {
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
 
+  const [shownNotice, setShownNotice] = useState<AuthNotice | null>(notice)
+
   useEffect(() => {
     if (!open) return
     setMode(initialMode)
+    if (initialEmail) setEmail(initialEmail)
     setPassword('')
     setError(null)
     setMessage(null)
-  }, [initialMode, open])
+    setShownNotice(notice)
+  }, [initialEmail, initialMode, notice, open])
 
   useEffect(() => {
     if (!open) return
@@ -53,6 +61,7 @@ export function AuthDialog({ open, initialMode, onClose }: AuthDialogProps) {
     setPassword('')
     setError(null)
     setMessage(null)
+    setShownNotice(null)
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -64,13 +73,19 @@ export function AuthDialog({ open, initialMode, onClose }: AuthDialogProps) {
     try {
       if (mode === 'sign-in') {
         const result = await auth.signIn(email, password)
-        if (result.error) setError(result.error)
+        if (result.code === 'email_not_confirmed') setError(t.auth.emailNotConfirmed)
+        else if (result.error) setError(result.error)
         else onClose()
       } else if (mode === 'sign-up') {
         const result = await auth.signUp(email, password)
         if (result.error) setError(result.error)
-        else if (result.confirmationRequired) setMessage(t.auth.confirmationSent)
-        else onClose()
+        else if (result.confirmationRequired) {
+          // The link may be opened on another device, which does not sign
+          // this browser in: leave the sign-in form ready for when they return.
+          setMode('sign-in')
+          setPassword('')
+          setMessage(t.auth.confirmationSent)
+        } else onClose()
       } else if (mode === 'recovery') {
         const result = await auth.sendPasswordReset(email)
         if (result.error) setError(result.error)
@@ -127,6 +142,19 @@ export function AuthDialog({ open, initialMode, onClose }: AuthDialogProps) {
           </button>
         </div>
 
+        {shownNotice && (
+          <p
+            role="status"
+            className={
+              shownNotice === 'email-confirmed'
+                ? 'mt-4 rounded-xl border border-emerald-600/30 bg-emerald-50 px-3.5 py-2.5 text-sm font-medium text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
+                : 'mt-4 rounded-xl border border-amber-600/30 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
+            }
+          >
+            {shownNotice === 'email-confirmed' ? t.auth.emailConfirmed : t.auth.linkInvalid}
+          </p>
+        )}
+
         <form onSubmit={handleSubmit} className="mt-5 space-y-4">
           {needsEmail && (
             <label className="block text-sm font-medium text-[var(--ink)]">
@@ -135,7 +163,7 @@ export function AuthDialog({ open, initialMode, onClose }: AuthDialogProps) {
                 type="email"
                 autoComplete="email"
                 required
-                autoFocus
+                autoFocus={!initialEmail}
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 className="mt-1.5 w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg)] px-3.5 py-2.5 text-[var(--ink)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--ring)]"
@@ -151,7 +179,7 @@ export function AuthDialog({ open, initialMode, onClose }: AuthDialogProps) {
                 autoComplete={mode === 'sign-in' ? 'current-password' : 'new-password'}
                 required
                 minLength={8}
-                autoFocus={!needsEmail}
+                autoFocus={!needsEmail || Boolean(initialEmail)}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 className="mt-1.5 w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg)] px-3.5 py-2.5 text-[var(--ink)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--ring)]"

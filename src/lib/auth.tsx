@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { AuthContext, type AuthContextValue } from '@/lib/authContext'
 import { isSupabaseConfigured, supabase } from '@/lib/supabase'
+import { authRedirectUrl, EMAIL_CONFIRMED_PATH } from '@/lib/emailLink'
 const NOT_CONFIGURED = 'Supabase Auth is not configured.'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -48,21 +49,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async signIn(email, password) {
       if (!supabase) return { error: NOT_CONFIGURED }
       const { error } = await supabase.auth.signInWithPassword({ email, password })
-      return { error: error?.message ?? null }
+      return { error: error?.message ?? null, code: error?.code }
     },
     async signUp(email, password) {
       if (!supabase) return { error: NOT_CONFIGURED }
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: { emailRedirectTo: window.location.origin },
+        options: { emailRedirectTo: authRedirectUrl(EMAIL_CONFIRMED_PATH) },
       })
       return { error: error?.message ?? null, confirmationRequired: !error && !data.session }
     },
     async sendPasswordReset(email) {
       if (!supabase) return { error: NOT_CONFIGURED }
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin,
+        redirectTo: authRedirectUrl('/'),
       })
       return { error: error?.message ?? null }
     },

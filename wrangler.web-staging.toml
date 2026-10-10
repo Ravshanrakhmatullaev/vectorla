@@ -1,9 +1,9 @@
 # Staging frontend on Workers Static Assets (no Worker script: Cloudflare
 # serves dist/ directly, applies dist/_headers, and falls back to index.html
-# for client-side routes). Production still targets Cloudflare Pages
-# (DEPLOYMENT.md §5); staging uses this because the deploy token has no
-# Pages permission. Build first with the staging API and Supabase values
-# (DEPLOYMENT.md §5), then:
+# for client-side routes). Production uses the same setup
+# (wrangler.web-production.toml, DEPLOYMENT.md "Production preparation").
+# Build first with the staging API and Supabase values and
+# VITE_AUTH_REDIRECT_ORIGIN set to the staging origin (DEPLOYMENT.md §5), then:
 #   backend/node_modules/.bin/wrangler deploy -c wrangler.web-staging.toml
 name = "vectorla-web-staging"
 compatibility_date = "2026-01-01"

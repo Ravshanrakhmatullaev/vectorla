@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Coins, Menu, X } from 'lucide-react'
-import { AuthDialog, type AuthDialogMode } from '@/components/AuthDialog'
+import { AuthDialog, type AuthDialogMode, type AuthNotice } from '@/components/AuthDialog'
 import { LogoMark } from '@/components/LogoMark'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
@@ -10,7 +10,8 @@ import { navLinks } from '@/data/nav'
 import { useAuth } from '@/lib/useAuth'
 import { useLanguage } from '@/lib/language'
 import { useCredits } from '@/lib/useCredits'
-import { onAuthDialogRequest } from '@/lib/authDialogEvents'
+import { onAuthDialogRequest, type AuthDialogRequest } from '@/lib/authDialogEvents'
+import { consumeEmailLinkResult } from '@/lib/supabase'
 import { formatCredits } from '@/utils/formatCredits'
 import type { CreditsContextValue } from '@/lib/creditsContext'
 import type { Language, Translation } from '@/data/i18n'
@@ -26,23 +27,34 @@ export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [authOpen, setAuthOpen] = useState(false)
   const [authMode, setAuthMode] = useState<AuthDialogMode>('sign-in')
+  const [authNotice, setAuthNotice] = useState<AuthNotice | null>(null)
+  const [authEmail, setAuthEmail] = useState('')
   const { t, language } = useLanguage()
   const { user, loading, passwordRecovery, signOut } = useAuth()
   const credits = useCredits()
 
   useEffect(() => {
     if (!passwordRecovery) return
-    setAuthMode('update-password')
-    setAuthOpen(true)
+    openAuth({ mode: 'update-password' })
   }, [passwordRecovery])
 
-  function openAuth(mode: AuthDialogMode) {
+  function openAuth({ mode, notice, email }: AuthDialogRequest) {
     setAuthMode(mode)
+    setAuthNotice(notice ?? null)
+    setAuthEmail(email ?? '')
     setAuthOpen(true)
     setMobileOpen(false)
   }
 
   useEffect(() => onAuthDialogRequest(openAuth), [])
+
+  // Opened from an e-mail link: say what happened and offer sign-in. A
+  // confirmation never signs this browser in (see lib/supabase.ts).
+  useEffect(() => {
+    const result = consumeEmailLinkResult()
+    if (result?.kind === 'signup-confirmed') openAuth({ mode: 'sign-in', notice: 'email-confirmed', email: result.email ?? undefined })
+    else if (result?.kind === 'link-invalid') openAuth({ mode: 'sign-in', notice: 'link-invalid' })
+  }, [])
 
   return (
     <>
@@ -89,10 +101,10 @@ export function Navbar() {
               </>
             ) : (
               <>
-                <Button variant="ghost" size="sm" disabled={loading} onClick={() => openAuth('sign-in')}>
+                <Button variant="ghost" size="sm" disabled={loading} onClick={() => openAuth({ mode: 'sign-in' })}>
                   {t.nav.signIn}
                 </Button>
-                <Button variant="primary" size="sm" disabled={loading} onClick={() => openAuth('sign-up')}>
+                <Button variant="primary" size="sm" disabled={loading} onClick={() => openAuth({ mode: 'sign-up' })}>
                   {t.nav.startFree}
                 </Button>
               </>
@@ -149,10 +161,10 @@ export function Navbar() {
                 </>
               ) : (
                 <>
-                  <Button variant="secondary" size="md" className="w-full" disabled={loading} onClick={() => openAuth('sign-in')}>
+                  <Button variant="secondary" size="md" className="w-full" disabled={loading} onClick={() => openAuth({ mode: 'sign-in' })}>
                     {t.nav.signIn}
                   </Button>
-                  <Button variant="primary" size="md" className="w-full" disabled={loading} onClick={() => openAuth('sign-up')}>
+                  <Button variant="primary" size="md" className="w-full" disabled={loading} onClick={() => openAuth({ mode: 'sign-up' })}>
                     {t.nav.startFree}
                   </Button>
                 </>
@@ -162,7 +174,7 @@ export function Navbar() {
         )}
       </header>
 
-      <AuthDialog open={authOpen} initialMode={authMode} onClose={() => setAuthOpen(false)} />
+      <AuthDialog open={authOpen} initialMode={authMode} initialEmail={authEmail} notice={authNotice} onClose={() => setAuthOpen(false)} />
     </>
   )
 }

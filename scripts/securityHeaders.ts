@@ -24,6 +24,7 @@ export function securityHeaders(env: Record<string, string>, mode: string): Plug
     apply: 'build',
     configResolved(config) {
       outDir = path.resolve(config.root, config.build.outDir)
+      validateAuthRedirectOrigin(env.VITE_AUTH_REDIRECT_ORIGIN)
     },
     closeBundle() {
       const html = readFileSync(path.join(outDir, 'index.html'), 'utf8')
@@ -36,6 +37,21 @@ export function securityHeaders(env: Record<string, string>, mode: string): Plug
       if (/__(CONNECT|SCRIPT)_SRC__/.test(headers)) throw new Error('public/_headers: unreplaced placeholder')
       writeFileSync(path.join(outDir, '_headers'), headers)
     },
+  }
+}
+
+/**
+ * VITE_AUTH_REDIRECT_ORIGIN (optional) is where Supabase e-mail links return:
+ * an exact origin, https (or localhost), with no path. It must also be on the
+ * Supabase project's redirect allowlist (DEPLOYMENT.md).
+ */
+export function validateAuthRedirectOrigin(value: string | undefined): void {
+  const trimmed = value?.trim()
+  if (!trimmed) return
+  const url = new URL(trimmed)
+  const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1'
+  if ((url.protocol !== 'https:' && !local) || url.origin !== trimmed) {
+    throw new Error(`VITE_AUTH_REDIRECT_ORIGIN must be an https origin with no path (got ${trimmed})`)
   }
 }
 

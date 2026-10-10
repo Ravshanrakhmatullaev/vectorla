@@ -110,6 +110,12 @@ export interface Translation {
     haveAccount: string
     backToSignIn: string
     confirmationSent: string
+    /** After the signup confirmation link was opened (on any device). */
+    emailConfirmed: string
+    /** The e-mail link was already used, expired or malformed. */
+    linkInvalid: string
+    /** Sign-in before the address was confirmed. */
+    emailNotConfirmed: string
     recoverySent: string
     passwordUpdated: string
     close: string
@@ -305,7 +311,10 @@ export const translations: Record<Language, Translation> = {
       createAccount: 'Create an account',
       haveAccount: 'Already have an account?',
       backToSignIn: 'Back to sign in',
-      confirmationSent: 'Check your email to confirm your account.',
+      confirmationSent: 'We sent a confirmation link to your email. Open it on any device, then sign in here. Confirming on another device does not sign you in on this one.',
+      emailConfirmed: 'Email confirmed — you can sign in now.',
+      linkInvalid: 'This email link is invalid or has expired. Each link works once. If you already confirmed your email, just sign in; otherwise create your account again to get a new link.',
+      emailNotConfirmed: 'Your email is not confirmed yet. Open the link we sent you, then sign in.',
       recoverySent: 'If an account exists for that email, a reset link has been sent.',
       passwordUpdated: 'Your password has been updated.',
       close: 'Close',
@@ -668,7 +677,10 @@ export const translations: Record<Language, Translation> = {
       createAccount: 'Hisob yarating',
       haveAccount: 'Hisobingiz bormi?',
       backToSignIn: 'Kirishga qaytish',
-      confirmationSent: 'Hisobingizni tasdiqlash uchun emailingizni tekshiring.',
+      confirmationSent: 'Emailingizga tasdiqlash havolasini yubordik. Uni istalgan qurilmada oching, so‘ng shu yerda kiring. Boshqa qurilmada tasdiqlash bu qurilmada avtomatik kirishga olib kelmaydi.',
+      emailConfirmed: 'Email tasdiqlandi — endi kirishingiz mumkin.',
+      linkInvalid: 'Bu email havolasi yaroqsiz yoki muddati o‘tgan. Har bir havola faqat bir marta ishlaydi. Agar emailingizni allaqachon tasdiqlagan bo‘lsangiz, shunchaki kiring; aks holda yangi havola olish uchun qaytadan hisob yarating.',
+      emailNotConfirmed: 'Emailingiz hali tasdiqlanmagan. Yuborilgan havolani oching, so‘ng kiring.',
       recoverySent: 'Agar bu emailga hisob bog‘langan bo‘lsa, tiklash havolasi yuborildi.',
       passwordUpdated: 'Parolingiz yangilandi.',
       close: 'Yopish',
@@ -1039,7 +1051,10 @@ export const translations: Record<Language, Translation> = {
       createAccount: 'Создать аккаунт',
       haveAccount: 'Уже есть аккаунт?',
       backToSignIn: 'Вернуться ко входу',
-      confirmationSent: 'Проверьте почту, чтобы подтвердить аккаунт.',
+      confirmationSent: 'Мы отправили ссылку для подтверждения на вашу почту. Откройте её на любом устройстве, затем войдите здесь. Подтверждение на другом устройстве не выполняет вход на этом.',
+      emailConfirmed: 'Email подтверждён — теперь вы можете войти.',
+      linkInvalid: 'Ссылка из письма недействительна или устарела. Каждая ссылка работает один раз. Если вы уже подтвердили email, просто войдите; иначе создайте аккаунт заново, чтобы получить новую ссылку.',
+      emailNotConfirmed: 'Ваш email ещё не подтверждён. Откройте ссылку из письма, затем войдите.',
       recoverySent: 'Если аккаунт с таким email существует, ссылка для сброса отправлена.',
       passwordUpdated: 'Пароль обновлён.',
       close: 'Закрыть',

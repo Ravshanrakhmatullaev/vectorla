@@ -245,6 +245,7 @@ token with Pages permission exists.
 VITE_API_BASE_URL=https://vectorla-api-staging.ra-ravshan1998.workers.dev \
 VITE_SUPABASE_URL=https://rvrpuapbeglqmcajsdgm.supabase.co \
 VITE_SUPABASE_PUBLISHABLE_KEY=<publishable key> \
+VITE_AUTH_REDIRECT_ORIGIN=https://vectorla-web-staging.ra-ravshan1998.workers.dev \
 npm run build
 backend/node_modules/.bin/wrangler deploy -c wrangler.web-staging.toml
 ```
@@ -503,6 +504,35 @@ Cloudflare enforced at about twice the documented limit here; the 128 MB
 figure stays the design budget. These numbers cover the decode and trace,
 not the Supabase client or R2 transfer.
 
+### Signup confirmation across devices (staging, 2026-10-10)
+
+A two-browser test on staging (desktop and phone-sized Chromium) passed
+22/22 against the real Supabase Auth:
+
+- Signup sends `redirect_to=<staging>/auth/confirmed`. The dialog then
+  switches to sign-in, keeps the address, and says that confirming on
+  another device does not sign in this one.
+- Signing in before confirming gets Supabase's `email_not_confirmed`, shown
+  as a translated message.
+- The confirmation link, opened on the phone, was verified by Supabase. The
+  phone shows "Email confirmed — you can sign in now" with the address filled
+  in. It is not signed in, the tokens are gone from the address bar, and the
+  link's session was revoked (no open session or live refresh token
+  afterwards).
+- The computer stayed signed out until it signed in with the password (200);
+  the phone signed in too.
+- Reopening the used link shows the "invalid or expired" notice. Both
+  notices were checked in EN/UZ/RU, with no console or page errors.
+
+The test's signup call was answered with Supabase's own unconfirmed-signup
+response, and the matching database state (unconfirmed user plus one-time
+confirmation token, as Supabase's signup writes it) was created for a banned
+test account. Staging's built-in mailer only reaches team addresses, so no
+real inbox was available. Supabase still redirected the verified link to
+`https://vectorla.app/` because of the allowlist above. The phone step loaded
+the staging page with that redirect's fragment, which is where the browser
+lands once the staging URL is on the allowlist.
+
 ### Production preparation (2026-10-10)
 
 Nothing is deployed to production, and no DNS record or `vectorla.app` route
@@ -551,20 +581,35 @@ Worker custom domains (the commented `routes` lines in
 `wrangler.web-production.toml` and `backend/wrangler.toml`). CORS already
 allows both web origins, so `CORS_EXTRA_ORIGINS` stays empty in production.
 Build the frontend with `VITE_API_BASE_URL=https://api.vectorla.app`, which
-also sets the CSP `connect-src`.
+also sets the CSP `connect-src`, and
+`VITE_AUTH_REDIRECT_ORIGIN=https://vectorla.app`, so every e-mail link
+returns to the apex.
 
 **Supabase Auth settings (dashboard → Authentication → URL Configuration).**
 
 | Setting | Production | Staging |
 |---|---|---|
 | Site URL | `https://vectorla.app` | `https://vectorla-web-staging.ra-ravshan1998.workers.dev` |
-| Redirect URLs | `https://vectorla.app`, `https://www.vectorla.app` | the staging web origin |
+| Redirect URLs | `https://vectorla.app/**`, `https://www.vectorla.app/**` | `https://vectorla-web-staging.ra-ravshan1998.workers.dev/**` |
 
-The app passes `emailRedirectTo` / `redirectTo` =
-`window.location.origin` (`src/lib/auth.tsx`), so the exact origins are
-enough; any other origin falls back to the Site URL. Keep email
-confirmation on. On Pro, enable leaked-password protection and set a
-minimum password length.
+Signup confirmation links return to `<origin>/auth/confirmed` and password
+reset links to `<origin>/`, where `<origin>` is `VITE_AUTH_REDIRECT_ORIGIN`
+(set per build, §5) or else the visitor's origin (`src/lib/emailLink.ts`).
+Supabase only follows a `redirect_to` on this allowlist; anything else falls
+back to the Site URL. **This caused the 2026-10-10 staging bug:** the
+staging project's Site URL is `https://vectorla.app` and the staging origin
+was not on the list, so a confirmation link opened on a phone landed on
+vectorla.app. (A probe with an invalid token shows where Supabase redirects:
+`curl -sI "<supabase-url>/auth/v1/verify?token=x&type=signup&redirect_to=<url>"`.)
+
+After a confirmation link, the page shows "Email confirmed — you can sign
+in" with the address filled in. The link does not sign that browser in: the
+session Supabase creates for the link is revoked and the tokens are removed
+from the address bar. Users sign in with their password on whichever device
+they use, so confirming on a phone never signs in the computer they signed
+up on. An expired or reused link shows "This email link is invalid or has
+expired". Keep email confirmation on. On Pro, enable leaked-password
+protection and set a minimum password length.
 
 **SMTP requirements.** Supabase's built-in email only sends to the
 organization's team members, at about 2 messages an hour, so public signup

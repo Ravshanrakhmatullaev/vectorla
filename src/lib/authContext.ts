@@ -3,6 +3,8 @@ import type { User } from '@supabase/supabase-js'
 
 export interface AuthActionResult {
   error: string | null
+  /** Supabase's error code, e.g. 'email_not_confirmed', for a translated message. */
+  code?: string
   confirmationRequired?: boolean
 }
 
