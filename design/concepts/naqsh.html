@@ -1,0 +1,931 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vectorla · Naqsh</title>
+<meta name="description" content="Vectorla design concept C: Naqsh. Porcelain and cobalt, girih geometry and a guided three-step workspace.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Onest:wght@400;500;600&display=swap">
+<style>
+/* Naqsh: Rishtan porcelain. White glaze, cobalt ink, a turquoise glaze accent
+   and saffron only in ornament. The 8-point star (khatam) is drawn as vector
+   geometry, the product's own subject. Guided, friendly, high contrast. */
+:root {
+  --bg: #f5f6fb;
+  --surface: #ffffff;
+  --tile: #eceffa;
+  --ink: #0e1a3e;
+  --ink-2: #455070;
+  --ink-3: #5c6685;
+  --line: #dbe0ee;
+  --cobalt: #1f3fc2;
+  --cobalt-2: #17309a;
+  --on-cobalt: #ffffff;
+  --turq: #096b74;
+  --turq-soft: #d9f2f3;
+  --saffron: #f0a500;
+  --ok: #187a4a;
+  --bad: #b3261e;
+  --star: rgba(31, 63, 194, 0.12);
+  --shadow: 0 1px 2px rgba(14, 26, 62, 0.06), 0 14px 40px rgba(14, 26, 62, 0.09);
+  --display: "Unbounded", "Onest", system-ui, sans-serif;
+  --body: "Onest", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0a0f26; --surface: #111938; --tile: #172150; --ink: #eef1fb; --ink-2: #b6bed8; --ink-3: #98a1bf; --line: #253060;
+    --cobalt: #8ea4ff; --cobalt-2: #a9baff; --on-cobalt: #0a0f26; --turq: #52d0d8; --turq-soft: #0f3640; --saffron: #ffc23d;
+    --ok: #59d39a; --bad: #ff8b7f; --star: rgba(142, 164, 255, 0.12); --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 16px 44px rgba(0, 0, 0, 0.4); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0a0f26; --surface: #111938; --tile: #172150; --ink: #eef1fb; --ink-2: #b6bed8; --ink-3: #98a1bf; --line: #253060;
+  --cobalt: #8ea4ff; --cobalt-2: #a9baff; --on-cobalt: #0a0f26; --turq: #52d0d8; --turq-soft: #0f3640; --saffron: #ffc23d;
+  --ok: #59d39a; --bad: #ff8b7f; --star: rgba(142, 164, 255, 0.12); --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 16px 44px rgba(0, 0, 0, 0.4); color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-padding-top: 88px; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 400 16.5px/1.6 var(--body); -webkit-font-smoothing: antialiased; }
+img, svg { display: block; max-width: 100%; }
+img { height: auto; }
+button, input { font: inherit; color: inherit; }
+a { color: inherit; }
+[hidden] { display: none !important; }
+:focus-visible { outline: 3px solid var(--turq); outline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.skip { position: absolute; left: -9999px; top: 12px; z-index: 100; background: var(--surface); padding: 10px 14px; border-radius: 10px; }
+.skip:focus { left: 16px; }
+.i { width: 20px; height: 20px; flex: none; }
+.i-sm { width: 16px; height: 16px; flex: none; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { font-family: var(--display); font-weight: 700; letter-spacing: -0.02em; line-height: 1.08; margin: 0; text-wrap: balance; }
+p { margin: 0; }
+.muted { color: var(--ink-2); }
+.kicker { display: inline-flex; align-items: center; gap: 8px; font: 600 13px var(--body); letter-spacing: 0.04em; color: var(--turq); text-transform: uppercase; }
+.kicker svg { color: var(--saffron); }
+.num { font-variant-numeric: tabular-nums; }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 48px; padding: 0 22px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--surface); font-weight: 600; font-size: 15.5px; text-decoration: none; cursor: pointer; white-space: nowrap; transition: transform 0.12s, background 0.15s, border-color 0.15s; }
+.btn:hover { border-color: var(--cobalt); }
+.btn:active { transform: translateY(1px); }
+.btn-cobalt { background: var(--cobalt); border-color: var(--cobalt); color: var(--on-cobalt); }
+.btn-cobalt:hover { background: var(--cobalt-2); border-color: var(--cobalt-2); }
+.btn-xl { min-height: 58px; padding: 0 28px; font-size: 17px; border-radius: 16px; }
+.btn-sm { min-height: 40px; padding: 0 14px; font-size: 14px; border-radius: 11px; }
+.ibtn { width: 44px; height: 44px; display: inline-grid; place-items: center; border-radius: 12px; border: 1.5px solid var(--line); background: var(--surface); cursor: pointer; }
+.ibtn:hover { border-color: var(--cobalt); }
+.ibtn .i-moon { display: none; }
+[data-theme-toggle][aria-pressed="true"] .i-sun { display: none; }
+[data-theme-toggle][aria-pressed="true"] .i-moon { display: block; }
+.pills { display: inline-flex; padding: 4px; gap: 2px; border-radius: 14px; background: var(--tile); }
+.pills button { min-height: 36px; min-width: 40px; padding: 0 10px; border: 0; border-radius: 10px; background: none; cursor: pointer; font-weight: 600; font-size: 13px; color: var(--ink-2); }
+.pills button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.badge { justify-self: start; display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 10px; border-radius: 999px; font: 600 12px var(--body); background: var(--tile); color: var(--ink-2); white-space: nowrap; }
+.badge-pro { background: var(--cobalt); color: var(--on-cobalt); }
+.badge-turq { background: var(--turq-soft); color: var(--turq); }
+
+/* Header */
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 30; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(14px); }
+.top .wrap { display: flex; align-items: center; gap: 28px; min-height: 76px; }
+.brand { display: inline-flex; align-items: center; gap: 11px; font: 700 19px var(--display); letter-spacing: -0.02em; text-decoration: none; }
+.brand svg { width: 34px; height: 34px; flex: none; }
+@media (max-width: 480px) { .top .wrap { gap: 10px; } .top-r { gap: 6px; } .top .btn-sm { padding: 0 11px; } }
+.nav { display: flex; gap: 26px; }
+.nav a { text-decoration: none; font-weight: 500; color: var(--ink-2); }
+.nav a:hover { color: var(--cobalt); }
+.top-r { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+@media (max-width: 940px) { .nav, .top-r .hide-m { display: none; } }
+
+/* Hero */
+.hero { position: relative; padding: 40px 0 96px; overflow: hidden; }
+.girih { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0.13; pointer-events: none; }
+:root[data-theme="dark"] .girih { opacity: 0.18; }
+.girih-fade { mask-image: radial-gradient(70% 70% at 80% 30%, #000 20%, transparent 75%); }
+.hero-grid { position: relative; display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 6fr); gap: 56px; align-items: center; }
+.hero h1 { font-size: clamp(34px, 4.3vw, 64px); margin: 18px 0 22px; hyphens: auto; overflow-wrap: break-word; }
+:lang(ru) .hero h1 { font-size: clamp(30px, 3.7vw, 54px); }
+.hero h1 span { display: block; }
+.hero h1 .c2 { color: var(--cobalt); }
+.hero h1 .c3 { color: var(--turq); }
+.hero .lede { font-size: 19px; color: var(--ink-2); max-width: 44ch; }
+.hero .ctas { display: flex; gap: 12px; margin: 32px 0 26px; flex-wrap: wrap; }
+.tokens { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; font-size: 14.5px; color: var(--ink-2); }
+.dots { display: inline-flex; gap: 4px; }
+.dots i { width: 12px; height: 12px; border-radius: 50%; background: var(--saffron); box-shadow: inset 0 0 0 2px color-mix(in srgb, #000 12%, var(--saffron)); }
+.dots i.off { background: transparent; box-shadow: inset 0 0 0 2px var(--line); }
+.upload-error { margin-top: 12px; color: var(--bad); font-size: 14px; display: flex; gap: 8px; align-items: center; }
+@media (max-width: 980px) { .hero-grid { grid-template-columns: minmax(0, 1fr); } }
+
+.guide { background: var(--surface); border-radius: 28px; box-shadow: var(--shadow); padding: 14px; display: grid; gap: 12px; }
+.guide-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 4px; background: var(--tile); border-radius: 18px; }
+.guide-steps button { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 12px; border: 0; border-radius: 14px; background: none; cursor: pointer; text-align: left; font-weight: 600; font-size: 14px; color: var(--ink-2); }
+.guide-steps button .n { width: 28px; height: 28px; flex: none; border-radius: 50%; display: grid; place-items: center; background: var(--surface); font: 700 12px var(--display); color: var(--ink-2); }
+.guide-steps button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.guide-steps button[aria-selected="true"] .n { background: var(--cobalt); color: var(--on-cobalt); }
+.guide-steps button.done .n { background: var(--turq); color: #fff; }
+.guide-body { position: relative; border-radius: 18px; overflow: hidden; background: #fff; aspect-ratio: 1 / 1; }
+.guide-body .panel { position: absolute; inset: 0; display: grid; place-items: center; padding: 22px; }
+.guide-up { background: var(--bg); text-align: center; gap: 12px; align-content: center; }
+.guide-up .file { display: inline-flex; gap: 12px; align-items: center; padding: 10px 14px 10px 10px; border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); text-align: left; }
+.guide-up .file img { width: 64px; height: 64px; border-radius: 10px; object-fit: contain; background: #fff; border: 1px solid var(--line); }
+.guide-mode { background: var(--bg); gap: 12px; align-content: center; justify-items: stretch; }
+.mcard { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 4px 14px; align-items: center; text-align: left; padding: 16px; border-radius: 18px; border: 2px solid var(--line); background: var(--surface); cursor: pointer; width: 100%; }
+.mcard:hover { border-color: var(--cobalt); }
+.mcard[aria-pressed="true"] { border-color: var(--cobalt); box-shadow: 0 0 0 3px color-mix(in srgb, var(--cobalt) 18%, transparent); }
+.mcard .ic { grid-row: span 2; width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center; background: var(--tile); color: var(--cobalt); }
+.mcard[aria-pressed="true"] .ic { background: var(--cobalt); color: var(--on-cobalt); }
+.mcard b { font: 700 16px var(--display); letter-spacing: -0.01em; }
+.mcard .cost { font-weight: 600; font-size: 14px; color: var(--ink-2); white-space: nowrap; }
+.mcard .d { grid-column: 2 / 4; font-size: 14px; color: var(--ink-2); line-height: 1.45; }
+.cmp { position: relative; overflow: hidden; user-select: none; -webkit-user-select: none; touch-action: pan-y; cursor: ew-resize; background: #fff; }
+.cmp .layer, .cmp .layer img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.cmp .layer { overflow: hidden; }
+.cmp .after { clip-path: inset(0 0 0 var(--pos, 50%)); }
+.cmp .before.px { image-rendering: pixelated; }
+.cmp .zoomed { transform: scale(var(--zz, 1)); transform-origin: var(--zo, 50% 50%); }
+.handle { position: absolute; top: 0; bottom: 0; left: var(--pos, 50%); width: 3px; margin-left: -1.5px; background: var(--cobalt); pointer-events: none; }
+.handle::after { content: ""; position: absolute; top: 50%; left: 50%; width: 40px; height: 40px; transform: translate(-50%, -50%) rotate(45deg); border-radius: 10px; background: var(--cobalt); box-shadow: 0 6px 18px rgba(14, 26, 62, 0.3); }
+.handle svg { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1; width: 20px; height: 20px; max-width: none; color: var(--on-cobalt); }
+.cmp:has(input:focus-visible) .handle::after { outline: 3px solid var(--turq); outline-offset: 3px; }
+.flag { position: absolute; top: 14px; z-index: 2; padding: 5px 10px; border-radius: 999px; font: 600 12px var(--body); pointer-events: none; }
+.flag-l { left: 14px; background: rgba(14, 26, 62, 0.82); color: #fff; }
+.flag-r { right: 14px; background: var(--cobalt); color: var(--on-cobalt); }
+.guide-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 4px 6px 4px 10px; flex-wrap: wrap; }
+
+/* Sections */
+.sec { padding: 104px 0; }
+.sec-h { max-width: 760px; margin-bottom: 44px; }
+.sec-h h2 { font-size: clamp(30px, 3.8vw, 52px); margin: 14px 0 16px; }
+.sec-h p { font-size: 18px; color: var(--ink-2); }
+.band { background: var(--surface); }
+.trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.trio figure { margin: 0; display: grid; gap: 12px; }
+.trio .cmp { aspect-ratio: 1; border-radius: 22px; border: 1px solid var(--line); }
+.trio figcaption { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: baseline; }
+.trio figcaption b { font-weight: 600; }
+@media (max-width: 900px) { .trio { grid-template-columns: minmax(0, 1fr); } }
+
+.chooser { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 28px; align-items: start; }
+.choices { display: grid; gap: 12px; }
+.choice { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 4px 14px; align-items: center; text-align: left; padding: 18px; border-radius: 20px; border: 2px solid var(--line); background: var(--surface); cursor: pointer; }
+.choice:hover { border-color: var(--cobalt); }
+.choice[aria-pressed="true"] { border-color: var(--cobalt); background: color-mix(in srgb, var(--cobalt) 6%, var(--surface)); }
+.choice .ic { grid-row: span 2; width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; background: var(--tile); color: var(--cobalt); }
+.choice b { font-size: 17px; }
+.choice span { font-size: 14px; color: var(--ink-2); }
+.answer { background: var(--surface); border-radius: 26px; box-shadow: var(--shadow); padding: 22px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px; align-items: center; }
+.answer .art { aspect-ratio: 1; border-radius: 18px; background: #fff; border: 1px solid var(--line); display: grid; place-items: center; overflow: hidden; }
+.answer .art img { width: 86%; height: 86%; object-fit: contain; }
+.answer h3 { font-size: 26px; margin: 10px 0; }
+@media (max-width: 900px) { .chooser, .answer { grid-template-columns: minmax(0, 1fr); } }
+
+.uses { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.use { background: var(--surface); border-radius: 22px; padding: 18px; display: grid; gap: 12px; align-content: start; border: 1px solid var(--line); }
+.use .art { aspect-ratio: 4 / 3; border-radius: 14px; background: #fff; border: 1px solid var(--line); display: grid; place-items: center; overflow: hidden; }
+.use .art img { width: 70%; height: 80%; object-fit: contain; }
+.use h3 { font-size: 18px; }
+.use p { font-size: 14.5px; color: var(--ink-2); }
+@media (max-width: 1000px) { .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .uses { grid-template-columns: minmax(0, 1fr); } }
+
+.pricing { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 18px; }
+.plan { border-radius: 26px; padding: 30px; display: grid; gap: 18px; align-content: start; background: var(--surface); border: 1px solid var(--line); }
+.plan.main { background: var(--cobalt); color: var(--on-cobalt); border-color: var(--cobalt); position: relative; overflow: hidden; }
+.plan.main .muted { color: color-mix(in srgb, var(--on-cobalt) 82%, transparent); }
+.plan .big { font: 700 64px/1 var(--display); letter-spacing: -0.04em; }
+.plan ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.plan li { display: flex; gap: 10px; }
+.plan .btn { justify-self: start; }
+.plan.main .btn { background: var(--on-cobalt); color: var(--cobalt); border-color: transparent; }
+.plan.main .dots i { background: var(--saffron); }
+@media (max-width: 900px) { .pricing { grid-template-columns: minmax(0, 1fr); } }
+.faq { display: grid; gap: 12px; max-width: 880px; }
+.faq details { background: var(--surface); border-radius: 18px; border: 1px solid var(--line); }
+.faq summary { cursor: pointer; list-style: none; padding: 20px 22px; font-weight: 600; font-size: 17px; display: flex; justify-content: space-between; gap: 14px; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: ""; width: 12px; height: 12px; flex: none; margin-top: 7px; border-right: 2.5px solid var(--cobalt); border-bottom: 2.5px solid var(--cobalt); transform: rotate(45deg); transition: transform 0.2s; }
+.faq details[open] summary::after { transform: rotate(225deg); margin-top: 12px; }
+.faq p { padding: 0 22px 20px; color: var(--ink-2); }
+.foot { position: relative; padding: 56px 0 44px; background: var(--surface); overflow: hidden; }
+.foot .wrap { position: relative; display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
+.foot nav { display: flex; gap: 18px; flex-wrap: wrap; }
+.foot nav a { color: var(--ink-2); text-decoration: none; }
+.credit-line { margin-top: 22px; font-size: 13.5px; color: var(--ink-3); max-width: 92ch; }
+
+/* App: guided workspace */
+.app { min-height: 100vh; display: grid; grid-template-rows: auto 1fr; }
+.app-top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 30; background: var(--surface); border-bottom: 1px solid var(--line); }
+.app-top .wrap { max-width: none; display: flex; align-items: center; gap: 18px; min-height: 68px; }
+.stepper { display: flex; align-items: center; gap: 6px; margin: 0 auto; }
+.stepper button { display: inline-flex; align-items: center; gap: 9px; min-height: 40px; padding: 0 14px 0 6px; border: 0; border-radius: 999px; background: none; cursor: pointer; font-weight: 600; font-size: 14px; color: var(--ink-3); }
+.stepper button .n { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--tile); font: 700 12px var(--display); }
+.stepper button[aria-current="step"] { background: var(--tile); color: var(--ink); }
+.stepper button[aria-current="step"] .n { background: var(--cobalt); color: var(--on-cobalt); }
+.stepper button.done .n { background: var(--turq); color: #fff; }
+.stepper .bar { width: 28px; height: 2px; background: var(--line); border-radius: 2px; }
+.stepper .mini { display: none; font-weight: 600; }
+.app-r { display: flex; gap: 10px; align-items: center; }
+.credit-dots { display: inline-flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 12px; border-radius: 12px; background: var(--tile); text-decoration: none; font-weight: 600; font-size: 14px; }
+.app main { padding: 36px 0 72px; }
+.step-h { text-align: center; max-width: 720px; margin: 0 auto 30px; }
+.step-h h1 { font-size: clamp(28px, 3.4vw, 44px); margin-bottom: 10px; }
+.drop-big { position: relative; max-width: 760px; margin: 0 auto; border-radius: 30px; border: 2.5px dashed color-mix(in srgb, var(--cobalt) 45%, var(--line)); background: var(--surface); padding: 56px 28px; display: grid; justify-items: center; gap: 14px; text-align: center; overflow: hidden; }
+.drop-big.is-over { border-color: var(--cobalt); background: color-mix(in srgb, var(--cobalt) 7%, var(--surface)); }
+.drop-big .orb { width: 88px; height: 88px; border-radius: 26px; display: grid; place-items: center; background: var(--cobalt); color: var(--on-cobalt); transform: rotate(45deg); }
+.drop-big .orb svg { transform: rotate(-45deg); width: 36px; height: 36px; }
+.drop-big h2 { font-size: 26px; margin-top: 10px; }
+.samples-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 8px; }
+.samples-row button { width: 76px; height: 76px; padding: 8px; border-radius: 16px; border: 1.5px solid var(--line); background: #fff; cursor: pointer; }
+.samples-row button:hover { border-color: var(--cobalt); }
+.tips { max-width: 760px; margin: 22px auto 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.tip { display: flex; gap: 10px; padding: 14px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); font-size: 14px; color: var(--ink-2); }
+.tip svg { color: var(--turq); margin-top: 2px; }
+@media (max-width: 720px) { .tips { grid-template-columns: minmax(0, 1fr); } }
+.mode-step { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 24px; max-width: 1080px; margin: 0 auto; align-items: start; }
+.preview-card { background: var(--surface); border-radius: 26px; padding: 14px; box-shadow: var(--shadow); display: grid; gap: 12px; }
+.preview-card .img { aspect-ratio: 1; border-radius: 18px; background: #fff; border: 1px solid var(--line); display: grid; place-items: center; overflow: hidden; }
+.preview-card .img img { width: 92%; height: 92%; object-fit: contain; }
+.preview-card .meta { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 0 6px 4px; font-size: 14px; }
+.mode-opts { display: grid; gap: 14px; }
+.mode-opts .mcard { padding: 20px; }
+.example-diff { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.example-diff figure { margin: 0; background: #fff; border-radius: 14px; border: 1px solid var(--line); padding: 8px; display: grid; gap: 6px; }
+.example-diff figcaption { font-size: 12.5px; color: #4a5370; text-align: center; }
+.result-step { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; max-width: 1320px; margin: 0 auto; padding: 0 max(20px, env(safe-area-inset-right, 0px)) 0 max(20px, env(safe-area-inset-left, 0px)); }
+.viewer { background: var(--surface); border-radius: 26px; box-shadow: var(--shadow); padding: 12px; display: grid; gap: 10px; align-self: start; align-content: start; }
+.viewer-bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.vp { position: relative; height: min(66vh, 680px); min-height: 380px; border-radius: 18px; overflow: hidden; cursor: grab; touch-action: none; background-color: var(--tile); background-image: linear-gradient(45deg, var(--bg) 25%, transparent 25%, transparent 75%, var(--bg) 75%), linear-gradient(45deg, var(--bg) 25%, transparent 25%, transparent 75%, var(--bg) 75%); background-size: 22px 22px; background-position: 0 0, 11px 11px; }
+.vp.is-panning { cursor: grabbing; }
+.stage-content { position: absolute; left: 0; top: 0; background: #fff; box-shadow: var(--shadow); }
+.stage-content > img { position: absolute; inset: 0; width: 100%; height: 100%; }
+.vp.is-pixels .before { image-rendering: pixelated; }
+.stage-content .after { clip-path: inset(0 0 0 var(--pos, 50%)); }
+.stage-content .handle { pointer-events: auto; cursor: ew-resize; width: 30px; margin-left: -15px; background: transparent; }
+.stage-content .handle::before { content: ""; position: absolute; left: 13.5px; top: 0; bottom: 0; width: 3px; background: var(--cobalt); }
+.viewer[data-only="vector"] .before, .viewer[data-only="vector"] .handle { display: none; }
+.viewer[data-only="vector"] .after { clip-path: none; }
+.viewer[data-only="original"] .after, .viewer[data-only="original"] .handle { display: none; }
+.zoomer { display: inline-flex; gap: 6px; align-items: center; }
+.zoomer output { min-width: 54px; text-align: center; font-weight: 600; font-size: 14px; }
+.side { display: grid; gap: 14px; align-content: start; }
+.side .card { background: var(--surface); border-radius: 24px; padding: 20px; box-shadow: var(--shadow); display: grid; gap: 14px; }
+.side h2 { font-size: 20px; }
+.side .btn { white-space: normal; text-align: center; line-height: 1.3; padding-block: 8px; }
+.statlist { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0; }
+.statlist div { background: var(--tile); border-radius: 14px; padding: 10px 12px; }
+.statlist dt { font-size: 12.5px; color: var(--ink-2); font-weight: 500; }
+.statlist dd { margin: 0; font: 700 20px var(--display); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.note { font-size: 13px; color: var(--ink-3); }
+.states { display: flex; flex-wrap: wrap; gap: 6px; }
+.states button { min-height: 32px; padding: 0 12px; border-radius: 999px; border: 1.5px dashed var(--line); background: none; cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.states button[aria-pressed="true"] { border-style: solid; border-color: var(--turq); color: var(--turq); }
+.processing { max-width: 640px; margin: 0 auto; background: var(--surface); border-radius: 28px; box-shadow: var(--shadow); padding: 30px; display: grid; gap: 18px; text-align: center; }
+.processing .star { width: 64px; height: 64px; margin: 0 auto; color: var(--cobalt); animation: turn 6s linear infinite; }
+@keyframes turn { to { transform: rotate(360deg); } }
+.progress { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; text-align: center; font-size: 13px; font-weight: 600; color: var(--ink-3); }
+.progress div { display: grid; gap: 8px; justify-items: center; }
+.progress i { width: 100%; height: 6px; border-radius: 99px; background: var(--tile); }
+.progress .done i { background: var(--turq); }
+.progress .now i { background: linear-gradient(90deg, var(--cobalt) 50%, var(--tile) 50%); }
+.progress .done, .progress .now { color: var(--ink); }
+.alert { display: flex; gap: 10px; padding: 14px; border-radius: 16px; background: var(--turq-soft); font-size: 14px; color: var(--ink); }
+.alert svg { color: var(--turq); margin-top: 2px; }
+.alert-bad { background: color-mix(in srgb, var(--bad) 10%, var(--surface)); }
+.alert-bad svg { color: var(--bad); }
+.drop-overlay { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: color-mix(in srgb, var(--cobalt) 20%, color-mix(in srgb, var(--bg) 80%, transparent)); border: 4px dashed var(--cobalt); font: 700 30px var(--display); pointer-events: none; }
+@media (max-width: 1040px) { .result-step { grid-template-columns: minmax(0, 1fr); } .mode-step { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 760px) {
+  .stepper button .t, .stepper .bar { display: none; }
+  .stepper button { padding: 0 4px; }
+  .app-r .hide-s, .app-r .btn .hide-s { display: none; }
+  .app-top .brand { font-size: 0; gap: 0; }
+  .credit-dots .dots { display: none; }
+  .vp { height: 56vh; min-height: 320px; }
+}
+
+/* Shelf (history) */
+.shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+.slot { background: var(--surface); border-radius: 22px; border: 1px solid var(--line); padding: 12px; display: grid; gap: 10px; }
+.slot .art { aspect-ratio: 1; border-radius: 16px; background: #fff; border: 1px solid var(--line); display: grid; place-items: center; }
+.slot .art img { width: 84%; height: 84%; object-fit: contain; }
+.slot .row { display: flex; justify-content: space-between; gap: 8px; align-items: center; flex-wrap: wrap; }
+.slot .acts { display: flex; gap: 8px; }
+.wallet { background: var(--cobalt); color: var(--on-cobalt); border-radius: 28px; padding: 26px; display: grid; gap: 14px; position: relative; overflow: hidden; }
+.wallet .big { font: 700 72px/1 var(--display); letter-spacing: -0.04em; }
+.wallet .muted { color: color-mix(in srgb, var(--on-cobalt) 82%, transparent); }
+.hist-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 22px; align-items: start; }
+.ledger { list-style: none; margin: 0; padding: 0; background: var(--surface); border-radius: 24px; border: 1px solid var(--line); }
+.ledger li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 13px 18px; }
+.ledger li + li { border-top: 1px solid var(--line); }
+.ledger .amt { font: 700 15px var(--display); }
+.ledger .plus { color: var(--ok); }
+.ledger .sub { display: block; font-size: 12.5px; color: var(--ink-3); }
+@media (max-width: 1040px) { .hist-grid { grid-template-columns: minmax(0, 1fr); } }
+
+.proto-bar { position: fixed; left: max(12px, env(safe-area-inset-left, 0px)); bottom: max(12px, env(safe-area-inset-bottom, 0px)); z-index: 60; display: flex; gap: 4px; align-items: center; padding: 5px; border-radius: 14px; background: var(--ink); color: var(--bg); font: 600 12px var(--body); box-shadow: var(--shadow); }
+.proto-bar span { padding: 0 8px; opacity: 0.75; }
+.proto-bar a { color: inherit; text-decoration: none; padding: 7px 10px; border-radius: 10px; }
+.proto-bar a[aria-current="page"], .proto-bar a:hover { background: color-mix(in srgb, var(--bg) 18%, transparent); }
+.is-shot .proto-bar { display: none; }
+.is-shot *, .is-shot *::before, .is-shot *::after { animation: none !important; transition: none !important; }
+@media (max-width: 560px) { .proto-bar span { display: none; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<a class="skip" href="#main" data-i18n="ui.skip">Skip to content</a>
+<div class="drop-overlay" data-drop-overlay hidden><span data-i18n="upload.release">Release to upload</span></div>
+<svg width="0" height="0" style="position:absolute;color:var(--cobalt)" aria-hidden="true">
+  <defs>
+    <pattern id="girih" width="72" height="72" patternUnits="userSpaceOnUse">
+      <g fill="none" stroke="currentColor" stroke-width="1.2">
+        <rect x="18" y="18" width="36" height="36"/>
+        <path d="M36 10.5 61.5 36 36 61.5 10.5 36z"/>
+        <path d="M0 0 10.5 10.5M72 0 61.5 10.5M0 72l10.5-10.5M72 72 61.5 61.5"/>
+        <circle cx="36" cy="36" r="6"/>
+      </g>
+    </pattern>
+    <pattern id="girih-w" width="72" height="72" patternUnits="userSpaceOnUse">
+      <g fill="none" stroke="#ffffff" stroke-width="1.2"><rect x="18" y="18" width="36" height="36"/><path d="M36 10.5 61.5 36 36 61.5 10.5 36z"/><path d="M0 0 10.5 10.5M72 0 61.5 10.5M0 72l10.5-10.5M72 72 61.5 61.5"/><circle cx="36" cy="36" r="6"/></g>
+    </pattern>
+    <symbol id="khatam" viewBox="0 0 40 40"><rect x="9" y="9" width="22" height="22" fill="currentColor"/><rect x="9" y="9" width="22" height="22" fill="currentColor" transform="rotate(45 20 20)"/></symbol>
+  </defs>
+</svg>
+
+<!-- ============ LANDING ============ -->
+<div data-view="home">
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="#" aria-label="Vectorla"><svg viewBox="0 0 40 40" aria-hidden="true"><use href="#khatam" style="color:var(--cobalt)"/><path d="M14 14.5 20 26.5 26 14.5" fill="none" stroke="var(--on-cobalt)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>Vectorla</a>
+      <nav class="nav" aria-label="Main"><a href="#compare" data-i18n="nav.examples">Examples</a><a href="#choose" data-i18n="nav.modes">Modes</a><a href="#pricing" data-i18n="nav.pricing">Pricing</a><a href="#faq" data-i18n="nav.faq">FAQ</a></nav>
+      <div class="top-r">
+        <div class="pills hide-m" role="group" data-i18n-attr="aria-label:ui.language"><button type="button" data-lang="en">EN</button><button type="button" data-lang="uz">UZ</button><button type="button" data-lang="ru">RU</button></div>
+        <button class="ibtn" type="button" data-theme-toggle data-i18n-attr="aria-label:ui.theme"><svg class="i i-sun"><use href="#i-sun"/></svg><svg class="i i-moon"><use href="#i-moon"/></svg></button>
+        <a class="btn btn-sm hide-m" href="#app" data-i18n="nav.signIn">Sign in</a>
+        <a class="btn btn-sm btn-cobalt" href="#app" data-i18n="nav.startFree">Start free</a>
+      </div>
+    </div>
+  </header>
+  <main id="main">
+    <section class="hero">
+      <svg class="girih girih-fade" aria-hidden="true"><rect width="100%" height="100%" fill="url(#girih)"/></svg>
+      <div class="wrap hero-grid">
+        <div>
+          <p class="kicker"><svg class="i-sm" viewBox="0 0 40 40"><use href="#khatam"/></svg><span data-i18n="c.kicker">Raster to vector, made simple</span></p>
+          <h1 data-focus tabindex="-1"><span data-i18n="c.t1">Any image.</span><span class="c2" data-i18n="c.t2">A clean vector.</span><span class="c3" data-i18n="c.t3">Three steps.</span></h1>
+          <p class="lede" data-i18n="c.sub"></p>
+          <div class="ctas" data-dropzone>
+            <input type="file" accept="image/png,image/jpeg,image/webp" hidden>
+            <button class="btn btn-xl btn-cobalt" type="button" data-browse><svg class="i"><use href="#i-upload"/></svg><span data-i18n="c.cta">Start with your image</span></button>
+            <a class="btn btn-xl" href="#compare" data-i18n="c.see">See examples</a>
+          </div>
+          <p class="upload-error" role="alert" data-upload-error hidden><svg class="i-sm"><use href="#i-alert"/></svg><span></span></p>
+          <div class="tokens"><span class="dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span data-i18n="c.tokens">10 free credits when you sign up</span></div>
+        </div>
+        <div class="guide" id="guide">
+          <div class="guide-steps" role="tablist" data-i18n-attr="aria-label:c.howTitle">
+            <button type="button" role="tab" data-g="1" class="done" aria-selected="false" aria-controls="g1"><span class="n">1</span><span data-i18n="steps.s1">Upload</span></button>
+            <button type="button" role="tab" data-g="2" class="done" aria-selected="false" aria-controls="g2"><span class="n">2</span><span data-i18n="mode.title">Trace mode</span></button>
+            <button type="button" role="tab" data-g="3" aria-selected="true" aria-controls="g3"><span class="n">3</span><span data-i18n="ws.result">Result</span></button>
+          </div>
+          <div class="guide-body">
+            <div class="panel guide-up" id="g1" role="tabpanel" hidden>
+              <div class="file"><img src="samples/summit-logo/source.jpg" alt="" width="512" height="512"><div><b>summit-logo.jpg</b><p class="muted" style="font-size:14px" data-i18n="samples.summit-logoSrc"></p></div></div>
+              <p class="muted" style="max-width:34ch" data-i18n="c.g1"></p>
+            </div>
+            <div class="panel guide-mode" id="g2" role="tabpanel" hidden>
+              <button class="mcard" type="button" data-gm="quick" aria-pressed="true"><span class="ic"><svg class="i"><use href="#i-bolt"/></svg></span><b data-i18n="mode.quick">Quick Trace</b><span class="cost" data-i18n="mode.cost1">1 credit</span><span class="d" data-i18n="mode.quickDesc"></span></button>
+              <button class="mcard" type="button" data-gm="pro" aria-pressed="false"><span class="ic"><svg class="i"><use href="#i-spark"/></svg></span><b data-i18n="mode.pro">Professional Trace</b><span class="cost" data-i18n="mode.cost2">2 credits</span><span class="d" data-i18n="mode.proDesc"></span></button>
+            </div>
+            <div class="panel" id="g3" role="tabpanel" style="padding:0">
+              <div class="cmp" id="guideCmp" style="position:absolute;inset:0;--pos:50%">
+                <div class="layer"><img class="before px zoomed" src="samples/summit-logo/source.jpg" alt="" width="512" height="512"></div>
+                <div class="layer after"><img class="zoomed" id="guideVec" src="samples/summit-logo/quick.svg" alt="" width="512" height="512"></div>
+                <span class="flag flag-l" data-i18n="cmp.before">Original</span><span class="flag flag-r" data-i18n="cmp.after">Vector</span>
+                <div class="handle" data-compare-handle><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 7l-5 5 5 5M15 7l5 5-5 5"/></svg></div>
+                <input class="sr-only" type="range" min="0" max="100" value="50" data-i18n-attr="aria-label:cmp.label">
+              </div>
+            </div>
+          </div>
+          <div class="guide-foot"><span class="muted" style="font-size:14px" id="guideStat"></span><a class="btn btn-sm" href="#app"><span data-i18n="c.tryIt">Try it yourself</span><svg class="i-sm"><use href="#i-arrow-right"/></svg></a></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="sec band" id="compare">
+      <div class="wrap">
+        <div class="sec-h"><p class="kicker"><svg class="i-sm" viewBox="0 0 40 40"><use href="#khatam"/></svg><span data-i18n="c.compareKicker">Before and after</span></p><h2 data-i18n="c.compareTitle">Slide to see what changes.</h2><p data-i18n="c.compareSub"></p></div>
+        <div class="trio" id="trio"></div>
+        <p class="credit-line" data-i18n="samples.credits"></p>
+      </div>
+    </section>
+
+    <section class="sec" id="choose">
+      <div class="wrap">
+        <div class="sec-h"><p class="kicker"><svg class="i-sm" viewBox="0 0 40 40"><use href="#khatam"/></svg><span data-i18n="nav.modes">Modes</span></p><h2 data-i18n="c.chooseTitle">Which mode is right for you?</h2><p data-i18n="c.chooseSub"></p></div>
+        <div class="chooser">
+          <div class="choices" role="group" data-i18n-attr="aria-label:c.chooseQ">
+            <button class="choice" type="button" data-choice="flat" aria-pressed="true"><span class="ic"><svg class="i"><use href="#i-vector"/></svg></span><b data-i18n="c.chFlat">Logo, text or flat colors</b><span data-i18n="c.chFlatD"></span></button>
+            <button class="choice" type="button" data-choice="shaded" aria-pressed="false"><span class="ic"><svg class="i"><use href="#i-spark"/></svg></span><b data-i18n="c.chShaded">Emblem, shading or gradients</b><span data-i18n="c.chShadedD"></span></button>
+            <button class="choice" type="button" data-choice="photo" aria-pressed="false"><span class="ic"><svg class="i"><use href="#i-image"/></svg></span><b data-i18n="c.chPhoto">A photograph</b><span data-i18n="c.chPhotoD"></span></button>
+          </div>
+          <div class="answer" aria-live="polite">
+            <div class="art"><img id="ansImg" src="samples/summit-logo/quick.svg" alt="" width="512" height="512"></div>
+            <div>
+              <span class="badge badge-turq" data-i18n="mode.recommended">Recommended</span>
+              <h3 id="ansTitle"></h3>
+              <p class="muted" id="ansDesc"></p>
+              <p style="margin-top:14px;font-weight:600" id="ansCost"></p>
+              <p class="note" style="margin-top:10px" id="ansNote"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="sec band" id="uses">
+      <div class="wrap">
+        <div class="sec-h"><p class="kicker"><svg class="i-sm" viewBox="0 0 40 40"><use href="#khatam"/></svg><span data-i18n="c.usesKicker">Use cases</span></p><h2 data-i18n="c.usesTitle">Made for real work.</h2></div>
+        <div class="uses">
+          <article class="use"><div class="art"><img src="samples/crest/pro.svg" alt="" loading="lazy" width="1200" height="1200"></div><h3 data-i18n="c.uPrint">Print shops</h3><p data-i18n="c.uPrintD"></p></article>
+          <article class="use"><div class="art"><img src="samples/horse/quick.svg" alt="" loading="lazy" width="400" height="328"></div><h3 data-i18n="c.uCut">Cutting and engraving</h3><p data-i18n="c.uCutD"></p></article>
+          <article class="use"><div class="art"><img src="samples/alpine-patch/quick.svg" alt="" loading="lazy" width="1200" height="1200"></div><h3 data-i18n="c.uTextile">Textile and DTF</h3><p data-i18n="c.uTextileD"></p></article>
+          <article class="use"><div class="art"><img src="samples/wordmark/quick.svg" alt="" loading="lazy" width="768" height="256"></div><h3 data-i18n="c.uDesign">Designers</h3><p data-i18n="c.uDesignD"></p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="sec" id="pricing">
+      <div class="wrap">
+        <div class="sec-h"><p class="kicker"><svg class="i-sm" viewBox="0 0 40 40"><use href="#khatam"/></svg><span data-i18n="nav.pricing">Pricing</span></p><h2 data-i18n="pricing.title">Pay per image, in credits</h2></div>
+        <div class="pricing">
+          <div class="plan main">
+            <svg class="girih" aria-hidden="true"><rect width="100%" height="100%" fill="url(#girih-w)"/></svg>
+            <div style="position:relative;display:grid;gap:18px">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><h3 style="font-size:24px" data-i18n="pricing.free">Free</h3><span class="big" data-i18n="pricing.freePrice">$0</span></div>
+              <span class="dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+              <ul id="freeItems"></ul>
+              <a class="btn btn-xl" href="#app" data-i18n="pricing.cta">Start free</a>
+            </div>
+          </div>
+          <div class="plan"><h3 style="font-size:24px" data-i18n="pricing.paid">Paid plans</h3><span class="badge" data-i18n="pricing.paidSoon">Coming soon</span><p class="muted" data-i18n="pricing.paidDesc"></p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="sec" id="faq" style="padding-top:0">
+      <div class="wrap">
+        <div class="sec-h"><h2 data-i18n="faq.title">Questions</h2></div>
+        <div class="faq">
+          <details><summary data-i18n="faq.q1"></summary><p data-i18n="faq.a1"></p></details>
+          <details><summary data-i18n="faq.q2"></summary><p data-i18n="faq.a2"></p></details>
+          <details><summary data-i18n="faq.q3"></summary><p data-i18n="faq.a3"></p></details>
+          <details><summary data-i18n="faq.q4"></summary><p data-i18n="faq.a4"></p></details>
+        </div>
+      </div>
+    </section>
+  </main>
+  <footer class="foot">
+    <svg class="girih" aria-hidden="true"><rect width="100%" height="100%" fill="url(#girih)"/></svg>
+    <div class="wrap">
+      <div style="display:grid;gap:10px;max-width:42ch"><span class="brand" style="font-size:17px"><svg viewBox="0 0 40 40" aria-hidden="true" style="width:28px;height:28px"><use href="#khatam" style="color:var(--cobalt)"/></svg>Vectorla</span><p class="muted" data-i18n="footer.tagline"></p><p class="note" data-i18n="footer.proto"></p></div>
+      <nav aria-label="Footer"><a href="#compare" data-i18n="nav.examples">Examples</a><a href="#pricing" data-i18n="nav.pricing">Pricing</a><a href="#faq" data-i18n="nav.faq">FAQ</a><a href="#top" data-i18n="footer.privacy">Privacy</a><a href="#top" data-i18n="footer.terms">Terms</a></nav>
+    </div>
+  </footer>
+</div>
+
+<!-- ============ GUIDED WORKSPACE ============ -->
+<div class="app" data-view="app" hidden>
+  <header class="app-top">
+    <div class="wrap">
+      <a class="brand" href="#" aria-label="Vectorla"><svg viewBox="0 0 40 40" aria-hidden="true"><use href="#khatam" style="color:var(--cobalt)"/><path d="M14 14.5 20 26.5 26 14.5" fill="none" stroke="var(--on-cobalt)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+      <nav class="stepper" data-i18n-attr="aria-label:c.howTitle">
+        <button type="button" data-step="1"><span class="n">1</span><span class="t" data-i18n="steps.s1">Upload</span></button><span class="bar"></span>
+        <button type="button" data-step="2"><span class="n">2</span><span class="t" data-i18n="mode.title">Trace mode</span></button><span class="bar"></span>
+        <button type="button" data-step="3"><span class="n">3</span><span class="t" data-i18n="ws.result">Result</span></button>
+      </nav>
+      <div class="app-r">
+        <a class="credit-dots" href="#history" data-i18n-attr="aria-label:credits.balance"><span class="dots" aria-hidden="true" id="walletDots"></span><span data-credit-text></span></a>
+        <a class="ibtn hide-s" href="#history" data-i18n-attr="aria-label:nav.history"><svg class="i"><use href="#i-clock"/></svg></a>
+        <div class="pills hide-s" role="group" data-i18n-attr="aria-label:ui.language"><button type="button" data-lang="en">EN</button><button type="button" data-lang="uz">UZ</button><button type="button" data-lang="ru">RU</button></div>
+        <button class="ibtn" type="button" data-theme-toggle data-i18n-attr="aria-label:ui.theme"><svg class="i i-sun"><use href="#i-sun"/></svg><svg class="i i-moon"><use href="#i-moon"/></svg></button>
+      </div>
+    </div>
+  </header>
+  <main>
+    <section id="step1" hidden>
+      <div class="wrap">
+        <div class="step-h"><h1 data-focus tabindex="-1" data-i18n="c.s1Title">What would you like to vectorize?</h1><p class="muted" data-i18n="upload.sub"></p></div>
+        <div class="drop-big" data-dropzone>
+          <svg class="girih" aria-hidden="true" style="opacity:.07"><rect width="100%" height="100%" fill="url(#girih)"/></svg>
+          <input type="file" accept="image/png,image/jpeg,image/webp" hidden>
+          <span class="orb"><svg><use href="#i-upload"/></svg></span>
+          <h2 data-i18n="upload.title">Drop an image to trace</h2>
+          <button class="btn btn-xl btn-cobalt" type="button" data-browse data-i18n="upload.browse">Choose a file</button>
+          <p class="muted" style="font-size:14px" data-i18n="upload.paste"></p>
+          <p class="upload-error" role="alert" data-upload-error hidden><svg class="i-sm"><use href="#i-alert"/></svg><span></span></p>
+          <p style="font-weight:600;margin-top:10px" data-i18n="upload.samples">Or open a sample</p>
+          <div class="samples-row" id="samplesRow"></div>
+        </div>
+        <div class="tips">
+          <p class="tip"><svg class="i-sm"><use href="#i-check"/></svg><span data-i18n="c.tip1"></span></p>
+          <p class="tip"><svg class="i-sm"><use href="#i-check"/></svg><span data-i18n="c.tip2"></span></p>
+          <p class="tip"><svg class="i-sm"><use href="#i-lock"/></svg><span data-i18n="c.tip3"></span></p>
+        </div>
+      </div>
+    </section>
+
+    <section id="step2" hidden>
+      <div class="wrap">
+        <div class="step-h"><h1 data-focus tabindex="-1" data-i18n="c.s2Title">Choose how to trace it</h1><p class="muted" data-i18n="mode.switchNote"></p></div>
+        <div class="mode-step">
+          <div class="preview-card">
+            <div class="img"><img id="s2Img" alt=""></div>
+            <div class="meta"><b id="s2Name"></b><span class="muted" id="s2Meta"></span></div>
+          </div>
+          <div class="mode-opts">
+            <button class="mcard" type="button" data-wm="quick" aria-pressed="false"><span class="ic"><svg class="i"><use href="#i-bolt"/></svg></span><b data-i18n="mode.quick">Quick Trace</b><span class="cost" data-i18n="mode.cost1">1 credit</span><span class="d" data-i18n="mode.quickDesc"></span></button>
+            <button class="mcard" type="button" data-wm="pro" aria-pressed="true"><span class="ic"><svg class="i"><use href="#i-spark"/></svg></span><b data-i18n="mode.pro">Professional Trace</b><span class="cost" data-i18n="mode.cost2">2 credits</span><span class="d" data-i18n="mode.proDesc"></span></button>
+            <div class="preview-card" style="box-shadow:none;border:1px solid var(--line)">
+              <p style="font-weight:600;padding:4px 6px 0" data-i18n="c.diffTitle">The difference, on a real example</p>
+              <div class="example-diff">
+                <figure><img src="samples/globe/quick.svg" alt="" loading="lazy" width="256" height="256"><figcaption data-i18n="mode.quickShort">Quick</figcaption></figure>
+                <figure><img src="samples/globe/pro.svg" alt="" loading="lazy" width="256" height="256"><figcaption data-i18n="mode.proShort">Professional</figcaption></figure>
+              </div>
+            </div>
+            <div class="alert" id="ownNote" hidden><svg class="i-sm"><use href="#i-info"/></svg><span data-i18n="upload.protoNote"></span></div>
+            <button class="btn btn-xl btn-cobalt" type="button" id="traceBtn"><svg class="i"><use href="#i-arrow-right"/></svg><span id="traceLbl"></span></button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="stepWait" hidden>
+      <div class="wrap">
+        <div class="processing" role="status">
+          <svg class="star" viewBox="0 0 40 40" aria-hidden="true"><use href="#khatam"/></svg>
+          <h1 data-focus tabindex="-1" style="font-size:28px" data-i18n="ws.processing">Tracing your image…</h1>
+          <p class="muted" data-i18n="ws.processingHint"></p>
+          <div class="progress"><div class="done"><i></i><span data-i18n="c.stUploaded">Uploaded</span></div><div class="done"><i></i><span data-i18n="ws.statusQueued">Queued</span></div><div class="now"><i></i><span data-i18n="ws.statusTracing">Tracing</span></div><div><i></i><span data-i18n="ws.statusReady">Ready</span></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="step3" hidden>
+      <div class="result-step">
+        <div class="viewer" id="viewer" data-only="split">
+          <div class="viewer-bar">
+            <div class="pills" role="group" id="onlySeg" data-i18n-attr="aria-label:c.viewLabel">
+              <button type="button" data-o="split" aria-pressed="true" data-i18n="views.split">Split</button>
+              <button type="button" data-o="vector" aria-pressed="false" data-i18n="views.vector">Vector</button>
+              <button type="button" data-o="original" aria-pressed="false" data-i18n="views.original">Original</button>
+            </div>
+            <div class="zoomer">
+              <button class="ibtn" type="button" data-zoom="out" data-i18n-attr="aria-label:zoom.out"><svg class="i"><use href="#i-minus"/></svg></button>
+              <output id="zoomOut">100%</output>
+              <button class="ibtn" type="button" data-zoom="in" data-i18n-attr="aria-label:zoom.in"><svg class="i"><use href="#i-plus"/></svg></button>
+              <button class="ibtn" type="button" data-zoom="fit" data-i18n-attr="aria-label:zoom.fit"><svg class="i"><use href="#i-fit"/></svg></button>
+            </div>
+          </div>
+          <div class="vp" tabindex="0" data-i18n-attr="aria-label:c.canvasLabel">
+            <div class="stage-content" id="contentA" style="--pos:50%">
+              <img class="before" id="srcA" alt="" draggable="false">
+              <img class="after" id="vecA" alt="" draggable="false">
+              <div class="handle" data-compare-handle data-no-pan></div>
+              <input class="sr-only" type="range" min="0" max="100" value="50" data-i18n-attr="aria-label:cmp.label">
+            </div>
+          </div>
+          <div class="alert alert-bad" id="errBox" hidden><svg class="i-sm"><use href="#i-alert"/></svg><span><b data-i18n="ws.failed">This trace failed</b> · <span data-i18n="ws.failedHint"></span></span></div>
+        </div>
+        <aside class="side">
+          <div class="card">
+            <h1 data-focus tabindex="-1" style="font-size:22px" id="resName"></h1>
+            <div style="display:flex;gap:8px;flex-wrap:wrap"><span class="badge" id="resMode"></span><span class="badge badge-turq"><svg class="i-sm"><use href="#i-check"/></svg><span data-i18n="ws.statusReady">Ready</span></span></div>
+            <a class="btn btn-xl btn-cobalt" id="dl" href="#" download><svg class="i"><use href="#i-download"/></svg><span data-i18n="ws.downloadSvg">Download SVG</span></a>
+            <p class="note" data-i18n="ws.retention"></p>
+          </div>
+          <div class="card">
+            <h2 data-i18n="ws.result">Result</h2>
+            <dl class="statlist" id="statlist"></dl>
+            <p class="note" data-i18n="stats.measured"></p>
+          </div>
+          <div class="card">
+            <button class="btn" type="button" id="otherMode"></button>
+            <button class="btn" type="button" data-goto="1"><svg class="i"><use href="#i-upload"/></svg><span data-i18n="ws.newUpload">New upload</span></button>
+            <p class="note" data-i18n="mode.switchNote"></p>
+          </div>
+          <div class="card"><p style="font-weight:600" data-i18n="ws.states">Prototype states</p><div class="states" id="states">
+            <button type="button" data-state="result" aria-pressed="true" data-i18n="ws.stateResult">Result</button>
+            <button type="button" data-state="processing" aria-pressed="false" data-i18n="ws.stateProcessing">Processing</button>
+            <button type="button" data-state="error" aria-pressed="false" data-i18n="ws.stateError">Error</button>
+            <button type="button" data-state="empty" aria-pressed="false" data-i18n="ws.stateEmpty">Empty</button>
+          </div></div>
+        </aside>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- ============ HISTORY ============ -->
+<div class="app" data-view="history" hidden>
+  <header class="app-top">
+    <div class="wrap">
+      <a class="brand" href="#" aria-label="Vectorla"><svg viewBox="0 0 40 40" aria-hidden="true"><use href="#khatam" style="color:var(--cobalt)"/><path d="M14 14.5 20 26.5 26 14.5" fill="none" stroke="var(--on-cobalt)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>Vectorla</a>
+      <div class="app-r" style="margin-left:auto">
+        <a class="btn btn-sm btn-cobalt" href="#app" data-i18n-attr="aria-label:ws.newUpload"><svg class="i-sm"><use href="#i-upload"/></svg><span class="hide-s" data-i18n="ws.newUpload">New upload</span></a>
+        <div class="pills hide-s" role="group" data-i18n-attr="aria-label:ui.language"><button type="button" data-lang="en">EN</button><button type="button" data-lang="uz">UZ</button><button type="button" data-lang="ru">RU</button></div>
+        <button class="ibtn" type="button" data-theme-toggle data-i18n-attr="aria-label:ui.theme"><svg class="i i-sun"><use href="#i-sun"/></svg><svg class="i i-moon"><use href="#i-moon"/></svg></button>
+      </div>
+    </div>
+  </header>
+  <main class="wrap" style="padding-top:36px;padding-bottom:72px">
+    <div class="step-h" style="text-align:left;margin:0 0 22px"><h1 data-focus tabindex="-1" data-i18n="history.title">History</h1><p class="muted" data-i18n="history.sub"></p></div>
+    <p class="alert" style="margin-bottom:20px"><svg class="i-sm"><use href="#i-info"/></svg><span data-i18n="history.exampleNote"></span></p>
+    <div class="hist-grid">
+      <div class="shelf" id="shelf"></div>
+      <div style="display:grid;gap:16px">
+        <div class="wallet">
+          <svg class="girih" aria-hidden="true"><rect width="100%" height="100%" fill="url(#girih-w)"/></svg>
+          <div style="position:relative;display:grid;gap:12px">
+            <p style="font-weight:600" data-i18n="credits.balance">Credit balance</p>
+            <span class="big num" id="balN">2</span>
+            <span class="dots" aria-hidden="true" id="balDots"></span>
+            <p class="muted" id="buys"></p>
+            <p class="muted" style="font-size:13.5px" data-i18n="credits.soon"></p>
+          </div>
+        </div>
+        <h2 style="font-size:20px;margin-top:6px" data-i18n="credits.ledger">Credit activity</h2>
+        <ul class="ledger" id="ledger"></ul>
+      </div>
+    </div>
+  </main>
+</div>
+
+<nav class="proto-bar" aria-label="Prototype">
+  <span>C · Naqsh</span>
+  <a href="#" data-pb="home" data-i18n="ui.landing">Landing</a>
+  <a href="#app" data-pb="app" data-i18n="nav.workspace">Workspace</a>
+  <a href="#history" data-pb="history" data-i18n="nav.history">History</a>
+  <a href="index.html" data-i18n="ui.overview">All concepts</a>
+</nav>
+
+<script src="shared/i18n.js"></script>
+<script src="shared/samples.js"></script>
+<script src="shared/demo.js"></script>
+<script src="shared/icons.js"></script>
+<script src="shared/proto.js"></script>
+<script>
+;(function () {
+  'use strict'
+  const P = window.Proto
+  const D = window.VL_DEMO
+  const $ = (s, r) => (r || document).querySelector(s)
+  const $$ = (s, r) => [...(r || document).querySelectorAll(s)]
+
+  P.extend({
+    en: { meta: { title: 'Vectorla · Naqsh' }, c: {
+      kicker: 'Raster to vector, made simple', t1: 'Any image.', t2: 'A clean vector.', t3: 'Three steps.',
+      sub: 'Upload a logo, emblem or drawing, choose Quick or Professional, then compare and download your SVG. Vectorla guides you through each step.',
+      cta: 'Start with your image', see: 'See examples', tokens: '10 free credits when you sign up', tryIt: 'Try it yourself',
+      g1: 'A customer’s logo, saved as a heavily compressed JPEG. Step 2 picks the mode, step 3 shows the result.',
+      compareKicker: 'Before and after', compareTitle: 'Slide to see what changes.', compareSub: 'Three real uploads and their Vectorla traces. Drag the diamond, or focus it and use the arrow keys.',
+      chooseTitle: 'Which mode is right for you?', chooseSub: 'Tell us what you are tracing. We recommend a mode and show a real result.', chooseQ: 'What are you tracing?',
+      chFlat: 'Logo, text or flat colors', chFlatD: 'Signs, stickers, cutting files, wordmarks', chShaded: 'Emblem, shading or gradients', chShadedD: 'Badges, crests, illustrations, 3D art', chPhoto: 'A photograph', chPhotoD: 'Portraits, products, scenes',
+      ansFlat: 'Flat colors trace cleanly in Quick mode. Here: a logo from a quality-40 JPEG.', ansShaded: 'Professional keeps fine shades and rebuilds gradients. Here: a crest from a JPEG.', ansPhoto: 'Professional keeps the most detail, but a photo becomes posterized artwork.',
+      usesKicker: 'Use cases', usesTitle: 'Made for real work.',
+      uPrint: 'Print shops', uPrintD: 'Rebuild customer logos as vectors that print sharply at any size.', uCut: 'Cutting and engraving', uCutD: 'Clean closed shapes for vinyl cutters and laser or CNC software that reads SVG.',
+      uTextile: 'Textile and DTF', uTextileD: 'Crisp artwork for direct-to-film and textile printing.', uDesign: 'Designers', uDesignD: 'Turn old raster logos into editable SVG.',
+      howTitle: 'Steps', s1Title: 'What would you like to vectorize?', s2Title: 'Choose how to trace it', diffTitle: 'The difference, on a real example',
+      tip1: 'Best for logos, emblems, icons, drawings and scans.', tip2: 'Bigger, sharper images give cleaner curves.', tip3: 'Files are private to your account and deleted after 30 days.',
+      traceWith: 'Trace · {cost}', stUploaded: 'Uploaded', viewLabel: 'View', canvasLabel: 'Result viewer. + and − zoom, arrow keys pan, 0 fits.', tryOther: 'Try {mode} · {cost}',
+    } },
+    uz: { meta: { title: 'Vectorla · Naqsh' }, c: {
+      kicker: 'Rastrdan vektorga, oson', t1: 'Istalgan rasm.', t2: 'Toza vektor.', t3: 'Uch qadam.',
+      sub: 'Logotip, gerb yoki chizmani yuklang, tezkor yoki professional rejimni tanlang, so‘ng solishtirib SVG ni yuklab oling. Vectorla har bir qadamda yo‘l ko‘rsatadi.',
+      cta: 'Rasmingiz bilan boshlang', see: 'Namunalarni ko‘rish', tokens: 'Ro‘yxatdan o‘tganda 10 bepul kredit', tryIt: 'O‘zingiz sinab ko‘ring',
+      g1: 'Mijozning juda siqilgan JPEG sifatida saqlangan logotipi. 2-qadamda rejim tanlanadi, 3-qadamda natija ko‘rsatiladi.',
+      compareKicker: 'Oldin va keyin', compareTitle: 'Nima o‘zgarishini ko‘rish uchun suring.', compareSub: 'Uchta haqiqiy rasm va ularning Vectorla trassirovkasi. Rombni suring yoki uni tanlab, strelkalardan foydalaning.',
+      chooseTitle: 'Qaysi rejim sizga mos?', chooseSub: 'Nimani trassirovka qilayotganingizni ayting. Biz rejimni tavsiya qilamiz va haqiqiy natijani ko‘rsatamiz.', chooseQ: 'Nimani trassirovka qilyapsiz?',
+      chFlat: 'Logotip, matn yoki tekis ranglar', chFlatD: 'Peshlavhalar, stikerlar, kesish fayllari', chShaded: 'Gerb, soyalar yoki gradientlar', chShadedD: 'Nishonlar, gerblar, illyustratsiyalar, 3D', chPhoto: 'Fotosurat', chPhotoD: 'Portretlar, mahsulotlar, manzaralar',
+      ansFlat: 'Tekis ranglar tezkor rejimda toza chiqadi. Bu yerda: 40 sifatli JPEG dagi logotip.', ansShaded: 'Professional rejim nozik tuslarni saqlaydi va gradientlarni tiklaydi. Bu yerda: JPEG dagi gerb.', ansPhoto: 'Professional rejim eng ko‘p tafsilotni saqlaydi, lekin fotosurat plakat uslubidagi grafikaga aylanadi.',
+      usesKicker: 'Qo‘llanish', usesTitle: 'Haqiqiy ish uchun.',
+      uPrint: 'Bosmaxonalar', uPrintD: 'Mijoz logotiplarini har qanday o‘lchamda tiniq chiqadigan vektorga aylantiring.', uCut: 'Kesish va gravyura', uCutD: 'Vinil plotterlar hamda SVG o‘qiydigan lazer va CNC dasturlari uchun toza yopiq shakllar.',
+      uTextile: 'Tekstil va DTF', uTextileD: 'DTF va tekstilga bosish uchun tiniq grafika.', uDesign: 'Dizaynerlar', uDesignD: 'Eski rastr logotiplarni tahrirlanadigan SVG ga aylantiring.',
+      howTitle: 'Qadamlar', s1Title: 'Nimani vektorga aylantirmoqchisiz?', s2Title: 'Qanday trassirovka qilishni tanlang', diffTitle: 'Farq — haqiqiy misolda',
+      tip1: 'Logotip, gerb, ikonka, chizma va skanlar uchun eng yaxshi.', tip2: 'Kattaroq va tiniqroq rasm silliqroq egri chiziqlar beradi.', tip3: 'Fayllar faqat sizga ko‘rinadi va 30 kundan keyin o‘chiriladi.',
+      traceWith: 'Trassirovka · {cost}', stUploaded: 'Yuklandi', viewLabel: 'Ko‘rinish', canvasLabel: 'Natija oynasi. + va − masshtab, strelkalar siljitish, 0 moslash.', tryOther: '{mode} · {cost}',
+    } },
+    ru: { meta: { title: 'Vectorla · Naqsh' }, c: {
+      kicker: 'Растр в вектор — просто', t1: 'Любое изображение.', t2: 'Чистый вектор.', t3: 'Три шага.',
+      sub: 'Загрузите логотип, герб или рисунок, выберите быстрый или профессиональный режим, затем сравните и скачайте SVG. Vectorla проведёт по каждому шагу.',
+      cta: 'Начать со своего изображения', see: 'Посмотреть примеры', tokens: '10 бесплатных кредитов при регистрации', tryIt: 'Попробовать самому',
+      g1: 'Логотип клиента, сохранённый как сильно сжатый JPEG. На шаге 2 выбирается режим, на шаге 3 — результат.',
+      compareKicker: 'До и после', compareTitle: 'Потяните, чтобы увидеть разницу.', compareSub: 'Три настоящие загрузки и их трассировки Vectorla. Потяните ромб или выберите его и используйте стрелки.',
+      chooseTitle: 'Какой режим вам подходит?', chooseSub: 'Расскажите, что вы трассируете. Мы порекомендуем режим и покажем настоящий результат.', chooseQ: 'Что вы трассируете?',
+      chFlat: 'Логотип, текст или плоские цвета', chFlatD: 'Вывески, стикеры, файлы для резки', chShaded: 'Герб, тени или градиенты', chShadedD: 'Нашивки, гербы, иллюстрации, 3D', chPhoto: 'Фотографию', chPhotoD: 'Портреты, товары, сцены',
+      ansFlat: 'Плоские цвета чисто трассируются в быстром режиме. Здесь: логотип из JPEG с качеством 40.', ansShaded: 'Профессиональный режим сохраняет тонкие оттенки и восстанавливает градиенты. Здесь: герб из JPEG.', ansPhoto: 'Профессиональный режим сохраняет больше всего деталей, но фото становится постеризованной графикой.',
+      usesKicker: 'Применение', usesTitle: 'Для реальной работы.',
+      uPrint: 'Типографии', uPrintD: 'Восстанавливайте логотипы клиентов в вектор, который печатается чётко в любом размере.', uCut: 'Резка и гравировка', uCutD: 'Чистые замкнутые контуры для плоттеров и программ лазерной и ЧПУ-резки, читающих SVG.',
+      uTextile: 'Текстиль и DTF', uTextileD: 'Чёткая графика для DTF и печати на текстиле.', uDesign: 'Дизайнеры', uDesignD: 'Превращайте старые растровые логотипы в редактируемый SVG.',
+      howTitle: 'Шаги', s1Title: 'Что вы хотите векторизовать?', s2Title: 'Выберите, как трассировать', diffTitle: 'Разница на настоящем примере',
+      tip1: 'Лучше всего для логотипов, гербов, иконок, рисунков и сканов.', tip2: 'Чем крупнее и чётче изображение, тем чище кривые.', tip3: 'Файлы видны только вам и удаляются через 30 дней.',
+      traceWith: 'Трассировать · {cost}', stUploaded: 'Загружено', viewLabel: 'Вид', canvasLabel: 'Просмотр результата. + и − — масштаб, стрелки — сдвиг, 0 — по размеру.', tryOther: '{mode} · {cost}',
+    } },
+  })
+
+  const fileName = (id) => `${id}.${P.sample(id).format === 'png' ? 'png' : 'jpg'}`
+  const modeOf = (id) => (['horse', 'ornament', 'wordmark', 'summit-logo'].includes(id) ? 'quick' : 'pro')
+  const icon = (name, cls) => {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    svg.setAttribute('class', cls || 'i')
+    svg.setAttribute('aria-hidden', 'true')
+    const use = document.createElementNS('http://www.w3.org/2000/svg', 'use')
+    use.setAttribute('href', `#i-${name}`)
+    svg.append(use)
+    return svg
+  }
+  const dots = (n, of) => Array.from({ length: of }, (_, i) => P.h('i', { class: i < n ? '' : 'off' }))
+  const costOf = (mode) => P.t(mode === 'pro' ? 'mode.cost2' : 'mode.cost1')
+
+  // ---------- landing: guided demo ----------
+  const guideCmp = $('#guideCmp')
+  P.compare(guideCmp)
+  // The guide zooms 2× into the lettering, where the JPEG damage shows.
+  guideCmp.style.setProperty('--zz', '2.1')
+  guideCmp.style.setProperty('--zo', '50% 84%')
+  let guideStep = 3
+  let guideMode = 'quick'
+  const renderGuide = () => {
+    $$('.guide-steps button').forEach((b) => b.setAttribute('aria-selected', String(Number(b.dataset.g) === guideStep)))
+    for (const n of [1, 2, 3]) $(`#g${n}`).hidden = n !== guideStep
+    $$('[data-gm]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.gm === guideMode)))
+    $('#guideVec').src = P.svgUrl('summit-logo', guideMode)
+    const r = P.sample('summit-logo')[guideMode]
+    $('#guideStat').textContent = `${P.t(guideMode === 'pro' ? 'mode.proShort' : 'mode.quickShort')} · ${P.t('stats.paths')} ${r.paths} · ${P.kb(r.bytes)}`
+  }
+  $$('.guide-steps button').forEach((b) => b.addEventListener('click', () => { guideStep = Number(b.dataset.g); renderGuide() }))
+  $$('[data-gm]').forEach((b) => b.addEventListener('click', () => { guideMode = b.dataset.gm; guideStep = 3; renderGuide() }))
+
+  const TRIO = [['alpine-patch', 'pro', 0.3, 0.22], ['crest', 'pro', 0.42, 0.86], ['rocket', 'pro', 0.62, 0.3]]
+  const renderTrio = () => {
+    $('#trio').replaceChildren(...TRIO.map(([id, mode, ox, oy]) => {
+      const s = P.sample(id)
+      const cmp = P.h('div', { class: 'cmp', style: `--pos:50%;--zz:2.4;--zo:${ox * 100}% ${oy * 100}%` },
+        P.h('div', { class: 'layer' }, P.h('img', { class: 'before px zoomed', src: s.src, alt: '', loading: 'lazy', width: s.w, height: s.h })),
+        P.h('div', { class: 'layer after' }, P.h('img', { class: 'zoomed', src: P.svgUrl(id, mode), alt: '', loading: 'lazy', width: s.w, height: s.h })),
+        P.h('span', { class: 'flag flag-l', text: P.t('cmp.before') }), P.h('span', { class: 'flag flag-r', text: P.t('cmp.after') }),
+        (() => { const h = P.h('div', { class: 'handle', 'data-compare-handle': '' }); h.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 7l-5 5 5 5M15 7l5 5-5 5"/></svg>'; return h })(),
+        P.h('input', { class: 'sr-only', type: 'range', min: '0', max: '100', value: '50', 'aria-label': `${P.t('cmp.label')}: ${P.sampleName(id)}` }))
+      P.compare(cmp)
+      return P.h('figure', null, cmp, P.h('figcaption', null, P.h('b', { text: P.sampleName(id) }), P.h('span', { class: 'muted', style: 'font-size:14px', text: `${P.sampleSource(id)} → SVG ${P.kb(s[mode].bytes)}` })))
+    }))
+  }
+
+  let choice = 'flat'
+  const renderChoice = () => {
+    $$('[data-choice]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.choice === choice)))
+    const map = { flat: ['summit-logo', 'quick', 'c.ansFlat'], shaded: ['crest', 'pro', 'c.ansShaded'], photo: ['coffee', 'pro', 'c.ansPhoto'] }
+    const [id, mode, key] = map[choice]
+    $('#ansImg').src = P.svgUrl(id, mode)
+    $('#ansTitle').textContent = P.t(mode === 'pro' ? 'mode.pro' : 'mode.quick')
+    $('#ansDesc').textContent = P.t(key)
+    $('#ansCost').textContent = costOf(mode)
+    $('#ansNote').textContent = `${P.sampleName(id)} · ${P.t('stats.paths')} ${P.sample(id)[mode].paths} · ${P.kb(P.sample(id)[mode].bytes)}`
+  }
+  $$('[data-choice]').forEach((b) => b.addEventListener('click', () => { choice = b.dataset.choice; renderChoice() }))
+
+  // ---------- guided workspace ----------
+  const state = { step: 3, sample: 'crest', mode: 'pro', file: null, state: 'result', only: 'split' }
+  P.compare($('#contentA'), { handleOnly: true })
+  const stage = P.stage([$('.vp')], { padding: 24, onZoom: (s) => ($('#zoomOut').textContent = `${Math.round(s * 100)}%`) })
+  $$('[data-zoom]').forEach((b) => b.addEventListener('click', () => (b.dataset.zoom === 'in' ? stage.zoomAt(1.4) : b.dataset.zoom === 'out' ? stage.zoomAt(1 / 1.4) : stage.fit())))
+  const go = (step) => {
+    state.step = step
+    renderApp(true)
+    const h = $(`#step${step === 'wait' ? 'Wait' : step} [data-focus]`)
+    if (h) h.focus({ preventScroll: true })
+  }
+  const renderApp = (refit) => {
+    const s = P.sample(state.sample)
+    const own = state.file
+    const step = state.state === 'empty' ? 1 : state.state === 'processing' ? 'wait' : state.step
+    $('#step1').hidden = step !== 1
+    $('#step2').hidden = step !== 2
+    $('#stepWait').hidden = step !== 'wait'
+    $('#step3').hidden = step !== 3
+    const current = step === 'wait' ? 3 : step
+    $$('.stepper button').forEach((b) => {
+      const n = Number(b.dataset.step)
+      if (n === current) b.setAttribute('aria-current', 'step')
+      else b.removeAttribute('aria-current')
+      b.classList.toggle('done', n < current)
+      b.disabled = n === 3 && Boolean(own)
+    })
+    $('#walletDots').replaceChildren(...dots(D.balance, 4))
+    $('#samplesRow').replaceChildren(...['crest', 'summit-logo', 'alpine-patch', 'rocket', 'horse', 'ornament'].map((id) => P.h('button', {
+      type: 'button', 'aria-label': P.sampleName(id), onclick: () => { Object.assign(state, { sample: id, mode: modeOf(id), file: null, state: 'result' }); go(2) },
+    }, P.h('img', { src: P.svgUrl(id, modeOf(id)), alt: '', loading: 'lazy' }))))
+    // Step 2
+    $('#s2Img').src = own ? own.url : s.src
+    $('#s2Name').textContent = own ? own.name : fileName(state.sample)
+    $('#s2Meta').textContent = own ? `${own.w ? `${own.w} × ${own.h} · ` : ''}${own.size < 1048576 ? P.kb(own.size) : P.mb(own.size)}` : P.sampleSource(state.sample)
+    $$('[data-wm]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.wm === state.mode)))
+    $('#traceLbl').textContent = P.t('c.traceWith', { cost: costOf(state.mode) })
+    $('#ownNote').hidden = !own
+    $('#traceBtn').disabled = Boolean(own)
+    $('#traceBtn').setAttribute('aria-disabled', String(Boolean(own)))
+    // Step 3
+    const vec = P.svgUrl(state.sample, state.mode)
+    $('#srcA').src = s.src
+    $('#vecA').src = vec
+    $('#viewer').dataset.only = state.only
+    $$('#onlySeg button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.o === state.only)))
+    $('#resName').textContent = fileName(state.sample)
+    $('#resMode').textContent = P.t(state.mode === 'pro' ? 'mode.pro' : 'mode.quick')
+    $('#resMode').className = `badge ${state.mode === 'pro' ? 'badge-pro' : ''}`
+    const r = s[state.mode]
+    $('#statlist').replaceChildren(...[['stats.paths', P.num(r.paths)], ['stats.colors', P.num(r.colors)], ['stats.gradients', P.num(r.gradients)], ['stats.size', P.kb(r.bytes)], ['stats.time', P.sec(r.ms)], ['stats.source', `${s.w} × ${s.h}`]].map(([k, v]) =>
+      P.h('div', null, P.h('dt', { text: P.t(k) }), P.h('dd', { text: v }))))
+    const other = state.mode === 'pro' ? 'quick' : 'pro'
+    $('#otherMode').replaceChildren(icon(other === 'pro' ? 'spark' : 'bolt'), P.h('span', { text: P.t('c.tryOther', { mode: P.t(other === 'pro' ? 'mode.pro' : 'mode.quick'), cost: costOf(other) }) }))
+    const dl = $('#dl')
+    dl.href = vec
+    dl.setAttribute('download', `${state.sample}-vectorla-${state.mode === 'pro' ? 'professional' : 'quick'}.svg`)
+    $('#errBox').hidden = state.state !== 'error'
+    $$('#states button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.state === state.state)))
+    if (refit && step === 3) requestAnimationFrame(() => stage.setSize(s.w, s.h))
+  }
+  $$('.stepper button').forEach((b) => b.addEventListener('click', () => { state.state = 'result'; go(Number(b.dataset.step)) }))
+  $$('[data-wm]').forEach((b) => b.addEventListener('click', () => { state.mode = b.dataset.wm; renderApp(false) }))
+  $('#traceBtn').addEventListener('click', () => { if (!state.file) go(3) })
+  $('#otherMode').addEventListener('click', () => { state.mode = state.mode === 'pro' ? 'quick' : 'pro'; renderApp(false) })
+  $$('[data-goto]').forEach((b) => b.addEventListener('click', () => { state.file = null; go(Number(b.dataset.goto)) }))
+  $$('#onlySeg button').forEach((b) => b.addEventListener('click', () => { state.only = b.dataset.o; renderApp(false) }))
+  $$('#states button').forEach((b) => b.addEventListener('click', () => { state.state = b.dataset.state; state.file = null; renderApp(true) }))
+
+  P.onFile((file, error) => {
+    $$('[data-upload-error]').forEach((el) => {
+      el.hidden = !error
+      if (error) el.querySelector('span').textContent = P.t(error)
+    })
+    if (error) return
+    const own = { url: URL.createObjectURL(file), name: file.name || 'pasted-image.png', size: file.size, w: 0, h: 0 }
+    const img = new Image()
+    img.onload = () => {
+      own.w = img.naturalWidth
+      own.h = img.naturalHeight
+      if (state.file === own) renderApp(false)
+    }
+    img.src = own.url
+    Object.assign(state, { file: own, state: 'result', step: 2 })
+    if (location.hash !== '#app') location.hash = 'app'
+    else renderApp(false)
+  })
+
+  // ---------- history ----------
+  const renderHistory = () => {
+    $('#shelf').replaceChildren(...D.conversions.map((c) => {
+      const s = P.sample(c.sample)
+      return P.h('article', { class: 'slot' },
+        P.h('div', { class: 'art' }, P.h('img', { src: P.svgUrl(c.sample, c.mode), alt: '', loading: 'lazy' })),
+        P.h('div', { class: 'row' }, P.h('b', { text: fileName(c.sample) }), P.h('span', { class: `badge ${c.mode === 'pro' ? 'badge-pro' : ''}`, text: P.t(c.mode === 'pro' ? 'mode.proShort' : 'mode.quickShort') })),
+        P.h('div', { class: 'row muted', style: 'font-size:13.5px' }, P.h('span', { text: `${P.date(c.date)} · ${P.kb(s[c.mode].bytes)}` }), P.h('span', { text: P.t('history.expires', { d: D.daysLeft(c.date) }) })),
+        P.h('div', { class: 'acts' },
+          P.h('a', { class: 'btn btn-sm', href: '#app', text: P.t('ui.open'), onclick: () => Object.assign(state, { sample: c.sample, mode: c.mode, file: null, state: 'result', step: 3 }) }),
+          P.h('a', { class: 'btn btn-sm', href: P.svgUrl(c.sample, c.mode), download: `${c.sample}-vectorla.svg`, 'aria-label': `${P.t('ui.download')} ${fileName(c.sample)}` }, icon('download', 'i-sm'), 'SVG')))
+    }))
+    $('#balN').textContent = String(D.balance)
+    $('#balDots').replaceChildren(...dots(D.balance, 10))
+    $('#buys').textContent = P.t('credits.buys', { q: D.balance, p: Math.floor(D.balance / 2) })
+    $('#ledger').replaceChildren(...D.ledger.map((e) => {
+      const what = e.reason === 'trace' ? `${P.t('credits.trace')} · ${fileName(e.sample)} · ${P.t(e.mode === 'pro' ? 'mode.proShort' : 'mode.quickShort')}` : e.reason === 'switchRefund' ? `${P.t('credits.switchRefund')} · ${fileName(e.sample)}` : P.t('credits.signup')
+      const kind = e.reason === 'signup' ? 'added' : e.amount > 0 ? 'refunded' : 'used'
+      return P.h('li', null, P.h('span', null, P.h('span', { text: P.t(`credits.${kind}`) }), P.h('span', { class: 'sub', text: `${what} · ${P.date(e.date)}` })), P.h('span', { class: `amt ${e.amount > 0 ? 'plus' : ''}`, text: `${e.amount > 0 ? '+' : '−'}${Math.abs(e.amount)}` }))
+    }))
+  }
+
+  const renderText = () => {
+    $('#freeItems').replaceChildren(...P.t('pricing.freeItems').map((t) => P.h('li', null, icon('check', 'i-sm'), P.h('span', { text: t }))))
+    $$('[data-credit-text]').forEach((el) => (el.textContent = P.credits(D.balance)))
+    $('#guideCmp .before').alt = `${P.t('cmp.before')}: ${P.sampleName('summit-logo')} (${P.sampleSource('summit-logo')})`
+    $('#guideVec').alt = `${P.t('cmp.after')}: Vectorla SVG`
+    renderGuide()
+    renderTrio()
+    renderChoice()
+    renderHistory()
+    if (P.view === 'app') renderApp(false)
+  }
+  P.onLang(renderText)
+  P.onRoute((view, changed) => {
+    $$('.proto-bar a[data-pb]').forEach((a) => (a.dataset.pb === view ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current')))
+    if (view === 'app' && changed) renderApp(true)
+  })
+  P.init()
+})()
+</script>
+</body>
+</html>

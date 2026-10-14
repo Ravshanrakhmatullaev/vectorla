@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vectorla Redesign Concepts</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@85,600;85,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* A neutral review sheet: one reading column, wide screenshot plates, each concept keyed by its own accent. */
+:root {
+  --bg: #f4f4f2;
+  --surface: #ffffff;
+  --fg: #16171a;
+  --muted: #555a63;
+  --rule: #dadbd8;
+  --a: #006aa6;
+  --b: #a65e00;
+  --c: #1f3fc2;
+  --good: #1f7a4a;
+  --bad: #a83a2c;
+  --display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #111214; --surface: #1a1c20; --fg: #ebecee; --muted: #a3a8b1; --rule: #2d3036; --a: #4fb3ee; --b: #ffb238; --c: #8ea4ff; --good: #58c08a; --bad: #ef8a7a; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #111214; --surface: #1a1c20; --fg: #ebecee; --muted: #a3a8b1; --rule: #2d3036; --a: #4fb3ee; --b: #ffb238; --c: #8ea4ff; --good: #58c08a; --bad: #ef8a7a; color-scheme: dark; }
+body { background: var(--bg); color: var(--fg); font: 400 16px/1.6 var(--body); -webkit-font-smoothing: antialiased; }
+.page { max-width: 1160px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 40px 80px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 56px; }
+h1, h2, h3 { font-family: var(--display); font-stretch: 85%; margin: 0; line-height: 1.12; text-wrap: balance; }
+h1 { font-size: clamp(34px, 5.4vw, 56px); font-weight: 700; }
+h2 { font-size: clamp(26px, 3.4vw, 36px); font-weight: 700; }
+h3 { font-size: 19px; font-weight: 600; }
+p { margin: 0; max-width: 72ch; }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--a); outline-offset: 2px; }
+.eyebrow { font: 500 12px/1.4 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); overflow-wrap: anywhere; }
+.lede { font-size: 18px; color: var(--muted); }
+header, section { display: grid; gap: 18px; min-width: 0; grid-template-columns: minmax(0, 1fr); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font: 500 12.5px var(--mono); padding: 4px 10px; border-radius: 999px; border: 1px solid var(--rule); background: var(--surface); color: var(--muted); }
+.chip b { color: var(--fg); font-weight: 500; }
+.verdict { display: grid; gap: 14px; padding: 22px 24px; background: var(--surface); border: 1px solid var(--rule); border-left: 0; border-radius: 10px; position: relative; overflow: hidden; }
+.verdict::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 6px; background: var(--a); }
+ul { margin: 0; padding-left: 20px; display: grid; gap: 8px; max-width: 76ch; }
+li b { font-weight: 600; }
+.concepts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.ccard { display: grid; gap: 10px; align-content: start; padding: 0 0 16px; background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; overflow: hidden; text-decoration: none; }
+.ccard img { width: 100%; height: auto; display: block; aspect-ratio: 16 / 10; object-fit: cover; object-position: top; border-bottom: 1px solid var(--rule); }
+.ccard .t { padding: 0 16px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.ccard p { padding: 0 16px; color: var(--muted); font-size: 14.5px; }
+.ccard .go { padding: 0 16px; font-weight: 600; font-size: 14.5px; }
+.ccard:hover .go { text-decoration: underline; }
+.key { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.ka { background: var(--a); } .kb { background: var(--b); } .kc { background: var(--c); }
+@media (max-width: 860px) { .concepts { grid-template-columns: minmax(0, 1fr); } }
+.concept { display: grid; gap: 18px; padding-top: 28px; border-top: 1px solid var(--rule); }
+.concept .head { display: flex; justify-content: space-between; align-items: end; gap: 16px; flex-wrap: wrap; }
+.btn { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 10px; background: var(--fg); color: var(--bg); text-decoration: none; font-weight: 600; font-size: 15px; }
+.btn:hover { opacity: 0.88; }
+.spec { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.spec div { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.spec dt { font: 500 11.5px var(--mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.spec dd { margin: 0; font-size: 14.5px; }
+.sw { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 2px; }
+.sw i { width: 22px; height: 22px; border-radius: 5px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15); }
+@media (max-width: 760px) { .spec { grid-template-columns: minmax(0, 1fr); } }
+.plates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.plates figure.wide { grid-column: 1 / -1; }
+figure { margin: 0; display: grid; gap: 6px; min-width: 0; }
+figure img { width: 100%; height: auto; display: block; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+figcaption { font-size: 13px; color: var(--muted); }
+.phones { display: grid; grid-template-columns: repeat(2, minmax(0, 220px)) minmax(0, 1fr); gap: 14px; align-items: start; }
+.scroller { max-height: 520px; overflow: auto; border: 1px solid var(--rule); border-radius: 8px; }
+.scroller img { border: 0; border-radius: 0; }
+@media (max-width: 760px) { .plates { grid-template-columns: minmax(0, 1fr); } .phones { grid-template-columns: repeat(2, minmax(0, 1fr)); } .phones .full { grid-column: 1 / -1; } }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.two > div { display: grid; gap: 8px; align-content: start; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 16px 18px; min-width: 0; }
+.two h3 { font-size: 16px; }
+.pro { color: var(--good); } .con { color: var(--bad); }
+@media (max-width: 760px) { .two { grid-template-columns: minmax(0, 1fr); } }
+.table-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--rule); vertical-align: top; }
+thead th { font: 500 11.5px var(--mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); white-space: nowrap; }
+tbody tr:last-child td { border-bottom: 0; }
+td:first-child { font-weight: 600; min-width: 160px; }
+td { min-width: 200px; }
+.best { font-weight: 600; }
+.note { font-size: 13.5px; color: var(--muted); }
+code { font-family: var(--mono); font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div class="eyebrow">Vectorla · redesign round 1 · 2026-10-14 · branch claude/bold-newton-y6wsui · design/concepts</div>
+    <h1>Vectorla Redesign Concepts</h1>
+    <p class="lede">Three different directions for the landing page and the signed-in workspace, built as working prototypes. Every example image is a real Vectorla trace from the current engine (commit b548a69). Nothing is deployed and the staging site is unchanged; the final redesign waits for your pick.</p>
+    <div class="chips">
+      <span class="chip"><b>3</b> concepts · landing, workspace, history</span>
+      <span class="chip">EN · UZ · RU</span>
+      <span class="chip">light and dark</span>
+      <span class="chip">desktop and phone</span>
+      <span class="chip"><b>9</b> real traced samples</span>
+    </div>
+  </header>
+
+  <section aria-labelledby="pick">
+    <h2 id="pick">Open a prototype</h2>
+    <div class="concepts">
+      <a class="ccard" href="contour.html"><img src="shots/contour-landing.webp" alt="Concept A, Contour: landing page" width="1200" height="750"><div class="t"><span class="key ka"></span><h3>A · Contour</h3></div><p>Precision light. A specimen sheet with crop marks, an Outlines view with anchor points, and a three-pane pro workspace.</p><span class="go">Open prototype →</span></a>
+      <a class="ccard" href="nightshift.html"><img src="shots/nightshift-landing.webp" alt="Concept B, Nightshift: landing page" width="1200" height="750"><div class="t"><span class="key kb"></span><h3>B · Nightshift</h3></div><p>A dark darkroom studio. A loupe shows pixels against vector; the workspace is a full-screen canvas with floating tools and a command palette.</p><span class="go">Open prototype →</span></a>
+      <a class="ccard" href="naqsh.html"><img src="shots/naqsh-landing.webp" alt="Concept C, Naqsh: landing page" width="1200" height="750"><div class="t"><span class="key kc"></span><h3>C · Naqsh</h3></div><p>Porcelain and cobalt with girih geometry. A guided three-step workspace for print shops and first-time users.</p><span class="go">Open prototype →</span></a>
+    </div>
+    <p class="note">Inside each prototype: the bar at the bottom switches between Landing, Workspace and History; the header switches language and theme. In the workspace, “Prototype states” shows empty, processing and error states. Dropping or pasting your own image works, but it stays in your browser tab: prototypes are not connected to the tracing service.</p>
+  </section>
+
+  <section aria-labelledby="rec">
+    <h2 id="rec">Recommendation</h2>
+    <div class="verdict">
+      <h3>A · Contour is the strongest base for the product.</h3>
+      <ul>
+        <li><b>Best before/after:</b> the hero shows the same crest at 1×, 3× and 8×, and an Outlines view draws every traced path with its anchor points over the original pixels. It proves vector quality instead of claiming it.</li>
+        <li><b>Most complete professional workspace:</b> files on the left, a large synchronized split / side-by-side / vector / outlines / original canvas, and an inspector with mode, cost, measured stats, palette and a pinned Download button.</li>
+        <li><b>Clearest credits and history:</b> the balance appears in every app header, and the history table and credit ledger show exactly what each trace cost and when it will be deleted.</li>
+        <li><b>Light first suits color work:</b> print shops judge colors on light paper; the dark theme is equally complete.</li>
+        <li><b>Easiest to build well:</b> conventional, accessible layout primitives that map cleanly onto the existing React and Tailwind app.</li>
+      </ul>
+      <p class="note">Worth borrowing whichever you pick: B’s loupe as an extra demo on the landing page and B’s ⌘K command palette in the workspace; C’s “Which mode is right?” chooser and step-one tips for first-time users. Nightshift is the most striking, but its floating, canvas-only interface hides credits and stats and is harder on phones; Naqsh is the friendliest and most local, but feels less like a professional tool.</p>
+    </div>
+  </section>
+
+  <section aria-labelledby="cmp">
+    <h2 id="cmp">How each concept meets the priorities</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Priority</th><th>A · Contour</th><th>B · Nightshift</th><th>C · Naqsh</th></tr></thead>
+        <tbody>
+          <tr><td>Visual design and typography</td><td>Geologica and Golos Text with JetBrains Mono data; specimen sheet, crop marks, CMYK details</td><td class="best">Spectral serif display over a dark studio; light-table plates and one amber accent</td><td>Unbounded and Onest; porcelain, cobalt and turquoise; girih tiles drawn as vectors</td></tr>
+          <tr><td>Before/after</td><td class="best">Split at 1×, 3× and 8×, Outlines with anchor points, an 8× zoom test</td><td>Loupe with pixels on one side and vector on the other; mode flip on the crest</td><td>Three zoomed sliders; a guided demo that walks through the steps</td></tr>
+          <tr><td>Upload</td><td>Upload button and drop anywhere on the page; drop zone with samples in the workspace</td><td>Drop anywhere in the studio; floating upload and drop panel</td><td class="best">A whole first step: large drop zone, samples and tips</td></tr>
+          <tr><td>Workspace and previews</td><td class="best">Three panes, synchronized zoom and pan, five views, inspector</td><td>Full-screen canvas (largest preview), floating toolbar, filmstrip, ⌘K</td><td>Guided steps; large result viewer with download card</td></tr>
+          <tr><td>Quick vs Professional</td><td>Mode cards with cost and description; real globe comparison</td><td>Mode pill always visible at the top; crest flip on the landing page</td><td class="best">“Which mode?” chooser with a recommended result; mode step with a real example</td></tr>
+          <tr><td>Credits and history</td><td class="best">Credit pill in the header; history table with expiry; ledger with a meter</td><td>Credit counter; contact-sheet archive; ledger list</td><td>Credit dots in the header; history shelf; cobalt credit wallet</td></tr>
+          <tr><td>Mobile</td><td>Files become a strip; canvas then inspector</td><td>Floating tools reduced; info as a bottom sheet</td><td class="best">Steps suit phones; large touch targets</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="concept" aria-labelledby="ca">
+    <div class="head"><div><p class="eyebrow"><span class="key ka"></span> Concept A</p><h2 id="ca">Contour: precision light</h2></div><a class="btn" href="contour.html">Open the prototype</a></div>
+    <p>A technical specimen sheet for designers, print shops and sign makers. Light by default. Process cyan marks interaction, process magenta marks vector geometry, and a CMYK registration bar signs the footer. The workspace follows desktop design tools: files, canvas, inspector.</p>
+    <dl class="spec">
+      <div><dt>Type</dt><dd>Geologica (display), Golos Text (text), JetBrains Mono (data). All three include Cyrillic.</dd></div>
+      <div><dt>Color</dt><dd><span class="sw"><i style="background:#f4f5f3"></i><i style="background:#121519"></i><i style="background:#006aa6"></i><i style="background:#c4145a"></i><i style="background:#f2c200"></i></span></dd></div>
+      <div><dt>Signature</dt><dd>Outlines view: anchor points over the original pixels, at any zoom.</dd></div>
+    </dl>
+    <div class="plates">
+      <figure class="wide"><img src="shots/contour-landing.webp" alt="Contour landing page, light, English" loading="lazy" width="1200" height="750"><figcaption>Landing · light · EN. The crest at 3×, original pixels on the left, Vectorla SVG on the right.</figcaption></figure>
+      <figure><img src="shots/contour-landing-alt.webp" alt="Contour landing page, dark, Russian" loading="lazy" width="1200" height="750"><figcaption>Landing · dark · RU</figcaption></figure>
+      <figure><img src="shots/contour-app.webp" alt="Contour workspace" loading="lazy" width="1200" height="750"><figcaption>Workspace · split view, Professional result with measured stats and palette</figcaption></figure>
+      <figure><img src="shots/contour-app-alt.webp" alt="Contour workspace, outlines view zoomed, dark, Uzbek" loading="lazy" width="1200" height="750"><figcaption>Outlines view at 164% · dark · UZ</figcaption></figure>
+      <figure><img src="shots/contour-upload.webp" alt="Contour upload state" loading="lazy" width="1200" height="750"><figcaption>Upload state in the workspace</figcaption></figure>
+      <figure><img src="shots/contour-history.webp" alt="Contour history and credits" loading="lazy" width="1200" height="750"><figcaption>History table and credit ledger (example entries)</figcaption></figure>
+    </div>
+    <div class="phones">
+      <figure><img src="shots/contour-m-landing.webp" alt="Contour on a phone, landing, Uzbek" loading="lazy" width="585" height="1266"><figcaption>Phone · landing · UZ</figcaption></figure>
+      <figure><img src="shots/contour-m-app.webp" alt="Contour on a phone, workspace, dark, Uzbek" loading="lazy" width="585" height="1266"><figcaption>Phone · workspace · dark</figcaption></figure>
+      <figure class="full"><div class="scroller" tabindex="0" aria-label="Full Contour landing page, scrollable"><img src="shots/contour-full.webp" alt="The full Contour landing page" loading="lazy" width="720" height="3474"></div><figcaption>Full landing page (scroll inside)</figcaption></figure>
+    </div>
+    <div class="two"><div><h3 class="pro">Strengths</h3><ul><li>Proof of quality is built into the page: zoom levels, outlines, measured numbers.</li><li>Most complete tool: every action and number visible at once.</li><li>Highest contrast, conventional semantics, easy to maintain.</li></ul></div><div><h3 class="con">Trade-offs</h3><ul><li>Less dramatic than B on first impression.</li><li>The three-pane layout needs simplifying on phones (done: file strip, stacked inspector).</li></ul></div></div>
+  </section>
+
+  <section class="concept" aria-labelledby="cb">
+    <div class="head"><div><p class="eyebrow"><span class="key kb"></span> Concept B</p><h2 id="cb">Nightshift: dark studio</h2></div><a class="btn" href="nightshift.html">Open the prototype</a></div>
+    <p>A darkroom: near-black studio, artwork on lit light-table plates, one safelight amber for actions. The landing page is a stage with a loupe. The workspace is all canvas, with floating controls, a filmstrip and a ⌘K command palette for keyboard users.</p>
+    <dl class="spec">
+      <div><dt>Type</dt><dd>Spectral (display serif, italic accent), Wix Madefor Text (UI), IBM Plex Mono (data). All three include Cyrillic.</dd></div>
+      <div><dt>Color</dt><dd><span class="sw"><i style="background:#0b0c0f"></i><i style="background:#131519"></i><i style="background:#ffffff"></i><i style="background:#ffb238"></i><i style="background:#efeeeb"></i></span></dd></div>
+      <div><dt>Signature</dt><dd>The loupe: the uploaded pixels and the vector side by side under your cursor or finger.</dd></div>
+    </dl>
+    <div class="plates">
+      <figure class="wide"><img src="shots/nightshift-landing.webp" alt="Nightshift landing page, dark, English" loading="lazy" width="1200" height="750"><figcaption>Landing · dark · EN. The loupe over the photographed patch.</figcaption></figure>
+      <figure><img src="shots/nightshift-landing-alt.webp" alt="Nightshift landing page, light, Russian" loading="lazy" width="1200" height="750"><figcaption>Landing · light (“daylight”) · RU</figcaption></figure>
+      <figure><img src="shots/nightshift-app.webp" alt="Nightshift studio" loading="lazy" width="1200" height="750"><figcaption>Studio · split view, floating mode pill, info panel and toolbar</figcaption></figure>
+      <figure><img src="shots/nightshift-app-alt.webp" alt="Nightshift studio with the command palette, light, Russian" loading="lazy" width="1200" height="750"><figcaption>⌘K command palette · light · RU</figcaption></figure>
+      <figure><img src="shots/nightshift-upload.webp" alt="Nightshift upload state" loading="lazy" width="1200" height="750"><figcaption>Upload state</figcaption></figure>
+      <figure><img src="shots/nightshift-history.webp" alt="Nightshift archive and credits" loading="lazy" width="1200" height="750"><figcaption>Archive (contact sheet) and credit activity (example entries)</figcaption></figure>
+    </div>
+    <div class="phones">
+      <figure><img src="shots/nightshift-m-landing.webp" alt="Nightshift on a phone, landing, Uzbek" loading="lazy" width="585" height="1266"><figcaption>Phone · landing · UZ</figcaption></figure>
+      <figure><img src="shots/nightshift-m-app.webp" alt="Nightshift on a phone, studio, light, Uzbek" loading="lazy" width="585" height="1266"><figcaption>Phone · studio · light</figcaption></figure>
+      <figure class="full"><div class="scroller" tabindex="0" aria-label="Full Nightshift landing page, scrollable"><img src="shots/nightshift-full.webp" alt="The full Nightshift landing page" loading="lazy" width="720" height="1993"></div><figcaption>Full landing page (scroll inside)</figcaption></figure>
+    </div>
+    <div class="two"><div><h3 class="pro">Strengths</h3><ul><li>The most premium, cinematic first impression.</li><li>Largest preview: the image owns the screen.</li><li>Keyboard-first: ⌘K, zoom and pan keys.</li></ul></div><div><h3 class="con">Trade-offs</h3><ul><li>Floating panels hide stats and credits until opened, especially on phones.</li><li>Dark by default is less natural for judging print colors (the plates stay white).</li><li>The loupe needs the full original upload (534 KB here), loaded after the page.</li></ul></div></div>
+  </section>
+
+  <section class="concept" aria-labelledby="cc">
+    <div class="head"><div><p class="eyebrow"><span class="key kc"></span> Concept C</p><h2 id="cc">Naqsh: guided, crafted color</h2></div><a class="btn" href="naqsh.html">Open the prototype</a></div>
+    <p>Rishtan porcelain: white glaze, cobalt ink, turquoise and saffron. The 8-point star (khatam) and girih tiles are drawn as vector geometry, the product’s own subject. The workspace is a guided flow (Upload → Mode → Result) for print shops and people who trace a logo once a month.</p>
+    <dl class="spec">
+      <div><dt>Type</dt><dd>Unbounded (display), Onest (text). Both include Cyrillic.</dd></div>
+      <div><dt>Color</dt><dd><span class="sw"><i style="background:#f5f6fb"></i><i style="background:#0e1a3e"></i><i style="background:#1f3fc2"></i><i style="background:#096b74"></i><i style="background:#f0a500"></i></span></dd></div>
+      <div><dt>Signature</dt><dd>The “Which mode?” chooser, and a workspace that never leaves you guessing about the next step.</dd></div>
+    </dl>
+    <div class="plates">
+      <figure class="wide"><img src="shots/naqsh-landing.webp" alt="Naqsh landing page, light, English" loading="lazy" width="1200" height="750"><figcaption>Landing · light · EN. A guided demo with the low-quality JPEG logo at step three.</figcaption></figure>
+      <figure><img src="shots/naqsh-landing-alt.webp" alt="Naqsh landing page, dark, Russian" loading="lazy" width="1200" height="750"><figcaption>Landing · dark · RU</figcaption></figure>
+      <figure><img src="shots/naqsh-app.webp" alt="Naqsh workspace result step" loading="lazy" width="1200" height="750"><figcaption>Workspace · step 3, result with download card</figcaption></figure>
+      <figure><img src="shots/naqsh-app-alt.webp" alt="Naqsh workspace mode step, dark, Russian" loading="lazy" width="1200" height="750"><figcaption>Step 2, choose the mode · dark · RU</figcaption></figure>
+      <figure><img src="shots/naqsh-upload.webp" alt="Naqsh upload step" loading="lazy" width="1200" height="750"><figcaption>Step 1, upload with samples and tips</figcaption></figure>
+      <figure><img src="shots/naqsh-history.webp" alt="Naqsh history and credit wallet" loading="lazy" width="1200" height="750"><figcaption>History shelf and credit wallet (example entries)</figcaption></figure>
+    </div>
+    <div class="phones">
+      <figure><img src="shots/naqsh-m-landing.webp" alt="Naqsh on a phone, landing, Uzbek" loading="lazy" width="585" height="1266"><figcaption>Phone · landing · UZ</figcaption></figure>
+      <figure><img src="shots/naqsh-m-app.webp" alt="Naqsh on a phone, workspace, dark, Uzbek" loading="lazy" width="585" height="1266"><figcaption>Phone · workspace · dark</figcaption></figure>
+      <figure class="full"><div class="scroller" tabindex="0" aria-label="Full Naqsh landing page, scrollable"><img src="shots/naqsh-full.webp" alt="The full Naqsh landing page" loading="lazy" width="720" height="2495"></div><figcaption>Full landing page (scroll inside)</figcaption></figure>
+    </div>
+    <div class="two"><div><h3 class="pro">Strengths</h3><ul><li>The clearest path for first-time and occasional users.</li><li>A distinctive identity rooted in Uzbekistan, without stereotypes.</li><li>Best on phones.</li></ul></div><div><h3 class="con">Trade-offs</h3><ul><li>Heavier steps for professionals who trace in bulk.</li><li>A strong color identity is harder to keep restrained across a growing product.</li></ul></div></div>
+  </section>
+
+  <section aria-labelledby="refs">
+    <h2 id="refs">Patterns studied, not copied</h2>
+    <div class="two">
+      <div><h3>Vectorizer.AI</h3><p class="note">A zoomable result preview with single and side-by-side views and pan, and a format choice at download (<a href="https://vectorizer.ai/">vectorizer.ai</a>; the site was not reachable from this environment, so this comes from its public descriptions). Used: synchronized zoom and pan across split and side-by-side views; the result is always inspectable before download.</p></div>
+      <div><h3>Adobe Illustrator, Image Trace</h3><p class="note">View modes: tracing result, outlines, outlines with source, source image. Used: the Outlines view (paths and anchor points over the original) and the Original view, so users can judge how closely curves follow the source.</p></div>
+      <div><h3>Figma</h3><p class="note">The canvas comes first, with minimal floating toolbars and properties in a side panel. Used: A’s inspector, B’s floating toolbar and canvas, pinch and scroll zoom.</p></div>
+      <div><h3>Linear</h3><p class="note">A command menu, keyboard-first work and restrained color. Used: B’s ⌘K palette, keyboard zoom and pan on every canvas, one accent per concept.</p></div>
+    </div>
+    <p class="note">No logos, layouts, copy or color schemes were taken from these products.</p>
+  </section>
+
+  <section aria-labelledby="honest">
+    <h2 id="honest">What is real</h2>
+    <ul>
+      <li><b>Every result image</b> is a Vectorla trace made by the production pipeline at commit b548a69, in both modes, from nine samples: Vectorla benchmark test designs, Microsoft Fluent Emoji (MIT license) and scikit-image sample photos (CC0). The customer emblem from the engine rounds is not used: it is licensed for benchmarking only. Regenerate with <code>design/concepts/tools/trace-samples.ts</code>.</li>
+      <li><b>Every number</b> (shapes, colors, gradients, SVG size, trace time) is measured from those traces on the benchmark machine.</li>
+      <li><b>Product facts</b> match the backend: Quick 1 credit, Professional 2, 10 free credits, PNG/JPG/WebP up to 5 MB, SVG output, deletion after 30 days, automatic refunds, and switching modes refunds the earlier trace. Paid plans are shown as “coming soon”, with no prices.</li>
+      <li><b>Example data</b>: the history and credit ledger use the real traces, but their dates and the balance (2 of 10) are illustrative and labeled as example entries. There are no testimonials, ratings, customer logos or usage claims.</li>
+      <li><b>Prototype uploads</b> stay in the browser tab and are never sent anywhere. The page says so and offers samples instead.</li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="qa">
+    <h2 id="qa">Checks</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Check</th><th>Result</th></tr></thead>
+        <tbody>
+          <tr><td>Accessibility</td><td>axe-core, WCAG 2.1 A/AA rules: 0 violations on all 18 views (3 concepts × landing, workspace, history × light, dark). Keyboard: compare sliders, canvas zoom and pan, mode controls, command palette. Reduced motion respected.</td></tr>
+          <tr><td>Mobile layout</td><td>No horizontal overflow at 375 px in any of the 27 combinations (3 concepts × 3 languages × 3 views).</td></tr>
+          <tr><td>Languages and themes</td><td>All pages in EN, UZ (Latin, with o‘ and g‘) and RU, in light and dark; language and theme switch without reloading.</td></tr>
+          <tr><td>First-load weight</td><td>Page code 17–19 KB gzip plus 15 KB of shared scripts; hero media A 100 KB, B 56 KB (the loupe’s 534 KB original loads after the page), C 20 KB; web fonts 84–120 KB. Everything below the first screen is lazy-loaded.</td></tr>
+          <tr><td>Errors</td><td>No console errors or failed requests across 27 screenshot runs.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="next">
+    <h2 id="next">After your choice</h2>
+    <ul>
+      <li>Pick A, B or C, or one of them with named borrowings (for example, “A with B’s loupe”).</li>
+      <li>The chosen concept is then rebuilt in the React and Tailwind app (<code>src/</code>), wired to the real API: uploads, jobs, credits (<code>/api/v1/credits</code>) and history (<code>/api/v1/history</code>), with the same EN/UZ/RU strings.</li>
+      <li>Staging keeps the current design until you approve the rebuilt version; production is not touched.</li>
+    </ul>
+  </section>
+</div>
+</body>
+</html>

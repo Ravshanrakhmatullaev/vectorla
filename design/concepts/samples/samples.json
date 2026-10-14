@@ -1,0 +1,272 @@
+[
+  {
+    "id": "summit-logo",
+    "case": "real/logo-complex@512jpgq40",
+    "credit": "Vectorla benchmark test design",
+    "source": {
+      "file": "source.jpg",
+      "width": 512,
+      "height": 512,
+      "bytes": 11315,
+      "format": "jpeg"
+    },
+    "quick": {
+      "ms": 1693,
+      "bytes": 35368,
+      "paths": 103,
+      "segments": 1464,
+      "curves": 868,
+      "colors": 7,
+      "gradients": 0
+    },
+    "professional": {
+      "ms": 2176,
+      "bytes": 28077,
+      "paths": 72,
+      "segments": 1215,
+      "curves": 868,
+      "colors": 7,
+      "gradients": 0
+    }
+  },
+  {
+    "id": "alpine-patch",
+    "case": "emblem-photo/patch-mountain@1200jpgq90blur0.6n7",
+    "credit": "Vectorla benchmark test design",
+    "source": {
+      "file": "source.jpg",
+      "width": 1200,
+      "height": 1200,
+      "bytes": 546849,
+      "format": "jpeg"
+    },
+    "quick": {
+      "ms": 5785,
+      "bytes": 175798,
+      "paths": 383,
+      "segments": 6559,
+      "curves": 4884,
+      "colors": 18,
+      "gradients": 0
+    },
+    "professional": {
+      "ms": 5635,
+      "bytes": 220665,
+      "paths": 798,
+      "segments": 8679,
+      "curves": 4355,
+      "colors": 32,
+      "gradients": 1
+    }
+  },
+  {
+    "id": "crest",
+    "case": "emblem/crest-gold@1200jpgq85",
+    "credit": "Vectorla benchmark test design",
+    "source": {
+      "file": "source.jpg",
+      "width": 1200,
+      "height": 1200,
+      "bytes": 75457,
+      "format": "jpeg"
+    },
+    "quick": {
+      "ms": 3182,
+      "bytes": 150703,
+      "paths": 326,
+      "segments": 5567,
+      "curves": 2998,
+      "colors": 26,
+      "gradients": 0
+    },
+    "professional": {
+      "ms": 4251,
+      "bytes": 105640,
+      "paths": 296,
+      "segments": 3889,
+      "curves": 1675,
+      "colors": 46,
+      "gradients": 13
+    }
+  },
+  {
+    "id": "rocket",
+    "case": "real/emoji3d-rocket@256",
+    "credit": "Microsoft Fluent Emoji (MIT)",
+    "source": {
+      "file": "source.png",
+      "width": 256,
+      "height": 256,
+      "bytes": 41483,
+      "format": "png"
+    },
+    "quick": {
+      "ms": 868,
+      "bytes": 49251,
+      "paths": 44,
+      "segments": 1757,
+      "curves": 1218,
+      "colors": 26,
+      "gradients": 0
+    },
+    "professional": {
+      "ms": 1190,
+      "bytes": 44925,
+      "paths": 42,
+      "segments": 1515,
+      "curves": 1049,
+      "colors": 22,
+      "gradients": 7
+    }
+  },
+  {
+    "id": "globe",
+    "case": "real/emoji3d-globe@256",
+    "credit": "Microsoft Fluent Emoji (MIT)",
+    "source": {
+      "file": "source.png",
+      "width": 256,
+      "height": 256,
+      "bytes": 48427,
+      "format": "png"
+    },
+    "quick": {
+      "ms": 821,
+      "bytes": 54411,
+      "paths": 38,
+      "segments": 1935,
+      "curves": 1522,
+      "colors": 11,
+      "gradients": 0
+    },
+    "professional": {
+      "ms": 1780,
+      "bytes": 49157,
+      "paths": 34,
+      "segments": 1680,
+      "curves": 1270,
+      "colors": 12,
+      "gradients": 4
+    }
+  },
+  {
+    "id": "horse",
+    "case": "real/scan-horse@original",
+    "credit": "scikit-image sample data, Andreas Preuss (CC0)",
+    "source": {
+      "file": "source.png",
+      "width": 400,
+      "height": 328,
+      "bytes": 6349,
+      "format": "png"
+    },
+    "quick": {
+      "ms": 916,
+      "bytes": 3710,
+      "paths": 3,
+      "segments": 147,
+      "curves": 113,
+      "colors": 2,
+      "gradients": 0
+    },
+    "professional": {
+      "ms": 1118,
+      "bytes": 3710,
+      "paths": 3,
+      "segments": 147,
+      "curves": 113,
+      "colors": 2,
+      "gradients": 0
+    }
+  },
+  {
+    "id": "coffee",
+    "case": "real/photo-coffee@original",
+    "credit": "scikit-image sample data, Rachel Michetti (CC0)",
+    "source": {
+      "file": "source.jpg",
+      "width": 600,
+      "height": 400,
+      "bytes": 72326,
+      "format": "jpeg"
+    },
+    "quick": {
+      "ms": 2862,
+      "bytes": 746824,
+      "paths": 1889,
+      "segments": 29883,
+      "curves": 15536,
+      "colors": 28,
+      "gradients": 0
+    },
+    "professional": {
+      "ms": 3695,
+      "bytes": 852219,
+      "paths": 2111,
+      "segments": 33582,
+      "curves": 17008,
+      "colors": 65,
+      "gradients": 17
+    }
+  },
+  {
+    "id": "ornament",
+    "case": "real/ornament@512",
+    "credit": "Vectorla benchmark test design",
+    "source": {
+      "file": "source.png",
+      "width": 512,
+      "height": 512,
+      "bytes": 69733,
+      "format": "png"
+    },
+    "quick": {
+      "ms": 931,
+      "bytes": 8593,
+      "paths": 63,
+      "segments": 272,
+      "curves": 246,
+      "colors": 3,
+      "gradients": 0
+    },
+    "professional": {
+      "ms": 1288,
+      "bytes": 8593,
+      "paths": 63,
+      "segments": 272,
+      "curves": 246,
+      "colors": 3,
+      "gradients": 0
+    }
+  },
+  {
+    "id": "wordmark",
+    "case": "core/wordmark@768jpg",
+    "credit": "Vectorla benchmark test design",
+    "source": {
+      "file": "source.jpg",
+      "width": 768,
+      "height": 256,
+      "bytes": 9944,
+      "format": "jpeg"
+    },
+    "quick": {
+      "ms": 1082,
+      "bytes": 7015,
+      "paths": 31,
+      "segments": 336,
+      "curves": 250,
+      "colors": 3,
+      "gradients": 0
+    },
+    "professional": {
+      "ms": 1884,
+      "bytes": 7659,
+      "paths": 31,
+      "segments": 391,
+      "curves": 274,
+      "colors": 3,
+      "gradients": 0
+    }
+  }
+]

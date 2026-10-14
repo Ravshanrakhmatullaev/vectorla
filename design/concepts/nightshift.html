@@ -1,0 +1,903 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vectorla · Nightshift</title>
+<meta name="description" content="Vectorla design concept B: Nightshift. A dark, canvas-first studio with a loupe, floating tools and a command palette.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,300;0,400;1,300&family=Wix+Madefor+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Nightshift: a darkroom. Near-black studio, artwork on lit light-table panels,
+   one safelight amber for actions. Serif display for the voice, plain sans for
+   the tools. Dark first; "daylight" is the light theme. */
+:root {
+  --bg: #0b0c0f;
+  --surface: #131519;
+  --raise: #1a1d23;
+  --float: rgba(24, 27, 33, 0.82);
+  --line: #272b33;
+  --line-2: #363b45;
+  --fg: #eeeef0;
+  --fg-2: #a6abb5;
+  --fg-3: #858b96;
+  --amber: #ffb238;
+  --amber-ink: #1d1203;
+  --amber-soft: rgba(255, 178, 56, 0.13);
+  --table: #ffffff;
+  --table-glow: rgba(255, 236, 200, 0.16);
+  --ok: #5ad19a;
+  --bad: #ff8b7f;
+  --shadow: 0 20px 60px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.4);
+  --serif: "Spectral", Georgia, "Times New Roman", serif;
+  --sans: "Wix Madefor Text", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  --bg: #efeeeb; --surface: #ffffff; --raise: #f6f5f2; --float: rgba(255, 255, 255, 0.86); --line: #dcdad5; --line-2: #c9c6bf;
+  --fg: #121316; --fg-2: #50545c; --fg-3: #5f636b; --amber: #a65e00; --amber-ink: #ffffff; --amber-soft: rgba(166, 94, 0, 0.1);
+  --table: #ffffff; --table-glow: rgba(166, 94, 0, 0.08); --ok: #1b7a4b; --bad: #b3261e;
+  --shadow: 0 18px 50px rgba(20, 18, 14, 0.14), 0 2px 6px rgba(20, 18, 14, 0.08); color-scheme: light;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --bg: #efeeeb; --surface: #ffffff; --raise: #f6f5f2; --float: rgba(255, 255, 255, 0.86); --line: #dcdad5; --line-2: #c9c6bf;
+    --fg: #121316; --fg-2: #50545c; --fg-3: #5f636b; --amber: #a65e00; --amber-ink: #ffffff; --amber-soft: rgba(166, 94, 0, 0.1);
+    --table: #ffffff; --table-glow: rgba(166, 94, 0, 0.08); --ok: #1b7a4b; --bad: #b3261e;
+    --shadow: 0 18px 50px rgba(20, 18, 14, 0.14), 0 2px 6px rgba(20, 18, 14, 0.08); color-scheme: light;
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-padding-top: 80px; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 400 16px/1.55 var(--sans); -webkit-font-smoothing: antialiased; }
+img, svg { display: block; max-width: 100%; }
+img { height: auto; }
+button, input { font: inherit; color: inherit; }
+a { color: inherit; }
+[hidden] { display: none !important; }
+:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.skip { position: absolute; left: -9999px; top: 12px; z-index: 100; background: var(--surface); padding: 10px 14px; border-radius: 8px; }
+.skip:focus { left: 16px; }
+.i { width: 20px; height: 20px; flex: none; }
+.i-sm { width: 16px; height: 16px; flex: none; }
+.wrap { max-width: 1280px; margin: 0 auto; padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+p { margin: 0; }
+.display { font-family: var(--serif); font-weight: 300; letter-spacing: -0.02em; line-height: 1.02; }
+.display em { font-style: italic; color: var(--amber); }
+.label { font: 500 11.5px/1.3 var(--mono); text-transform: uppercase; letter-spacing: 0.16em; color: var(--fg-3); }
+.mono { font-family: var(--mono); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.muted { color: var(--fg-2); }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px; border: 1px solid var(--line-2); background: transparent; font-weight: 500; font-size: 15px; text-decoration: none; cursor: pointer; white-space: nowrap; transition: background 0.15s, border-color 0.15s; }
+.btn:hover { border-color: var(--fg-3); background: color-mix(in srgb, var(--fg) 6%, transparent); }
+.btn-amber { background: var(--amber); border-color: var(--amber); color: var(--amber-ink); font-weight: 600; }
+.btn-amber:hover { background: color-mix(in srgb, var(--amber) 88%, #fff); border-color: transparent; }
+.btn-lg { min-height: 52px; padding: 0 26px; font-size: 16px; }
+.ibtn { width: 40px; height: 40px; display: inline-grid; place-items: center; border-radius: 999px; border: 0; background: transparent; cursor: pointer; color: var(--fg-2); }
+.ibtn:hover { background: color-mix(in srgb, var(--fg) 9%, transparent); color: var(--fg); }
+.ibtn[aria-pressed="true"] { background: var(--amber-soft); color: var(--amber); }
+.ibtn .i-moon { display: none; }
+[data-theme-toggle][aria-pressed="true"] .i-sun { display: none; }
+[data-theme-toggle][aria-pressed="true"] .i-moon { display: block; }
+.langs { display: inline-flex; gap: 2px; }
+.langs button { border: 0; background: none; min-height: 32px; min-width: 34px; border-radius: 999px; cursor: pointer; font: 500 12px var(--mono); color: var(--fg-3); letter-spacing: 0.06em; }
+.langs button[aria-pressed="true"] { color: var(--fg); background: color-mix(in srgb, var(--fg) 10%, transparent); }
+
+/* Header over the stage */
+.top { position: absolute; top: env(safe-area-inset-top, 0px); left: 0; right: 0; z-index: 20; }
+.top .wrap { display: flex; align-items: center; gap: 28px; min-height: 72px; }
+.brand { display: inline-flex; align-items: center; gap: 10px; font: 600 18px var(--sans); text-decoration: none; letter-spacing: -0.01em; }
+.brand svg { width: 26px; height: 26px; flex: none; color: var(--amber); }
+@media (max-width: 480px) { .top .wrap { gap: 12px; } .top .btn-amber { padding: 0 14px; } }
+.nav { display: flex; gap: 26px; }
+.nav a { text-decoration: none; color: var(--fg-2); font-size: 15px; }
+.nav a:hover { color: var(--fg); }
+.top-r { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+@media (max-width: 900px) { .nav, .top-r .hide-m { display: none; } }
+
+/* Hero stage with the loupe */
+.stage { position: relative; min-height: min(92vh, 900px); display: grid; align-items: end; overflow: hidden; padding: 110px 0 56px; background: radial-gradient(60% 55% at 68% 42%, var(--table-glow), transparent 70%), var(--bg); }
+.stage-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 48px; align-items: center; width: 100%; }
+.stage h1 { font-size: clamp(48px, 7vw, 104px); }
+.stage .lede { margin: 26px 0 34px; font-size: 18.5px; color: var(--fg-2); max-width: 42ch; }
+.stage .ctas { display: flex; gap: 12px; flex-wrap: wrap; }
+.stage .meta { margin-top: 30px; display: flex; gap: 22px; flex-wrap: wrap; }
+.stage .meta span { display: inline-flex; gap: 8px; align-items: center; font: 500 12.5px var(--mono); color: var(--fg-2); }
+.upload-error { margin-top: 14px; color: var(--bad); font-size: 14px; display: flex; gap: 8px; align-items: center; }
+.table { position: relative; justify-self: center; width: min(100%, 640px); aspect-ratio: 1; background: var(--table); border-radius: 6px; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 40px 120px rgba(255, 220, 160, 0.10), var(--shadow); touch-action: none; cursor: none; }
+.table .art { position: absolute; inset: 5%; width: 90%; height: 90%; }
+.loupe { position: absolute; width: var(--L, 260px); height: var(--L, 260px); left: calc(var(--x) * 100% - var(--L, 260px) / 2); top: calc(var(--y) * 100% - var(--L, 260px) / 2); border-radius: 50%; overflow: hidden; background: #fff; box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.9), 0 0 0 7px rgba(10, 10, 12, 0.85), 0 0 0 8px var(--amber), 0 30px 60px rgba(0, 0, 0, 0.5); cursor: none; }
+.loupe .half { position: absolute; inset: 0; }
+.loupe .half img { position: absolute; max-width: none; width: calc(0.9 * var(--TW) * var(--M)); height: auto; left: calc(var(--L, 260px) / 2 - (var(--x) - 0.05) * var(--TW) * var(--M)); top: calc(var(--L, 260px) / 2 - (var(--y) - 0.05) * var(--TW) * var(--M)); }
+.loupe .src { clip-path: inset(0 50% 0 0); }
+.loupe .src img { image-rendering: pixelated; }
+.loupe .vec { clip-path: inset(0 0 0 50%); }
+.loupe::after { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 1.5px; margin-left: -0.75px; background: var(--amber); }
+.lens-tag { position: absolute; bottom: 22px; font: 600 10.5px var(--mono); letter-spacing: 0.12em; padding: 3px 7px; border-radius: 99px; background: rgba(10, 10, 12, 0.78); color: #fff; z-index: 2; }
+.lens-tag.l { right: calc(50% + 8px); }
+.lens-tag.r { left: calc(50% + 8px); color: var(--amber); }
+.loupe:focus-visible { outline: 3px solid var(--amber); outline-offset: 10px; }
+.table-cap { position: absolute; left: 0; right: 0; bottom: -40px; display: flex; justify-content: space-between; gap: 12px; color: var(--fg-3); }
+@media (max-width: 1000px) {
+  .stage-grid { grid-template-columns: minmax(0, 1fr); gap: 72px; }
+  .stage { padding-top: 96px; padding-bottom: 80px; }
+  .table { --L: 190px; }
+}
+
+/* Sections */
+.sec { padding: 112px 0; }
+.sec-h { display: flex; justify-content: space-between; align-items: end; gap: 32px; flex-wrap: wrap; margin-bottom: 44px; }
+.sec-h h2 { font-size: clamp(36px, 4.6vw, 64px); margin-top: 12px; }
+.sec-h p { max-width: 46ch; color: var(--fg-2); font-size: 17px; }
+.strip { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(250px, 1fr); gap: 16px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 12px; }
+.frame { scroll-snap-align: start; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: grid; gap: 12px; }
+.frame .plate { position: relative; aspect-ratio: 1; background: var(--table); border-radius: 4px; overflow: hidden; }
+.frame .plate img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; padding: 12px; transition: opacity 0.25s; }
+.frame .plate .s { opacity: 0; }
+.frame:hover .plate .s, .frame:focus-within .plate .s { opacity: 1; }
+.frame:hover .plate .v, .frame:focus-within .plate .v { opacity: 0; }
+.frame .no { position: absolute; top: 8px; left: 10px; font: 600 10.5px var(--mono); letter-spacing: 0.14em; color: #8a5a00; z-index: 2; }
+.frame .peek { position: absolute; top: 8px; right: 10px; z-index: 2; font: 500 10.5px var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: #555; }
+.frame .cap { display: grid; gap: 4px; padding: 0 4px 4px; }
+.frame .cap b { font-weight: 500; }
+.frame a { display: block; text-decoration: none; border-radius: 6px; }
+.note-line { margin-top: 20px; font-size: 13px; color: var(--fg-3); max-width: 90ch; }
+
+.flip { display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); gap: 40px; align-items: center; }
+.flip .plate { position: relative; aspect-ratio: 1; background: var(--table); border-radius: 8px; box-shadow: var(--shadow); overflow: hidden; }
+.flip .plate img { position: absolute; inset: 6%; width: 88%; height: 88%; transition: opacity 0.35s; }
+.switch { display: inline-grid; grid-template-columns: 1fr 1fr; padding: 4px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); position: relative; }
+.switch button { position: relative; z-index: 1; border: 0; background: none; min-height: 44px; padding: 0 20px; border-radius: 999px; cursor: pointer; font-weight: 500; color: var(--fg-2); display: inline-flex; align-items: center; gap: 8px; justify-content: center; }
+.switch button[aria-pressed="true"] { color: var(--amber-ink); background: var(--amber); }
+.facts { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin: 28px 0 18px; }
+.facts div { background: var(--surface); padding: 16px 18px; display: grid; gap: 2px; }
+.facts b { font: 300 40px/1.05 var(--serif); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+@media (max-width: 900px) { .flip { grid-template-columns: minmax(0, 1fr); } }
+
+.price-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.price-row > div { padding: 30px; display: grid; gap: 14px; align-content: start; background: var(--surface); }
+.price-row > div + div { border-left: 1px solid var(--line); }
+.price-row .big { font: 300 72px/1 var(--serif); letter-spacing: -0.03em; }
+.price-row ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 9px; color: var(--fg-2); }
+.price-row li { display: flex; gap: 10px; }
+.price-row li svg { color: var(--amber); margin-top: 3px; }
+@media (max-width: 900px) { .price-row { grid-template-columns: 1fr; } .price-row > div + div { border-left: 0; border-top: 1px solid var(--line); } }
+.faq { display: grid; gap: 10px; max-width: 860px; }
+.faq details { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.faq summary { cursor: pointer; padding: 18px 22px; list-style: none; font-weight: 500; font-size: 17px; display: flex; justify-content: space-between; gap: 12px; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: "+"; color: var(--amber); font: 400 20px var(--mono); }
+.faq details[open] summary::after { content: "−"; }
+.faq p { padding: 0 22px 20px; color: var(--fg-2); }
+footer.foot { border-top: 1px solid var(--line); padding: 40px 0; }
+footer .wrap { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; align-items: center; }
+footer nav { display: flex; gap: 18px; flex-wrap: wrap; }
+footer a { color: var(--fg-2); text-decoration: none; font-size: 14px; }
+
+/* ---------- Studio (workspace) ---------- */
+.studio { position: fixed; inset: 0; background: var(--bg); overflow: hidden; }
+.studio .canvas { position: absolute; inset: 0; display: flex; background: radial-gradient(55% 60% at 50% 50%, var(--table-glow), transparent 75%), var(--bg); }
+.vp { position: relative; flex: 1; overflow: hidden; cursor: grab; touch-action: none; outline-offset: -4px; }
+.vp.is-panning { cursor: grabbing; }
+.vp + .vp { border-left: 1px solid var(--line); }
+.stage-content { position: absolute; left: 0; top: 0; background: var(--table); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 30px 90px rgba(0, 0, 0, 0.5); }
+.stage-content > img, .stage-content > .layer { position: absolute; inset: 0; width: 100%; height: 100%; }
+.vp.is-pixels .before { image-rendering: pixelated; }
+.stage-content .after { clip-path: inset(0 0 0 var(--pos, 50%)); }
+.handle { position: absolute; top: 0; bottom: 0; left: var(--pos, 50%); width: 28px; margin-left: -14px; cursor: ew-resize; }
+.handle::before { content: ""; position: absolute; left: 13px; top: 0; bottom: 0; width: 2px; background: var(--amber); }
+.handle::after { content: ""; position: absolute; top: 50%; left: 50%; width: 30px; height: 30px; transform: translate(-50%, -50%); border-radius: 50%; background: var(--amber); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4); }
+.stage-content:has(input:focus-visible) .handle::after { outline: 3px solid var(--fg); outline-offset: 3px; }
+.outline-layer svg { width: 100%; height: 100%; }
+.outline-layer path { fill: none !important; stroke: #d0347a; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.outline-layer path[fill="none"] { display: none; }
+.outline-layer .anchors { stroke: #0a84c8; stroke-width: 4; stroke-linecap: square; }
+.canvas[data-vmode="split"] .vp-b, .canvas[data-vmode="vector"] .vp-b, .canvas[data-vmode="outline"] .vp-b, .canvas[data-vmode="original"] .vp-b { display: none; }
+.canvas[data-vmode="side"] .vp-a .after, .canvas[data-vmode="side"] .vp-a .handle { display: none; }
+.canvas[data-vmode="vector"] .vp-a .before, .canvas[data-vmode="vector"] .vp-a .handle { display: none; }
+.canvas[data-vmode="vector"] .vp-a .after { clip-path: none; }
+.canvas[data-vmode="original"] .vp-a .after, .canvas[data-vmode="original"] .vp-a .handle { display: none; }
+.canvas[data-vmode="outline"] .vp-a .after, .canvas[data-vmode="outline"] .vp-a .handle { display: none; }
+.canvas[data-vmode="outline"] .vp-a .before { opacity: 0.3; }
+.canvas:not([data-vmode="outline"]) .outline-layer { display: none; }
+
+.float { position: absolute; z-index: 10; display: flex; align-items: center; gap: 4px; padding: 5px; border-radius: 999px; background: var(--float); border: 1px solid var(--line); backdrop-filter: blur(16px) saturate(1.3); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); }
+.f-tl { top: max(14px, env(safe-area-inset-top, 0px)); left: max(14px, env(safe-area-inset-left, 0px)); padding-right: 14px; }
+.f-tc { top: max(14px, env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); }
+.f-tr { top: max(14px, env(safe-area-inset-top, 0px)); right: max(14px, env(safe-area-inset-right, 0px)); }
+.f-bc { bottom: max(18px, env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); padding: 6px; }
+.f-tl .brand svg { width: 24px; height: 24px; }
+.file-btn { display: inline-flex; align-items: center; gap: 8px; border: 0; background: none; cursor: pointer; min-height: 32px; padding: 0 8px; border-radius: 999px; font-weight: 500; max-width: 240px; }
+.file-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-btn:hover { background: color-mix(in srgb, var(--fg) 8%, transparent); }
+.sep { width: 1px; height: 24px; background: var(--line-2); margin: 0 4px; }
+.modepill button { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 14px; border: 0; border-radius: 999px; background: none; cursor: pointer; color: var(--fg-2); font-weight: 500; font-size: 14px; white-space: nowrap; }
+.modepill button .c { font: 500 11.5px var(--mono); opacity: 0.8; }
+.modepill button[aria-pressed="true"] { background: var(--amber); color: var(--amber-ink); }
+.credits { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 12px; border-radius: 999px; text-decoration: none; font: 500 13px var(--mono); }
+.credits:hover { background: color-mix(in srgb, var(--fg) 8%, transparent); }
+.credits i { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 10px var(--amber); }
+.zoomval { min-width: 52px; text-align: center; font: 500 12.5px var(--mono); }
+.dl { min-height: 40px; }
+.tip { position: relative; }
+.tip[data-tip]:hover::after, .tip[data-tip]:focus-visible::after { content: attr(data-tip); position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%); white-space: nowrap; padding: 5px 9px; border-radius: 6px; background: var(--fg); color: var(--bg); font: 500 12px var(--sans); pointer-events: none; }
+.info { position: absolute; z-index: 9; right: max(14px, env(safe-area-inset-right, 0px)); top: 76px; width: 300px; max-height: calc(100% - 170px); overflow: auto; border-radius: 16px; background: var(--float); border: 1px solid var(--line); backdrop-filter: blur(16px) saturate(1.3); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); padding: 18px; display: grid; gap: 16px; }
+.info h2 { font: 300 26px/1.1 var(--serif); letter-spacing: -0.01em; }
+.kgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; margin: 0; }
+.kgrid div { display: grid; gap: 2px; }
+.kgrid dt { font: 500 10.5px var(--mono); text-transform: uppercase; letter-spacing: 0.12em; color: var(--fg-3); }
+.kgrid dd { margin: 0; font: 300 26px/1.1 var(--serif); font-variant-numeric: tabular-nums; }
+.sw { display: flex; flex-wrap: wrap; gap: 5px; }
+.sw span { width: 22px; height: 22px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18); }
+.info .note { font-size: 12.5px; color: var(--fg-3); }
+.info .alert { display: flex; gap: 10px; font-size: 13px; color: var(--fg-2); padding: 12px; border-radius: 12px; background: var(--amber-soft); }
+.info .alert svg { color: var(--amber); }
+.states { display: flex; flex-wrap: wrap; gap: 6px; }
+.states button { border: 1px dashed var(--line-2); background: none; border-radius: 999px; min-height: 28px; padding: 0 10px; font: 500 11.5px var(--mono); color: var(--fg-2); cursor: pointer; }
+.states button[aria-pressed="true"] { border-style: solid; border-color: var(--amber); color: var(--amber); }
+.film { position: absolute; z-index: 9; left: 50%; transform: translateX(-50%); bottom: 86px; display: flex; gap: 8px; padding: 8px; border-radius: 16px; background: var(--float); border: 1px solid var(--line); backdrop-filter: blur(16px); max-width: calc(100% - 28px); overflow-x: auto; }
+.film button { flex: none; width: 64px; height: 64px; padding: 5px; border-radius: 10px; border: 2px solid transparent; background: var(--table); cursor: pointer; }
+.film button[aria-current="true"] { border-color: var(--amber); }
+.film img { width: 100%; height: 100%; object-fit: contain; }
+.studio-overlay { position: absolute; inset: 0; z-index: 8; display: grid; place-items: center; padding: 24px; background: color-mix(in srgb, var(--bg) 70%, transparent); }
+.studio-overlay .card { width: min(420px, 100%); padding: 26px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); display: grid; gap: 14px; }
+.studio-overlay h3 { font: 300 30px/1.1 var(--serif); }
+.dev { height: 6px; border-radius: 99px; background: var(--raise); overflow: hidden; }
+.dev i { display: block; height: 100%; width: 40%; border-radius: 99px; background: linear-gradient(90deg, transparent, var(--amber), transparent); animation: dev 1.4s ease-in-out infinite; }
+@keyframes dev { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+.droparea { width: min(560px, 100%); padding: 40px 28px; border-radius: 22px; border: 1.5px dashed var(--line-2); background: var(--surface); display: grid; justify-items: center; gap: 12px; text-align: center; }
+.droparea.is-over { border-color: var(--amber); background: var(--amber-soft); }
+.droparea h3 { font: 300 34px/1.1 var(--serif); }
+.droparea .ss { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.droparea .ss button { width: 60px; height: 60px; padding: 5px; border-radius: 10px; border: 1px solid var(--line); background: var(--table); cursor: pointer; }
+.drop-overlay { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: color-mix(in srgb, var(--bg) 75%, transparent); border: 2px dashed var(--amber); font: 300 40px var(--serif); pointer-events: none; }
+
+/* Command palette */
+.palette-scrim { position: fixed; inset: 0; z-index: 70; background: rgba(0, 0, 0, 0.45); display: grid; justify-items: center; align-items: start; padding: 12vh 16px 16px; }
+.palette { width: min(560px, 100%); border-radius: 16px; background: var(--surface); border: 1px solid var(--line-2); box-shadow: var(--shadow); overflow: hidden; }
+.palette .q { display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.palette input { flex: 1; border: 0; background: none; min-height: 54px; font-size: 16px; outline: none; }
+.palette ul { list-style: none; margin: 0; padding: 6px; max-height: 50vh; overflow: auto; }
+.palette li { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; cursor: pointer; color: var(--fg-2); }
+.palette li[aria-selected="true"] { background: var(--amber-soft); color: var(--fg); }
+.palette li kbd { margin-left: auto; font: 500 11.5px var(--mono); color: var(--fg-3); }
+kbd.k { font: 500 11.5px var(--mono); padding: 2px 6px; border-radius: 6px; border: 1px solid var(--line-2); color: var(--fg-2); }
+
+@media (max-width: 860px) {
+  .f-tc { top: 70px; }
+  .f-tl .file-btn { max-width: 130px; }
+  .f-tr .hide-s, .f-bc .hide-s { display: none; }
+  .info { top: auto; bottom: 86px; left: 14px; right: 14px; width: auto; max-height: 46vh; }
+  .modepill button { padding: 0 12px; }
+  .modepill .long { display: none; }
+  .f-bc { max-width: calc(100% - 20px); overflow-x: auto; }
+  .film { bottom: 150px; }
+}
+@media (min-width: 861px) { .modepill .short { display: none; } }
+
+/* ---------- Archive (history) ---------- */
+.archive { min-height: 100vh; padding: 0 0 80px; }
+.arch-top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10; background: color-mix(in srgb, var(--bg) 85%, transparent); backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
+.arch-top .wrap { display: flex; align-items: center; gap: 16px; min-height: 64px; }
+.arch-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; align-items: end; padding: 48px 0 28px; }
+.arch-head h1 { font-size: clamp(44px, 6vw, 80px); }
+.bal { display: flex; gap: 22px; align-items: end; padding: 18px 22px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); }
+.bal .n { font: 300 64px/0.9 var(--serif); color: var(--amber); }
+.tabs { display: flex; gap: 4px; margin-bottom: 22px; flex-wrap: wrap; }
+.tabs button { min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line); background: none; cursor: pointer; color: var(--fg-2); font-size: 14px; }
+.tabs button[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.contact { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; }
+.ex-note { display: flex; gap: 10px; align-items: center; font-size: 13.5px; color: var(--fg-2); margin-bottom: 18px; }
+.ledger { margin-top: 56px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; border-top: 1px solid var(--line); }
+.ledger .row { display: grid; grid-template-columns: 110px minmax(0, 1fr) auto; gap: 16px; padding: 14px 4px; border-bottom: 1px solid var(--line); align-items: baseline; }
+.ledger .amt { font: 500 15px var(--mono); }
+.ledger .plus { color: var(--ok); }
+@media (max-width: 760px) { .arch-head { grid-template-columns: minmax(0, 1fr); } .ledger .row { grid-template-columns: minmax(0, 1fr) auto; } .ledger .d { display: none; } }
+
+.proto-bar { position: fixed; left: max(12px, env(safe-area-inset-left, 0px)); bottom: max(12px, env(safe-area-inset-bottom, 0px)); z-index: 60; display: flex; gap: 4px; align-items: center; padding: 5px; border-radius: 12px; background: var(--fg); color: var(--bg); font: 500 12px var(--mono); }
+.proto-bar span { padding: 0 8px; opacity: 0.7; }
+.proto-bar a { color: inherit; text-decoration: none; padding: 6px 9px; border-radius: 8px; }
+.proto-bar a[aria-current="page"], .proto-bar a:hover { background: color-mix(in srgb, var(--bg) 14%, transparent); }
+[data-route="app"] .proto-bar { bottom: auto; top: 50%; left: max(8px, env(safe-area-inset-left, 0px)); flex-direction: column; transform: translateY(-50%); }
+[data-route="app"] .proto-bar span { display: none; }
+.is-shot .proto-bar { display: none; }
+.is-shot *, .is-shot *::before, .is-shot *::after { animation: none !important; transition: none !important; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<a class="skip" href="#main" data-i18n="ui.skip">Skip to content</a>
+<div class="drop-overlay" data-drop-overlay hidden><span data-i18n="upload.release">Release to upload</span></div>
+
+<!-- ============ LANDING ============ -->
+<div data-view="home">
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="#" aria-label="Vectorla"><svg viewBox="0 0 26 26" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"/><path d="m17 17 6.5 6.5" stroke-linecap="round"/><path d="M6.5 13.5c1.5-5 5.5-6 9-4.5" stroke="var(--fg)"/><rect x="5" y="12" width="3" height="3" fill="var(--bg)" stroke="var(--fg)" stroke-width="1.2"/><rect x="14.5" y="7.5" width="3" height="3" fill="var(--bg)" stroke="var(--fg)" stroke-width="1.2"/></svg>Vectorla</a>
+      <nav class="nav" aria-label="Main"><a href="#contact" data-i18n="nav.examples">Examples</a><a href="#modes" data-i18n="nav.modes">Modes</a><a href="#pricing" data-i18n="nav.pricing">Pricing</a><a href="#faq" data-i18n="nav.faq">FAQ</a></nav>
+      <div class="top-r">
+        <div class="langs hide-m" role="group" data-i18n-attr="aria-label:ui.language"><button type="button" data-lang="en">EN</button><button type="button" data-lang="uz">UZ</button><button type="button" data-lang="ru">RU</button></div>
+        <button class="ibtn" type="button" data-theme-toggle data-i18n-attr="aria-label:ui.theme"><svg class="i i-sun"><use href="#i-sun"/></svg><svg class="i i-moon"><use href="#i-moon"/></svg></button>
+        <a class="btn hide-m" href="#app" data-i18n="nav.signIn">Sign in</a>
+        <a class="btn btn-amber" href="#app" data-i18n="c.openStudio">Open the studio</a>
+      </div>
+    </div>
+  </header>
+  <main id="main">
+    <section class="stage">
+      <div class="wrap stage-grid">
+        <div>
+          <p class="label" data-i18n="c.eyebrow">Vectorla studio</p>
+          <h1 class="display" data-focus tabindex="-1" style="margin-top:18px"><span data-i18n="c.titleA">Develop your pixels into</span> <em data-i18n="c.titleB">vectors.</em></h1>
+          <p class="lede" data-i18n="c.sub"></p>
+          <div class="ctas" data-dropzone>
+            <input type="file" accept="image/png,image/jpeg,image/webp" hidden>
+            <button class="btn btn-amber btn-lg" type="button" data-browse><svg class="i"><use href="#i-upload"/></svg><span data-i18n="c.upload">Upload an image</span></button>
+            <a class="btn btn-lg" href="#app" data-i18n="c.openStudio">Open the studio</a>
+          </div>
+          <p class="upload-error" role="alert" data-upload-error hidden><svg class="i-sm"><use href="#i-alert"/></svg><span></span></p>
+          <div class="meta"><span><svg class="i-sm"><use href="#i-coin"/></svg><span data-i18n="c.free">10 free credits</span></span><span>PNG · JPG · WebP → SVG</span><span><kbd class="k">Ctrl</kbd> <kbd class="k">V</kbd> <span data-i18n="c.pasteShort">to paste</span></span></div>
+        </div>
+        <div class="table" id="table" style="--x:0.27;--y:0.2;--M:8;--TW:640px">
+          <img class="art" src="samples/alpine-patch/pro.svg" alt="" width="1200" height="1200" fetchpriority="high">
+          <div class="loupe" id="loupe" tabindex="0" role="group" data-i18n-attr="aria-label:c.loupe" aria-roledescription="loupe">
+            <div class="half src"><img data-src="samples/alpine-patch/source.jpg" alt="" width="1200" height="1200" fetchpriority="low"></div>
+            <div class="half vec"><img src="samples/alpine-patch/pro.svg" alt="" width="1200" height="1200"></div>
+            <span class="lens-tag l">PX</span><span class="lens-tag r">SVG</span>
+          </div>
+          <div class="table-cap mono"><span data-i18n="samples.alpine-patch"></span><span id="heroStat"></span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="sec" id="contact">
+      <div class="wrap">
+        <div class="sec-h"><div><p class="label" data-i18n="c.contactLabel">Contact sheet</p><h2 class="display" data-i18n="c.contactTitle">Real traces, frame by frame.</h2></div><p data-i18n="c.contactSub"></p></div>
+        <div class="strip" id="strip" tabindex="0" data-i18n-attr="aria-label:nav.examples"></div>
+        <p class="note-line" data-i18n="samples.credits"></p>
+      </div>
+    </section>
+
+    <section class="sec" id="modes" style="background:var(--surface);border-block:1px solid var(--line)">
+      <div class="wrap flip">
+        <div class="plate" id="flipPlate">
+          <img id="flipQ" src="samples/crest/quick.svg" alt="" loading="lazy" width="1200" height="1200">
+          <img id="flipP" src="samples/crest/pro.svg" alt="" loading="lazy" width="1200" height="1200">
+        </div>
+        <div>
+          <p class="label" data-i18n="nav.modes">Modes</p>
+          <h2 class="display" style="font-size:clamp(36px,4.4vw,60px);margin:12px 0 18px" data-i18n="c.modesTitle">Quick or Professional?</h2>
+          <p class="muted" style="font-size:17px;max-width:46ch" data-i18n="c.modesSub"></p>
+          <div style="margin-top:26px" class="switch" role="group" data-i18n-attr="aria-label:mode.title">
+            <button type="button" data-flip="quick" aria-pressed="false"><svg class="i-sm"><use href="#i-bolt"/></svg><span data-i18n="mode.quickShort">Quick</span></button>
+            <button type="button" data-flip="pro" aria-pressed="true"><svg class="i-sm"><use href="#i-spark"/></svg><span data-i18n="mode.proShort">Professional</span></button>
+          </div>
+          <div class="facts" id="flipFacts" aria-live="polite"></div>
+          <p class="muted" id="flipDesc" style="font-size:15px"></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="sec" id="pricing">
+      <div class="wrap">
+        <div class="sec-h"><div><p class="label" data-i18n="nav.pricing">Pricing</p><h2 class="display" data-i18n="pricing.title">Pay per image, in credits</h2></div></div>
+        <div class="price-row">
+          <div><p class="label" data-i18n="pricing.free">Free</p><span class="big" data-i18n="pricing.freePrice">$0</span><ul id="freeItems"></ul></div>
+          <div><p class="label" data-i18n="c.perImage">Per image</p><div style="display:grid;gap:14px"><div><span class="big">1</span> <span class="muted" data-i18n="mode.quick">Quick Trace</span></div><div><span class="big">2</span> <span class="muted" data-i18n="mode.pro">Professional Trace</span></div></div><p class="muted" style="font-size:14px" data-i18n="mode.switchNote"></p></div>
+          <div><p class="label" data-i18n="pricing.paid">Paid plans</p><p style="font:300 34px/1.1 var(--serif)" data-i18n="pricing.paidSoon">Coming soon</p><p class="muted" data-i18n="pricing.paidDesc"></p><a class="btn btn-amber" href="#app" style="justify-self:start" data-i18n="pricing.cta">Start free</a></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="sec" id="faq" style="padding-top:0">
+      <div class="wrap">
+        <div class="sec-h"><div><p class="label">FAQ</p><h2 class="display" data-i18n="faq.title">Questions</h2></div></div>
+        <div class="faq">
+          <details><summary data-i18n="faq.q1"></summary><p data-i18n="faq.a1"></p></details>
+          <details><summary data-i18n="faq.q2"></summary><p data-i18n="faq.a2"></p></details>
+          <details><summary data-i18n="faq.q3"></summary><p data-i18n="faq.a3"></p></details>
+          <details><summary data-i18n="faq.q4"></summary><p data-i18n="faq.a4"></p></details>
+        </div>
+      </div>
+    </section>
+  </main>
+  <footer class="foot">
+    <div class="wrap">
+      <span class="brand" style="font-size:16px">Vectorla</span>
+      <p class="mono muted" data-i18n="footer.proto"></p>
+      <nav aria-label="Footer"><a href="#pricing" data-i18n="nav.pricing">Pricing</a><a href="#faq" data-i18n="nav.faq">FAQ</a><a href="#top" data-i18n="footer.privacy">Privacy</a><a href="#top" data-i18n="footer.terms">Terms</a></nav>
+    </div>
+  </footer>
+</div>
+
+<!-- ============ STUDIO ============ -->
+<div class="studio" data-view="app" hidden>
+  <h1 class="sr-only" data-focus tabindex="-1" data-i18n="nav.workspace">Workspace</h1>
+  <div class="canvas" id="canvas" data-vmode="split">
+    <div class="vp vp-a" tabindex="0" data-i18n-attr="aria-label:c.canvasLabel">
+      <div class="stage-content" id="contentA" style="--pos:50%">
+        <img class="before" id="srcA" alt="" draggable="false">
+        <img class="after" id="vecA" alt="" draggable="false">
+        <div class="layer outline-layer" id="outlineA"></div>
+        <div class="handle" data-compare-handle data-no-pan></div>
+        <input class="sr-only" type="range" min="0" max="100" value="50" data-i18n-attr="aria-label:cmp.label">
+      </div>
+    </div>
+    <div class="vp vp-b" tabindex="0" data-i18n-attr="aria-label:c.canvasLabel"><div class="stage-content"><img class="after" id="vecB" alt="" draggable="false" style="clip-path:none"></div></div>
+  </div>
+
+  <div class="float f-tl">
+    <a class="ibtn" href="#" aria-label="Vectorla"><svg viewBox="0 0 26 26" aria-hidden="true" fill="none" stroke="var(--amber)" stroke-width="1.8" style="width:24px;height:24px"><circle cx="11" cy="11" r="8"/><path d="m17 17 6.5 6.5" stroke-linecap="round"/></svg></a>
+    <button class="file-btn" type="button" id="fileBtn" aria-expanded="false" aria-controls="film"><span id="fileName">alpine-patch.jpg</span><svg class="i-sm"><use href="#i-chevron-down"/></svg></button>
+  </div>
+  <div class="float f-tc modepill" role="group" data-i18n-attr="aria-label:mode.title">
+    <button type="button" data-mode="quick" aria-pressed="false"><svg class="i-sm"><use href="#i-bolt"/></svg><span class="long" data-i18n="mode.quick">Quick Trace</span><span class="short" data-i18n="mode.quickShort">Quick</span><span class="c">1</span></button>
+    <button type="button" data-mode="pro" aria-pressed="true"><svg class="i-sm"><use href="#i-spark"/></svg><span class="long" data-i18n="mode.pro">Professional Trace</span><span class="short">Pro</span><span class="c">2</span></button>
+  </div>
+  <div class="float f-tr">
+    <a class="credits" href="#history" data-i18n-attr="aria-label:credits.balance"><i aria-hidden="true"></i><span data-credit-text></span></a>
+    <button class="ibtn tip hide-s" type="button" id="cmdBtn" data-i18n-attr="aria-label:ws.commands;data-tip:ws.commands"><svg class="i"><use href="#i-command"/></svg></button>
+    <button class="ibtn" type="button" id="infoBtn" aria-pressed="true" aria-controls="info" data-i18n-attr="aria-label:ws.inspector"><svg class="i"><use href="#i-info"/></svg></button>
+    <div class="langs hide-s" role="group" data-i18n-attr="aria-label:ui.language"><button type="button" data-lang="en">EN</button><button type="button" data-lang="uz">UZ</button><button type="button" data-lang="ru">RU</button></div>
+    <button class="ibtn" type="button" data-theme-toggle data-i18n-attr="aria-label:ui.theme"><svg class="i i-sun"><use href="#i-sun"/></svg><svg class="i i-moon"><use href="#i-moon"/></svg></button>
+  </div>
+
+  <aside class="info" id="info" data-i18n-attr="aria-label:ws.inspector">
+    <div id="infoResult">
+      <p class="label" data-i18n="ws.result">Result</p>
+      <h2 id="infoTitle" style="margin:6px 0 14px"></h2>
+      <dl class="kgrid" id="kgrid"></dl>
+      <p class="note" style="margin-top:10px" data-i18n="stats.measured"></p>
+    </div>
+    <div id="infoPalette"><p class="label" style="margin-bottom:10px" data-i18n="ws.palette">Palette</p><div class="sw" id="sw"></div></div>
+    <div id="infoFile" hidden><p class="label" data-i18n="ws.file">File</p><h2 id="ownName" style="margin:6px 0 10px;overflow-wrap:anywhere"></h2><p class="mono muted" id="ownMeta"></p><div class="alert" style="margin-top:12px"><svg class="i-sm"><use href="#i-info"/></svg><span data-i18n="upload.protoNote"></span></div></div>
+    <p class="note" data-i18n="mode.switchNote"></p>
+    <div><p class="label" style="margin-bottom:8px" data-i18n="ws.states">Prototype states</p><div class="states" id="states">
+      <button type="button" data-state="result" aria-pressed="true" data-i18n="ws.stateResult">Result</button>
+      <button type="button" data-state="processing" aria-pressed="false" data-i18n="ws.stateProcessing">Processing</button>
+      <button type="button" data-state="error" aria-pressed="false" data-i18n="ws.stateError">Error</button>
+      <button type="button" data-state="empty" aria-pressed="false" data-i18n="ws.stateEmpty">Empty</button>
+    </div></div>
+  </aside>
+
+  <div class="film" id="film" hidden></div>
+
+  <div class="float f-bc" role="toolbar" data-i18n-attr="aria-label:c.toolbar">
+    <button class="ibtn tip" type="button" data-v="split" data-i18n-attr="aria-label:views.split;data-tip:views.split"><svg class="i"><use href="#i-split"/></svg></button>
+    <button class="ibtn tip hide-s" type="button" data-v="side" data-i18n-attr="aria-label:views.side;data-tip:views.side"><svg class="i"><use href="#i-side"/></svg></button>
+    <button class="ibtn tip" type="button" data-v="vector" data-i18n-attr="aria-label:views.vector;data-tip:views.vector"><svg class="i"><use href="#i-vector"/></svg></button>
+    <button class="ibtn tip" type="button" data-v="outline" data-i18n-attr="aria-label:views.outline;data-tip:views.outline"><svg class="i"><use href="#i-outline"/></svg></button>
+    <button class="ibtn tip" type="button" data-v="original" data-i18n-attr="aria-label:views.original;data-tip:views.original"><svg class="i"><use href="#i-image"/></svg></button>
+    <span class="sep" aria-hidden="true"></span>
+    <button class="ibtn tip hide-s" type="button" data-zoom="out" data-i18n-attr="aria-label:zoom.out;data-tip:zoom.out"><svg class="i"><use href="#i-minus"/></svg></button>
+    <output class="zoomval hide-s" id="zoomOut">100%</output>
+    <button class="ibtn tip hide-s" type="button" data-zoom="in" data-i18n-attr="aria-label:zoom.in;data-tip:zoom.in"><svg class="i"><use href="#i-plus"/></svg></button>
+    <button class="ibtn tip" type="button" data-zoom="fit" data-i18n-attr="aria-label:zoom.fit;data-tip:zoom.fit"><svg class="i"><use href="#i-fit"/></svg></button>
+    <span class="sep" aria-hidden="true"></span>
+    <span data-dropzone style="display:contents"><input type="file" accept="image/png,image/jpeg,image/webp" hidden><button class="ibtn tip" type="button" data-browse data-i18n-attr="aria-label:ws.newUpload;data-tip:ws.newUpload"><svg class="i"><use href="#i-upload"/></svg></button></span>
+    <a class="btn btn-amber dl" id="dl" href="samples/alpine-patch/pro.svg" download><svg class="i"><use href="#i-download"/></svg><span data-i18n="c.svg">SVG</span></a>
+  </div>
+
+  <div class="studio-overlay" id="stProcessing" hidden><div class="card" role="status"><p class="label" data-i18n="ws.statusTracing">Tracing</p><h3 data-i18n="ws.processing">Tracing your image…</h3><div class="dev"><i></i></div><p class="muted" data-i18n="ws.processingHint"></p></div></div>
+  <div class="studio-overlay" id="stError" hidden><div class="card" role="alert"><p class="label" style="color:var(--bad)" data-i18n="ws.stateError">Error</p><h3 data-i18n="ws.failed">This trace failed</h3><p class="muted" data-i18n="ws.failedHint"></p><button class="btn btn-amber" type="button" data-state-go="result" style="justify-self:start"><svg class="i"><use href="#i-refresh"/></svg><span data-i18n="ws.retrace">Trace again</span></button></div></div>
+  <div class="studio-overlay" id="stEmpty" hidden>
+    <div class="droparea" data-dropzone>
+      <input type="file" accept="image/png,image/jpeg,image/webp" hidden>
+      <h3 data-i18n="upload.title">Drop an image to trace</h3>
+      <p class="muted" data-i18n="upload.sub"></p>
+      <button class="btn btn-amber" type="button" data-browse data-i18n="upload.browse">Choose a file</button>
+      <p class="muted" style="font-size:13px" data-i18n="upload.paste"></p>
+      <p class="label" style="margin-top:8px" data-i18n="upload.samples">Or open a sample</p>
+      <div class="ss" id="emptySamples"></div>
+    </div>
+  </div>
+
+  <div class="palette-scrim" id="palette" hidden>
+    <div class="palette" role="dialog" aria-modal="true" data-i18n-attr="aria-label:ws.commands">
+      <div class="q"><svg class="i"><use href="#i-search"/></svg><input id="cmdInput" type="text" role="combobox" aria-expanded="true" aria-controls="cmdList" aria-autocomplete="list" data-i18n-attr="placeholder:ws.commandsHint;aria-label:ws.commands"><kbd class="k">Esc</kbd></div>
+      <ul id="cmdList" role="listbox"></ul>
+    </div>
+  </div>
+</div>
+
+<!-- ============ ARCHIVE ============ -->
+<div class="archive" data-view="history" hidden>
+  <header class="arch-top">
+    <div class="wrap">
+      <a class="brand" href="#" aria-label="Vectorla"><svg viewBox="0 0 26 26" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"/><path d="m17 17 6.5 6.5" stroke-linecap="round"/></svg>Vectorla</a>
+      <nav class="nav" aria-label="App"><a href="#app" data-i18n="nav.workspace">Workspace</a><a href="#history" aria-current="page" style="color:var(--fg)" data-i18n="nav.history">History</a></nav>
+      <div class="top-r">
+        <div class="langs hide-m" role="group" data-i18n-attr="aria-label:ui.language"><button type="button" data-lang="en">EN</button><button type="button" data-lang="uz">UZ</button><button type="button" data-lang="ru">RU</button></div>
+        <button class="ibtn" type="button" data-theme-toggle data-i18n-attr="aria-label:ui.theme"><svg class="i i-sun"><use href="#i-sun"/></svg><svg class="i i-moon"><use href="#i-moon"/></svg></button>
+        <a class="btn btn-amber" href="#app" data-i18n-attr="aria-label:ws.newUpload"><svg class="i"><use href="#i-upload"/></svg><span class="hide-m" data-i18n="ws.newUpload">New upload</span></a>
+      </div>
+    </div>
+  </header>
+  <main class="wrap">
+    <div class="arch-head">
+      <div><p class="label" data-i18n="c.archiveLabel">Archive</p><h1 class="display" data-focus tabindex="-1" style="margin-top:10px" data-i18n="history.title">History</h1><p class="muted" style="margin-top:12px" data-i18n="history.sub"></p></div>
+      <div class="bal"><div><p class="label" data-i18n="credits.balance">Credit balance</p><p class="muted" style="font-size:13.5px;margin-top:8px;max-width:26ch" id="buys"></p></div><span class="n" id="balN">2</span></div>
+    </div>
+    <p class="ex-note"><svg class="i-sm"><use href="#i-info"/></svg><span data-i18n="history.exampleNote"></span></p>
+    <div class="tabs" role="group" id="tabs" data-i18n-attr="aria-label:history.mode">
+      <button type="button" data-f="all" aria-pressed="true" data-i18n="history.all">All</button>
+      <button type="button" data-f="quick" aria-pressed="false" data-i18n="mode.quickShort">Quick</button>
+      <button type="button" data-f="pro" aria-pressed="false" data-i18n="mode.proShort">Professional</button>
+    </div>
+    <div class="contact" id="archive"></div>
+    <h2 class="display" style="font-size:36px;margin-top:64px" data-i18n="credits.ledger">Credit activity</h2>
+    <div class="ledger" id="ledger" style="margin-top:20px"></div>
+  </main>
+</div>
+
+<nav class="proto-bar" aria-label="Prototype">
+  <span>B · Nightshift</span>
+  <a href="#" data-pb="home" data-i18n="ui.landing">Landing</a>
+  <a href="#app" data-pb="app" data-i18n="nav.workspace">Workspace</a>
+  <a href="#history" data-pb="history" data-i18n="nav.history">History</a>
+  <a href="index.html" data-i18n="ui.overview">All concepts</a>
+</nav>
+
+<script src="shared/i18n.js"></script>
+<script src="shared/samples.js"></script>
+<script src="shared/demo.js"></script>
+<script src="shared/icons.js"></script>
+<script src="shared/proto.js"></script>
+<script>
+;(function () {
+  'use strict'
+  const P = window.Proto
+  const D = window.VL_DEMO
+  const $ = (s, r) => (r || document).querySelector(s)
+  const $$ = (s, r) => [...(r || document).querySelectorAll(s)]
+
+  P.extend({
+    en: { meta: { title: 'Vectorla · Nightshift' }, c: {
+      eyebrow: 'Vectorla studio', titleA: 'Develop your pixels into', titleB: 'vectors.',
+      sub: 'Move the loupe over any edge. On the left, the photographed patch as uploaded. On the right, its Vectorla trace: sharp at every zoom.',
+      upload: 'Upload an image', openStudio: 'Open the studio', free: '10 free credits', pasteShort: 'to paste',
+      loupe: 'Loupe: original pixels on the left, vector on the right. Use the arrow keys to move it.',
+      contactLabel: 'Contact sheet', contactTitle: 'Real traces, frame by frame.', contactSub: 'Every frame is a real Vectorla output. Hover or focus a frame to see the original upload.',
+      modesTitle: 'Quick or Professional?', modesSub: 'Same crest, traced both ways. Quick keeps 32 flat colors; Professional keeps up to 64 and rebuilds the shading as real gradients.',
+      perImage: 'Credits per image', svg: 'SVG', toolbar: 'View and export tools', canvasLabel: 'Image canvas. + and − zoom, arrow keys pan, 0 fits.',
+      archiveLabel: 'Archive', viewCmd: 'View', peek: 'Original', openFrame: 'Open {name} in the studio',
+    } },
+    uz: { meta: { title: 'Vectorla · Nightshift' }, c: {
+      eyebrow: 'Vectorla studiyasi', titleA: 'Piksellaringizni aylantiring:', titleB: 'vektorga.',
+      sub: 'Lupani istalgan chegaraga olib boring. Chapda — yuklangan suratdagi nishon. O‘ngda — uning Vectorla trassirovkasi: har qanday masshtabda tiniq.',
+      upload: 'Rasm yuklash', openStudio: 'Studiyani ochish', free: '10 bepul kredit', pasteShort: 'qo‘yish uchun',
+      loupe: 'Lupa: chapda asl piksellar, o‘ngda vektor. Siljitish uchun strelka tugmalaridan foydalaning.',
+      contactLabel: 'Kontakt varaq', contactTitle: 'Haqiqiy trassirovkalar, kadrma-kadr.', contactSub: 'Har bir kadr — Vectorla ning haqiqiy natijasi. Asl rasmni ko‘rish uchun kadr ustiga olib boring yoki uni tanlang.',
+      modesTitle: 'Tezkormi yoki professional?', modesSub: 'Bitta gerb, ikki usulda. Tezkor rejim 32 ta tekis rang qoldiradi; professional rejim 64 tagacha rang saqlaydi va soyalarni haqiqiy gradientlar bilan tiklaydi.',
+      perImage: 'Rasm uchun kredit', svg: 'SVG', toolbar: 'Ko‘rinish va eksport asboblari', canvasLabel: 'Rasm maydoni. + va − masshtab, strelkalar siljitish, 0 moslash.',
+      archiveLabel: 'Arxiv', viewCmd: 'Ko‘rinish', peek: 'Asl rasm', openFrame: '{name} ni studiyada ochish',
+    } },
+    ru: { meta: { title: 'Vectorla · Nightshift' }, c: {
+      eyebrow: 'Студия Vectorla', titleA: 'Проявите пиксели в', titleB: 'вектор.',
+      sub: 'Наведите лупу на любой край. Слева — сфотографированная нашивка, как её загрузили. Справа — трассировка Vectorla: чёткая при любом увеличении.',
+      upload: 'Загрузить изображение', openStudio: 'Открыть студию', free: '10 бесплатных кредитов', pasteShort: 'чтобы вставить',
+      loupe: 'Лупа: слева исходные пиксели, справа вектор. Двигайте её стрелками.',
+      contactLabel: 'Контактный лист', contactTitle: 'Настоящие трассировки, кадр за кадром.', contactSub: 'Каждый кадр — реальный результат Vectorla. Наведите курсор или выберите кадр, чтобы увидеть исходник.',
+      modesTitle: 'Быстрая или профессиональная?', modesSub: 'Один герб в двух режимах. Быстрый оставляет 32 плоских цвета; профессиональный сохраняет до 64 и восстанавливает тени настоящими градиентами.',
+      perImage: 'Кредитов за изображение', svg: 'SVG', toolbar: 'Инструменты вида и экспорта', canvasLabel: 'Холст. + и − — масштаб, стрелки — сдвиг, 0 — по размеру.',
+      archiveLabel: 'Архив', viewCmd: 'Вид', peek: 'Оригинал', openFrame: 'Открыть {name} в студии',
+    } },
+  })
+
+  const fileName = (id) => `${id}.${P.sample(id).format === 'png' ? 'png' : 'jpg'}`
+  const modeOf = (id) => (['horse', 'ornament', 'wordmark', 'summit-logo'].includes(id) ? 'quick' : 'pro')
+  const icon = (name, cls) => {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    svg.setAttribute('class', cls || 'i')
+    svg.setAttribute('aria-hidden', 'true')
+    const use = document.createElementNS('http://www.w3.org/2000/svg', 'use')
+    use.setAttribute('href', `#i-${name}`)
+    svg.append(use)
+    return svg
+  }
+
+  // ---------- loupe ----------
+  // The original upload (534 KB) only feeds the loupe: load it after the page.
+  const loupeSrc = document.querySelector('#loupe .src img')
+  const loadLoupe = () => { if (!loupeSrc.src) loupeSrc.src = loupeSrc.dataset.src }
+  if (document.readyState === 'complete') setTimeout(loadLoupe, 0)
+  else window.addEventListener('load', loadLoupe)
+  const table = $('#table')
+  const loupe = $('#loupe')
+  const setLoupe = (x, y) => {
+    table.style.setProperty('--x', Math.max(0.02, Math.min(0.98, x)).toFixed(4))
+    table.style.setProperty('--y', Math.max(0.02, Math.min(0.98, y)).toFixed(4))
+  }
+  const sizeLoupe = () => table.style.setProperty('--TW', `${table.getBoundingClientRect().width}px`)
+  if (window.ResizeObserver) new ResizeObserver(sizeLoupe).observe(table)
+  sizeLoupe()
+  table.addEventListener('pointermove', (event) => {
+    if (event.pointerType === 'touch' && !event.buttons) return
+    const r = table.getBoundingClientRect()
+    setLoupe((event.clientX - r.left) / r.width, (event.clientY - r.top) / r.height)
+  })
+  table.addEventListener('pointerdown', (event) => {
+    table.setPointerCapture(event.pointerId)
+    const r = table.getBoundingClientRect()
+    setLoupe((event.clientX - r.left) / r.width, (event.clientY - r.top) / r.height)
+  })
+  loupe.addEventListener('keydown', (event) => {
+    const step = event.shiftKey ? 0.05 : 0.015
+    const x = Number(table.style.getPropertyValue('--x'))
+    const y = Number(table.style.getPropertyValue('--y'))
+    const moves = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }
+    if (moves[event.key]) {
+      event.preventDefault()
+      setLoupe(x + moves[event.key][0], y + moves[event.key][1])
+    }
+  })
+
+  // ---------- contact sheet + flip ----------
+  const STRIP = ['summit-logo', 'crest', 'rocket', 'horse', 'ornament', 'globe', 'wordmark', 'coffee']
+  const renderStrip = () => {
+    $('#strip').replaceChildren(...STRIP.map((id, i) => {
+      const s = P.sample(id)
+      const mode = modeOf(id)
+      return P.h('article', { class: 'frame' },
+        P.h('a', { href: '#app', 'data-open': id, 'data-mode': mode, 'aria-label': P.t('c.openFrame', { name: P.sampleName(id) }) },
+          P.h('div', { class: 'plate' },
+            P.h('span', { class: 'no', text: `${String(i + 1).padStart(2, '0')}A` }),
+            P.h('span', { class: 'peek', text: P.t('c.peek') }),
+            P.h('img', { class: 's', src: s.src, alt: '', loading: 'lazy', width: s.w, height: s.h }),
+            P.h('img', { class: 'v', src: P.svgUrl(id, mode), alt: '', loading: 'lazy', width: s.w, height: s.h }))),
+        P.h('div', { class: 'cap' },
+          P.h('b', { text: P.sampleName(id) }),
+          P.h('span', { class: 'mono muted', text: `${P.t(mode === 'pro' ? 'mode.proShort' : 'mode.quickShort')} · ${P.t('stats.paths')} ${s[mode].paths} · ${P.kb(s[mode].bytes)}` }),
+          id === 'coffee' ? P.h('span', { class: 'muted', style: 'font-size:12.5px', text: P.t('samples.photoNote') }) : null))
+    }))
+  }
+  $('#strip').addEventListener('click', (event) => {
+    const a = event.target.closest('[data-open]')
+    if (a) Object.assign(state, { sample: a.dataset.open, mode: a.dataset.mode, state: 'result', file: null })
+  })
+  let flip = 'pro'
+  const renderFlip = () => {
+    $('#flipQ').style.opacity = flip === 'quick' ? '1' : '0'
+    $('#flipP').style.opacity = flip === 'pro' ? '1' : '0'
+    $$('[data-flip]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.flip === flip)))
+    const r = P.sample('crest')[flip]
+    $('#flipFacts').replaceChildren(...[['stats.colors', r.colors], ['stats.gradients', r.gradients], ['stats.paths', r.paths], ['stats.size', P.kb(r.bytes)]].map(([k, v]) =>
+      P.h('div', null, P.h('span', { class: 'label', text: P.t(k) }), P.h('b', { text: String(v) }))))
+    $('#flipDesc').textContent = `${P.t(flip === 'pro' ? 'mode.pro' : 'mode.quick')} · ${P.t(flip === 'pro' ? 'mode.cost2' : 'mode.cost1')}. ${P.t(flip === 'pro' ? 'mode.proDesc' : 'mode.quickDesc')}`
+  }
+  $$('[data-flip]').forEach((b) => b.addEventListener('click', () => {
+    flip = b.dataset.flip
+    renderFlip()
+  }))
+
+  // ---------- studio ----------
+  const narrow = window.matchMedia('(max-width: 860px)')
+  const state = { sample: 'alpine-patch', mode: 'pro', view: 'split', state: 'result', file: null, info: !narrow.matches }
+  const canvas = $('#canvas')
+  P.compare($('#contentA'), { handleOnly: true })
+  const stage = P.stage([$('.vp-a'), $('.vp-b')], { padding: () => (narrow.matches ? { x: 16, y: 120 } : 90), onZoom: (s) => ($('#zoomOut').textContent = `${Math.round(s * 100)}%`) })
+  $$('[data-zoom]').forEach((b) => b.addEventListener('click', () => (b.dataset.zoom === 'in' ? stage.zoomAt(1.4) : b.dataset.zoom === 'out' ? stage.zoomAt(1 / 1.4) : stage.fit())))
+  const outlineCache = new Map()
+  const showOutline = async () => {
+    const key = `${state.sample}-${state.mode}`
+    const host = $('#outlineA')
+    if (host.dataset.key === key) return
+    host.dataset.key = key
+    host.replaceChildren()
+    if (!outlineCache.has(key)) {
+      outlineCache.set(key, P.inlineSvg(P.svgUrl(state.sample, state.mode), `n${outlineCache.size}-`).then((svg) => {
+        const anchors = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+        anchors.setAttribute('class', 'anchors')
+        anchors.setAttribute('d', P.anchorPath(svg))
+        svg.append(anchors)
+        return svg
+      }))
+    }
+    try {
+      const svg = await outlineCache.get(key)
+      if (host.dataset.key === key) host.replaceChildren(svg)
+    } catch {
+      host.dataset.key = ''
+    }
+  }
+  const palette = async (url) => {
+    const text = await P.svgText(url)
+    const counts = new Map()
+    for (const m of text.matchAll(/(?:fill|stop-color)="(#[0-9a-fA-F]{3,6})"/g)) counts.set(m[1].toLowerCase(), (counts.get(m[1].toLowerCase()) || 0) + 1)
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 18).map(([c]) => c)
+  }
+  const renderStudio = (refit) => {
+    const s = P.sample(state.sample)
+    const own = state.file
+    const vec = P.svgUrl(state.sample, state.mode)
+    $('#srcA').src = own ? own.url : s.src
+    for (const img of [$('#vecA'), $('#vecB')]) {
+      if (own) img.removeAttribute('src')
+      else img.src = vec
+    }
+    $('#fileName').textContent = own ? own.name : fileName(state.sample)
+    $$('.modepill button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === state.mode)))
+    const view = own ? 'original' : state.view
+    canvas.dataset.vmode = view
+    $$('[data-v]').forEach((b) => {
+      b.setAttribute('aria-pressed', String(b.dataset.v === view))
+      b.disabled = Boolean(own) && b.dataset.v !== 'original'
+    })
+    $('#info').hidden = !state.info
+    $('#infoBtn').setAttribute('aria-pressed', String(state.info))
+    $('#infoResult').hidden = Boolean(own) || state.state !== 'result'
+    $('#infoPalette').hidden = Boolean(own) || state.state !== 'result'
+    $('#infoFile').hidden = !own
+    $('#dl').hidden = Boolean(own) || state.state !== 'result'
+    $('#stProcessing').hidden = state.state !== 'processing'
+    $('#stError').hidden = state.state !== 'error'
+    $('#stEmpty').hidden = state.state !== 'empty'
+    $$('#states button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.state === state.state)))
+    if (own) {
+      $('#ownName').textContent = own.name
+      $('#ownMeta').textContent = `${own.w ? `${own.w} × ${own.h} · ` : ''}${own.size < 1048576 ? P.kb(own.size) : P.mb(own.size)} · ${P.t(state.mode === 'pro' ? 'mode.cost2' : 'mode.cost1')}`
+    } else {
+      const r = s[state.mode]
+      $('#infoTitle').textContent = P.sampleName(state.sample)
+      $('#kgrid').replaceChildren(...[['stats.paths', P.num(r.paths)], ['stats.colors', P.num(r.colors)], ['stats.gradients', P.num(r.gradients)], ['stats.size', P.kb(r.bytes)], ['stats.time', P.sec(r.ms)], ['stats.source', `${s.w} × ${s.h}`]].map(([k, v]) =>
+        P.h('div', null, P.h('dt', { text: P.t(k) }), P.h('dd', { text: v }))))
+      const dl = $('#dl')
+      dl.href = vec
+      dl.setAttribute('download', `${state.sample}-vectorla-${state.mode === 'pro' ? 'professional' : 'quick'}.svg`)
+      dl.setAttribute('aria-label', P.t('ws.downloadSvg'))
+      palette(vec).then((colors) => $('#sw').replaceChildren(...colors.map((c) => P.h('span', { style: `background:${c}`, title: c })))).catch(() => {})
+      if (view === 'outline') showOutline()
+    }
+    const ids = [...D.conversions.map((c) => c.sample), 'rocket', 'ornament', 'wordmark']
+    $('#film').replaceChildren(...ids.map((id) => P.h('button', {
+      type: 'button', 'aria-current': String(!own && id === state.sample), 'aria-label': fileName(id),
+      onclick: () => { Object.assign(state, { sample: id, mode: (D.conversions.find((c) => c.sample === id) || { mode: modeOf(id) }).mode, state: 'result', file: null }); renderStudio(true) },
+    }, P.h('img', { src: P.svgUrl(id, modeOf(id)), alt: '', loading: 'lazy' }))))
+    $('#emptySamples').replaceChildren(...['alpine-patch', 'crest', 'summit-logo', 'rocket'].map((id) => P.h('button', {
+      type: 'button', 'aria-label': P.sampleName(id),
+      onclick: () => { Object.assign(state, { sample: id, mode: modeOf(id), state: 'result', file: null }); renderStudio(true) },
+    }, P.h('img', { src: P.svgUrl(id, modeOf(id)), alt: '', loading: 'lazy' }))))
+    if (refit) requestAnimationFrame(() => stage.setSize(own ? own.w || 800 : s.w, own ? own.h || 800 : s.h))
+  }
+  $$('.modepill button').forEach((b) => b.addEventListener('click', () => { state.mode = b.dataset.mode; renderStudio(false) }))
+  $$('[data-v]').forEach((b) => b.addEventListener('click', () => { state.view = b.dataset.v; renderStudio(false); requestAnimationFrame(() => stage.fit()) }))
+  $$('#states button').forEach((b) => b.addEventListener('click', () => { state.state = b.dataset.state; state.file = null; renderStudio(false) }))
+  $$('[data-state-go]').forEach((b) => b.addEventListener('click', () => { state.state = b.dataset.stateGo; renderStudio(false) }))
+  $('#infoBtn').addEventListener('click', () => { state.info = !state.info; renderStudio(false) })
+  $('#fileBtn').addEventListener('click', () => {
+    const film = $('#film')
+    film.hidden = !film.hidden
+    $('#fileBtn').setAttribute('aria-expanded', String(!film.hidden))
+  })
+
+  P.onFile((file, error) => {
+    $$('[data-upload-error]').forEach((el) => {
+      el.hidden = !error
+      if (error) el.querySelector('span').textContent = P.t(error)
+    })
+    if (error) return
+    const own = { url: URL.createObjectURL(file), name: file.name || 'pasted-image.png', size: file.size, w: 0, h: 0 }
+    const img = new Image()
+    img.onload = () => {
+      own.w = img.naturalWidth
+      own.h = img.naturalHeight
+      if (state.file === own) renderStudio(true)
+    }
+    img.src = own.url
+    Object.assign(state, { file: own, state: 'result', info: !narrow.matches })
+    if (location.hash !== '#app') location.hash = 'app'
+    else renderStudio(true)
+  })
+
+  // ---------- command palette ----------
+  const commands = () => [
+    { icon: 'upload', label: P.t('ws.newUpload'), run: () => $('.f-bc [data-browse]').click() },
+    { icon: 'bolt', label: `${P.t('mode.quick')} · ${P.t('mode.cost1')}`, run: () => { state.mode = 'quick'; renderStudio(false) } },
+    { icon: 'spark', label: `${P.t('mode.pro')} · ${P.t('mode.cost2')}`, run: () => { state.mode = 'pro'; renderStudio(false) } },
+    ...['split', 'side', 'vector', 'outline', 'original'].map((v) => ({ icon: v === 'original' ? 'image' : v, label: `${P.t('c.viewCmd')}: ${P.t(`views.${v}`)}`, run: () => { state.view = v; renderStudio(false); requestAnimationFrame(() => stage.fit()) } })),
+    { icon: 'fit', label: P.t('zoom.fit'), key: '0', run: () => stage.fit() },
+    { icon: 'download', label: P.t('ws.downloadSvg'), run: () => $('#dl').click() },
+    { icon: 'clock', label: P.t('nav.history'), run: () => (location.hash = 'history') },
+    { icon: 'globe', label: 'English', run: () => P.setLang('en') },
+    { icon: 'globe', label: 'O‘zbekcha', run: () => P.setLang('uz') },
+    { icon: 'globe', label: 'Русский', run: () => P.setLang('ru') },
+    { icon: 'moon', label: P.t('ui.theme'), run: () => P.toggleTheme() },
+  ]
+  let cmdSel = 0
+  let lastFocus = null
+  const openPalette = () => {
+    lastFocus = document.activeElement
+    $('#palette').hidden = false
+    $('#cmdInput').value = ''
+    cmdSel = 0
+    renderCmds()
+    $('#cmdInput').focus()
+  }
+  const closePalette = () => {
+    $('#palette').hidden = true
+    if (lastFocus) lastFocus.focus()
+  }
+  const filtered = () => {
+    const q = $('#cmdInput').value.trim().toLowerCase()
+    return commands().filter((c) => !q || c.label.toLowerCase().includes(q))
+  }
+  const renderCmds = () => {
+    const list = filtered()
+    cmdSel = Math.min(cmdSel, Math.max(0, list.length - 1))
+    $('#cmdList').replaceChildren(...list.map((c, i) => P.h('li', {
+      role: 'option', id: `cmd-${i}`, 'aria-selected': String(i === cmdSel),
+      onclick: () => { closePalette(); c.run() }, onmousemove: () => { if (cmdSel !== i) { cmdSel = i; renderCmds() } },
+    }, icon(c.icon, 'i'), P.h('span', { text: c.label }), c.key ? P.h('kbd', { text: c.key }) : null)))
+    $('#cmdInput').setAttribute('aria-activedescendant', list.length ? `cmd-${cmdSel}` : '')
+  }
+  $('#cmdInput').addEventListener('input', () => { cmdSel = 0; renderCmds() })
+  $('#cmdInput').addEventListener('keydown', (event) => {
+    const list = filtered()
+    if (event.key === 'ArrowDown') { event.preventDefault(); cmdSel = (cmdSel + 1) % Math.max(1, list.length); renderCmds() }
+    if (event.key === 'ArrowUp') { event.preventDefault(); cmdSel = (cmdSel - 1 + list.length) % Math.max(1, list.length); renderCmds() }
+    if (event.key === 'Enter' && list[cmdSel]) { event.preventDefault(); closePalette(); list[cmdSel].run() }
+    if (event.key === 'Escape') { event.preventDefault(); closePalette() }
+  })
+  $('#palette').addEventListener('click', (event) => { if (event.target === $('#palette')) closePalette() })
+  $('#cmdBtn').addEventListener('click', openPalette)
+  document.addEventListener('keydown', (event) => {
+    if (P.view === 'app' && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+      event.preventDefault()
+      if ($('#palette').hidden) openPalette()
+      else closePalette()
+    }
+  })
+
+  // ---------- archive ----------
+  let filter = 'all'
+  const renderArchive = () => {
+    $('#archive').replaceChildren(...D.conversions.filter((c) => filter === 'all' || c.mode === filter).map((c, i) => {
+      const s = P.sample(c.sample)
+      return P.h('article', { class: 'frame' },
+        P.h('a', { href: '#app', 'aria-label': P.t('c.openFrame', { name: fileName(c.sample) }), onclick: () => Object.assign(state, { sample: c.sample, mode: c.mode, state: 'result', file: null }) },
+          P.h('div', { class: 'plate' }, P.h('span', { class: 'no', text: `${String(i + 1).padStart(2, '0')}A` }), P.h('span', { class: 'peek', text: P.t('c.peek') }),
+            P.h('img', { class: 's', src: s.src, alt: '', loading: 'lazy' }), P.h('img', { class: 'v', src: P.svgUrl(c.sample, c.mode), alt: '', loading: 'lazy' }))),
+        P.h('div', { class: 'cap' },
+          P.h('b', { text: fileName(c.sample) }),
+          P.h('span', { class: 'mono muted', text: `${P.t(c.mode === 'pro' ? 'mode.proShort' : 'mode.quickShort')} · ${P.date(c.date)} · ${P.kb(s[c.mode].bytes)}` }),
+          P.h('span', { class: 'muted', style: 'font-size:12.5px', text: P.t('history.expires', { d: D.daysLeft(c.date) }) })))
+    }))
+    $('#balN').textContent = String(D.balance)
+    $('#buys').textContent = P.t('credits.buys', { q: D.balance, p: Math.floor(D.balance / 2) })
+    $('#ledger').replaceChildren(...D.ledger.map((e) => {
+      const what = e.reason === 'trace' ? `${P.t('credits.trace')} · ${fileName(e.sample)} · ${P.t(e.mode === 'pro' ? 'mode.proShort' : 'mode.quickShort')}` : e.reason === 'switchRefund' ? `${P.t('credits.switchRefund')} · ${fileName(e.sample)}` : P.t('credits.signup')
+      return P.h('div', { class: 'row' }, P.h('span', { class: 'mono muted d', text: P.date(e.date) }), P.h('span', { text: what }), P.h('span', { class: `amt ${e.amount > 0 ? 'plus' : ''}`, text: `${e.amount > 0 ? '+' : '−'}${Math.abs(e.amount)}` }))
+    }))
+  }
+  $$('#tabs button').forEach((b) => b.addEventListener('click', () => {
+    filter = b.dataset.f
+    $$('#tabs button').forEach((o) => o.setAttribute('aria-pressed', String(o === b)))
+    renderArchive()
+  }))
+
+  const renderText = () => {
+    const r = P.sample('alpine-patch').pro
+    $('#table .art').alt = `${P.sampleName('alpine-patch')}: Vectorla SVG, ${P.t('mode.pro')}`
+    $('#heroStat').textContent = `SVG · ${P.t('stats.paths')} ${r.paths} · ${P.t('stats.gradients')} ${r.gradients} · ${P.kb(r.bytes)}`
+    $('#freeItems').replaceChildren(...P.t('pricing.freeItems').map((t) => P.h('li', null, icon('check', 'i-sm'), P.h('span', { text: t }))))
+    $$('[data-credit-text]').forEach((el) => (el.textContent = P.credits(D.balance)))
+    renderStrip()
+    renderFlip()
+    renderArchive()
+    if (P.view === 'app') renderStudio(false)
+  }
+  P.onLang(renderText)
+  P.onRoute((view, changed) => {
+    $$('.proto-bar a[data-pb]').forEach((a) => (a.dataset.pb === view ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current')))
+    if (view === 'app' && changed) renderStudio(true)
+  })
+  P.init({ defaultTheme: 'dark' })
+})()
+</script>
+</body>
+</html>

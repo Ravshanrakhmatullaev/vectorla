@@ -1,0 +1,1238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vectorla · Contour</title>
+<meta name="description" content="Vectorla design concept A: Contour. Precision light theme with a three-pane tracing workspace.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geologica:wght@500;600;700&family=Golos+Text:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Contour: a technical specimen sheet. Cool paper, graphite ink, process cyan
+   for interaction and process magenta for vector geometry (print shop CMYK). */
+:root {
+  --paper: #f4f5f3;
+  --sheet: #ffffff;
+  --sheet-2: #eceeec;
+  --ink: #121519;
+  --ink-2: #474e57;
+  --ink-3: #626973;
+  --rule: #d6dadd;
+  --rule-2: #c3c8cd;
+  --grid: rgba(18, 21, 25, 0.075);
+  --cyan: #006aa6;
+  --cyan-soft: #e1eff8;
+  --magenta: #c4145a;
+  --yellow: #f2c200;
+  --ok: #1b7543;
+  --bad: #b3261e;
+  --scrim: rgba(244, 245, 243, 0.86);
+  --shadow: 0 1px 2px rgba(18, 21, 25, 0.06), 0 10px 30px rgba(18, 21, 25, 0.07);
+  --display: "Geologica", "Golos Text", system-ui, sans-serif;
+  --body: "Golos Text", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0d1013; --sheet: #14181d; --sheet-2: #1a1f25; --ink: #e8ebee; --ink-2: #aab1ba; --ink-3: #8c949e;
+    --rule: #272e36; --rule-2: #36404a; --grid: rgba(232, 235, 238, 0.06); --cyan: #4fb3ee; --cyan-soft: #0f2738;
+    --magenta: #ff5f9c; --yellow: #f5cd2a; --ok: #4cc583; --bad: #ff8a80; --scrim: rgba(13, 16, 19, 0.86);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 32px rgba(0, 0, 0, 0.35); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0d1013; --sheet: #14181d; --sheet-2: #1a1f25; --ink: #e8ebee; --ink-2: #aab1ba; --ink-3: #8c949e;
+  --rule: #272e36; --rule-2: #36404a; --grid: rgba(232, 235, 238, 0.06); --cyan: #4fb3ee; --cyan-soft: #0f2738;
+  --magenta: #ff5f9c; --yellow: #f5cd2a; --ok: #4cc583; --bad: #ff8a80; --scrim: rgba(13, 16, 19, 0.86);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 32px rgba(0, 0, 0, 0.35); color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-padding-top: 80px; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 400 16px/1.55 var(--body); -webkit-font-smoothing: antialiased; }
+img, svg { display: block; max-width: 100%; }
+img { height: auto; }
+button, input, select { font: inherit; color: inherit; }
+a { color: inherit; }
+[hidden] { display: none !important; }
+:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.skip { position: absolute; left: -9999px; top: 12px; z-index: 100; background: var(--sheet); padding: 10px 14px; border: 1px solid var(--rule); border-radius: 8px; }
+.skip:focus { left: 16px; }
+.i { width: 20px; height: 20px; flex: none; }
+.i-sm { width: 16px; height: 16px; flex: none; }
+.wrap { max-width: 1320px; margin: 0 auto; padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: -0.025em; line-height: 1.04; margin: 0; text-wrap: balance; }
+p { margin: 0; }
+.mono { font-family: var(--mono); font-size: 12.5px; letter-spacing: 0.01em; font-variant-numeric: tabular-nums; }
+.eyebrow { font: 500 12px/1.3 var(--mono); text-transform: uppercase; letter-spacing: 0.14em; color: var(--cyan); }
+.muted { color: var(--ink-2); }
+.num { font-variant-numeric: tabular-nums; }
+
+/* Controls */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 10px; border: 1px solid var(--rule-2); background: var(--sheet); font-weight: 500; font-size: 15px; text-decoration: none; cursor: pointer; white-space: nowrap; transition: background 0.15s, border-color 0.15s, color 0.15s; }
+.btn:hover { border-color: var(--ink-3); }
+.btn-primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.btn-primary:hover { background: var(--cyan); border-color: var(--cyan); color: #fff; }
+.btn-ghost { border-color: transparent; background: transparent; }
+.btn-ghost:hover { background: var(--sheet-2); border-color: transparent; }
+.btn-lg { min-height: 52px; padding: 0 24px; font-size: 16px; border-radius: 12px; }
+.btn[aria-disabled="true"] { opacity: 0.55; cursor: not-allowed; }
+.icon-btn { width: 40px; height: 40px; display: inline-grid; place-items: center; border-radius: 10px; border: 1px solid var(--rule); background: var(--sheet); cursor: pointer; }
+.icon-btn:hover { border-color: var(--ink-3); }
+.icon-btn .i-moon { display: none; }
+[data-theme-toggle][aria-pressed="true"] .i-sun { display: none; }
+[data-theme-toggle][aria-pressed="true"] .i-moon { display: block; }
+.seg { display: inline-flex; padding: 3px; border: 1px solid var(--rule); border-radius: 10px; background: var(--sheet-2); gap: 2px; }
+.seg button { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; min-height: 34px; padding: 0 12px; border-radius: 7px; cursor: pointer; color: var(--ink-2); font-weight: 500; font-size: 14px; white-space: nowrap; }
+.seg button:hover { color: var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--sheet); color: var(--ink); box-shadow: 0 0 0 1px var(--rule-2), 0 1px 2px rgba(0, 0, 0, 0.08); }
+.seg-sm button { min-height: 30px; padding: 0 9px; font-size: 13px; }
+.lang button { font-family: var(--mono); font-size: 12px; letter-spacing: 0.06em; padding: 0 9px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px; border-radius: 6px; border: 1px solid var(--rule); background: var(--sheet); font: 500 12px var(--mono); color: var(--ink-2); white-space: nowrap; }
+.chip-pro { color: var(--magenta); border-color: color-mix(in srgb, var(--magenta) 35%, var(--rule)); }
+.chip-quick { color: var(--cyan); border-color: color-mix(in srgb, var(--cyan) 35%, var(--rule)); }
+
+/* Header */
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 30; background: color-mix(in srgb, var(--paper) 90%, transparent); backdrop-filter: saturate(1.4) blur(12px); border-bottom: 1px solid var(--rule); }
+.top .wrap { display: flex; align-items: center; gap: 28px; min-height: 64px; }
+.brand { display: inline-flex; align-items: center; gap: 10px; font: 600 19px var(--display); letter-spacing: -0.02em; text-decoration: none; }
+.brand svg { width: 28px; height: 28px; flex: none; }
+.nav { display: flex; gap: 24px; }
+.nav a { text-decoration: none; color: var(--ink-2); font-size: 15px; }
+.nav a:hover { color: var(--ink); }
+.top-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.menu-btn { display: none; }
+.mobile-menu { border-top: 1px solid var(--rule); padding: 12px 0 20px; }
+.mobile-menu nav { display: grid; }
+.mobile-menu nav a { padding: 12px 0; text-decoration: none; font-size: 17px; border-bottom: 1px solid var(--rule); }
+.mobile-menu .row { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+@media (max-width: 960px) {
+  .nav, .top-actions .hide-m { display: none; }
+  .menu-btn { display: inline-grid; }
+}
+
+/* Hero: specimen sheet */
+.hero { padding: 56px 0 80px; background-image: radial-gradient(var(--grid) 1px, transparent 1.2px); background-size: 22px 22px; border-bottom: 1px solid var(--rule); }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 64px; align-items: center; }
+.hero h1 { font-size: clamp(44px, 6.2vw, 88px); margin-top: 18px; }
+.hero h1 em { font-style: normal; color: var(--cyan); }
+.lede { font-size: 19px; color: var(--ink-2); max-width: 44ch; margin: 22px 0 32px; }
+.cta-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.drop-hint { font-size: 14px; color: var(--ink-3); }
+.facts { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 36px; padding-top: 20px; border-top: 1px dashed var(--rule-2); }
+.facts span { display: inline-flex; align-items: center; gap: 8px; font: 500 12.5px var(--mono); color: var(--ink-2); }
+.facts b { color: var(--ink); font-weight: 500; }
+.upload-error { margin-top: 14px; color: var(--bad); font-size: 14px; display: flex; gap: 8px; align-items: center; }
+@media (max-width: 1060px) { .hero-grid { grid-template-columns: minmax(0, 1fr); gap: 40px; } }
+
+.specimen { position: relative; background: var(--sheet); border: 1px solid var(--rule); box-shadow: var(--shadow); padding: 22px; }
+.specimen .cm { position: absolute; width: 14px; height: 14px; border-color: var(--ink-3); border-style: solid; border-width: 0; }
+.cm.tl { top: -18px; left: -18px; border-right-width: 1px; border-bottom-width: 1px; }
+.cm.tr { top: -18px; right: -18px; border-left-width: 1px; border-bottom-width: 1px; }
+.cm.bl { bottom: -18px; left: -18px; border-right-width: 1px; border-top-width: 1px; }
+.cm.br { bottom: -18px; right: -18px; border-left-width: 1px; border-top-width: 1px; }
+.spec-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 14px; }
+.spec-cap { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 14px; color: var(--ink-2); }
+.spec-cap .arrow { color: var(--magenta); }
+
+/* Compare */
+.cmp { position: relative; overflow: hidden; user-select: none; -webkit-user-select: none; touch-action: pan-y; cursor: ew-resize; background: #fff; }
+.cmp-sq { aspect-ratio: 1 / 1; }
+.zoombox { position: absolute; width: calc(100% * var(--z, 1)); height: calc(100% * var(--z, 1)); left: calc(50% - var(--fx, 0.5) * 100% * var(--z, 1)); top: calc(50% - var(--fy, 0.5) * 100% * var(--z, 1)); transition: width 0.45s cubic-bezier(.2, .7, .2, 1), height 0.45s cubic-bezier(.2, .7, .2, 1), left 0.45s cubic-bezier(.2, .7, .2, 1), top 0.45s cubic-bezier(.2, .7, .2, 1); }
+.zoombox > * { position: absolute; inset: 0; width: 100%; height: 100%; }
+.zoombox img { object-fit: contain; }
+.cmp .after { clip-path: inset(0 0 0 var(--pos, 50%)); }
+.cmp.is-pixels .before { image-rendering: pixelated; }
+.handle { position: absolute; top: 0; bottom: 0; left: var(--pos, 50%); width: 2px; margin-left: -1px; background: var(--cyan); pointer-events: none; }
+.handle::after { content: ""; position: absolute; top: 50%; left: 50%; width: 34px; height: 34px; transform: translate(-50%, -50%); border-radius: 50%; background: var(--sheet); border: 2px solid var(--cyan); box-shadow: var(--shadow); }
+.handle svg { max-width: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1; width: 18px; height: 18px; color: var(--cyan); }
+.cmp:has(input:focus-visible) .handle::after { outline: 3px solid color-mix(in srgb, var(--cyan) 45%, transparent); outline-offset: 2px; }
+.tag { position: absolute; top: 12px; z-index: 2; padding: 4px 8px; font: 500 11px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.1em; background: color-mix(in srgb, var(--sheet) 88%, transparent); border: 1px solid var(--rule); border-radius: 4px; pointer-events: none; color: var(--ink); }
+.tag-l { left: 12px; }
+.tag-r { right: 12px; color: var(--magenta); }
+.outline-layer svg { width: 100%; height: 100%; overflow: visible; }
+.outline-layer path { fill: none !important; stroke: var(--magenta); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.outline-layer path[fill="none"] { display: none; }
+.outline-layer .anchors { stroke: var(--cyan); stroke-width: 4; stroke-linecap: square; }
+.cmp[data-mode="outline"] .after, .cmp[data-mode="outline"] .handle { display: none; }
+.cmp[data-mode="outline"] .before { opacity: 0.35; }
+.cmp[data-mode="outline"] { cursor: default; }
+
+/* Sections */
+section.band { padding: 96px 0; border-bottom: 1px solid var(--rule); }
+.sec-head { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 40px; align-items: end; margin-bottom: 48px; }
+.sec-head h2 { font-size: clamp(32px, 4vw, 52px); margin-top: 14px; }
+.sec-head p { color: var(--ink-2); font-size: 18px; max-width: 54ch; }
+@media (max-width: 860px) { .sec-head { grid-template-columns: minmax(0, 1fr); gap: 16px; } section.band { padding: 72px 0; } }
+
+.zoomtest { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.zt { background: var(--sheet); border: 1px solid var(--rule); }
+.zt .frame { position: relative; aspect-ratio: 4 / 3; overflow: hidden; background: #fff; }
+.zt .frame img { position: absolute; width: 800%; height: auto; max-width: none; left: calc(50% - var(--cx) * 800%); top: calc(50% - var(--cy) * 800% * 4 / 3); }
+.zt .frame { --cx: 0.3; --cy: 0.86; }
+.zt .frame img.px { image-rendering: pixelated; }
+.zt figcaption { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 12px 14px; border-top: 1px solid var(--rule); }
+@media (max-width: 700px) { .zoomtest { grid-template-columns: 1fr; } }
+
+.modes { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.mode-card { background: var(--sheet); border: 1px solid var(--rule); display: grid; grid-template-rows: auto 1fr; }
+.mode-card .art { position: relative; aspect-ratio: 16 / 10; display: grid; place-items: center; background-image: radial-gradient(var(--grid) 1px, transparent 1.2px); background-size: 16px 16px; border-bottom: 1px solid var(--rule); }
+.mode-card .art img { width: min(62%, 300px); }
+.mode-card .body { padding: 24px; display: grid; gap: 16px; align-content: start; }
+.mode-card h3 { font-size: 28px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.mode-card .cost { margin-left: auto; font: 500 13px var(--mono); color: var(--ink-2); }
+.spec { display: grid; grid-template-columns: auto 1fr; gap: 8px 18px; margin: 0; font-size: 14.5px; }
+.spec dt { color: var(--ink-3); font: 500 12px/1.9 var(--mono); text-transform: uppercase; letter-spacing: 0.08em; }
+.spec dd { margin: 0; }
+@media (max-width: 760px) { .modes { grid-template-columns: 1fr; } }
+
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; }
+.card { background: var(--sheet); border: 1px solid var(--rule); display: grid; grid-template-rows: auto 1fr; }
+.card .thumb { position: relative; aspect-ratio: 1 / 1; background: #fff; border-bottom: 1px solid var(--rule); overflow: hidden; }
+.card .thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; padding: 14px; transition: opacity 0.2s; }
+.card .thumb .src { opacity: 0; }
+.card.show-src .thumb .src { opacity: 1; }
+.card.show-src .thumb .vec { opacity: 0; }
+.card .thumb .seg { position: absolute; right: 8px; top: 8px; z-index: 2; }
+.card .meta { padding: 14px 16px 16px; display: grid; gap: 8px; align-content: start; }
+.card h3 { font-size: 17px; letter-spacing: -0.01em; }
+.card .row { display: flex; flex-wrap: wrap; gap: 6px; }
+.card a.open { margin-top: 4px; display: inline-flex; align-items: center; gap: 6px; font-weight: 500; font-size: 14px; color: var(--cyan); text-decoration: none; }
+.card a.open:hover { text-decoration: underline; }
+.credit-line { margin-top: 28px; font-size: 13px; color: var(--ink-3); max-width: 90ch; }
+
+.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--rule); background: var(--sheet); }
+.step { padding: 28px; display: grid; gap: 10px; align-content: start; }
+.step + .step { border-left: 1px solid var(--rule); }
+.step .n { font: 500 13px var(--mono); color: var(--magenta); }
+.step h3 { font-size: 22px; }
+@media (max-width: 760px) { .steps { grid-template-columns: 1fr; } .step + .step { border-left: 0; border-top: 1px solid var(--rule); } }
+
+.pricing { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 20px; }
+.price { background: var(--sheet); border: 1px solid var(--rule); padding: 32px; display: grid; gap: 18px; align-content: start; }
+.price.main { border-color: var(--ink); box-shadow: var(--shadow); }
+.price .amount { font: 600 64px/1 var(--display); letter-spacing: -0.04em; }
+.price ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.price li { display: flex; gap: 10px; align-items: flex-start; }
+.price li svg { color: var(--ok); margin-top: 2px; }
+.badge-soon { display: inline-flex; width: fit-content; padding: 4px 10px; border: 1px dashed var(--rule-2); border-radius: 999px; font: 500 12px var(--mono); color: var(--ink-2); }
+@media (max-width: 860px) { .pricing { grid-template-columns: 1fr; } }
+
+.faq { border-top: 1px solid var(--rule); max-width: 900px; }
+.faq details { border-bottom: 1px solid var(--rule); }
+.faq summary { list-style: none; cursor: pointer; padding: 22px 0; font: 500 19px var(--display); display: flex; justify-content: space-between; gap: 16px; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: "+"; font: 400 22px var(--mono); color: var(--ink-3); }
+.faq details[open] summary::after { content: "−"; }
+.faq details p { padding: 0 0 22px; color: var(--ink-2); max-width: 70ch; }
+
+.cta-band { padding: 88px 0; text-align: left; background-image: radial-gradient(var(--grid) 1px, transparent 1.2px); background-size: 22px 22px; }
+.cta-band .wrap { display: flex; justify-content: space-between; align-items: center; gap: 32px; flex-wrap: wrap; }
+.cta-band h2 { font-size: clamp(32px, 4.4vw, 60px); max-width: 16ch; }
+
+footer.foot { padding: 48px 0 40px; }
+.foot .wrap { display: grid; gap: 28px; }
+.foot .cols { display: flex; justify-content: space-between; gap: 32px; flex-wrap: wrap; }
+.foot nav { display: flex; gap: 20px; flex-wrap: wrap; }
+.foot nav a { color: var(--ink-2); text-decoration: none; font-size: 14px; }
+.colorbar { display: flex; height: 10px; width: 180px; }
+.colorbar i { flex: 1; }
+
+/* App shell */
+.app { min-height: 100vh; display: grid; grid-template-rows: auto 1fr; }
+.app-top { display: flex; align-items: center; gap: 16px; min-height: 56px; padding: 0 max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px)); border-bottom: 1px solid var(--rule); background: var(--sheet); position: sticky; top: env(safe-area-inset-top, 0px); z-index: 30; }
+.crumbs { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--ink-2); font-size: 14px; }
+.crumbs b { color: var(--ink); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-tabs { display: flex; gap: 4px; margin-left: 12px; }
+.app-tabs a { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border-radius: 8px; text-decoration: none; color: var(--ink-2); font-size: 14px; font-weight: 500; }
+.app-tabs a[aria-current="page"] { background: var(--sheet-2); color: var(--ink); }
+.credit-pill { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--rule); text-decoration: none; font: 500 13px var(--mono); }
+.credit-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--yellow); box-shadow: 0 0 0 3px color-mix(in srgb, var(--yellow) 25%, transparent); }
+.app-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.avatar { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--ink); color: var(--paper); font: 600 13px var(--display); }
+
+.ws { display: grid; grid-template-columns: 252px minmax(0, 1fr) 328px; min-height: 0; height: calc(100vh - 57px); }
+.rail { border-right: 1px solid var(--rule); background: var(--sheet); display: flex; flex-direction: column; min-height: 0; }
+.rail .pad { padding: 14px; }
+.rail h2 { font: 500 11.5px var(--mono); text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-3); margin: 14px 14px 8px; }
+.files { list-style: none; margin: 0; padding: 0 8px; overflow: auto; display: grid; gap: 2px; }
+.files button { width: 100%; display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 10px; align-items: center; text-align: left; padding: 7px; border-radius: 8px; border: 1px solid transparent; background: none; cursor: pointer; }
+.files button:hover { background: var(--sheet-2); }
+.files button[aria-current="true"] { background: var(--cyan-soft); border-color: color-mix(in srgb, var(--cyan) 30%, transparent); }
+.files .th { width: 44px; height: 44px; background: #fff; border: 1px solid var(--rule); display: grid; place-items: center; overflow: hidden; }
+.files .th img { width: 100%; height: 100%; object-fit: contain; padding: 3px; }
+.files .nm, .files .sub { display: block; }
+.files .nm { font-size: 13.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.files .sub { font: 400 11.5px var(--mono); color: var(--ink-3); }
+.rail .foot-note { margin-top: auto; padding: 14px; font-size: 12.5px; color: var(--ink-3); border-top: 1px solid var(--rule); }
+
+.canvas-col { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0; }
+.canvas-bar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--rule); background: var(--sheet); flex-wrap: wrap; }
+.canvas-bar .zoom { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+.zoom output { min-width: 56px; text-align: center; font: 500 12.5px var(--mono); }
+.canvas { position: relative; min-height: 0; display: flex; background-color: var(--paper); background-image: radial-gradient(var(--grid) 1px, transparent 1.2px); background-size: 20px 20px; overflow: hidden; }
+.vp { position: relative; flex: 1; overflow: hidden; cursor: grab; touch-action: none; outline-offset: -3px; }
+.vp.is-panning { cursor: grabbing; }
+.vp + .vp { border-left: 1px solid var(--rule); }
+.stage-content { position: absolute; left: 0; top: 0; background: #fff; box-shadow: var(--shadow); transform-origin: 0 0; }
+.stage-content > img, .stage-content > .layer { position: absolute; inset: 0; width: 100%; height: 100%; }
+.vp.is-pixels .before { image-rendering: pixelated; }
+.stage-content .after { clip-path: inset(0 0 0 var(--pos, 50%)); }
+.stage-content .handle { pointer-events: auto; cursor: ew-resize; width: 24px; margin-left: -12px; background: transparent; }
+.stage-content .handle::before { content: ""; position: absolute; left: 11px; top: 0; bottom: 0; width: 2px; background: var(--cyan); }
+.vp-label { position: absolute; top: 12px; left: 12px; z-index: 3; }
+.vp-label-r { left: auto; right: 12px; }
+.canvas:not([data-vmode="split"]) .vp-a .vp-label-r { display: none; }
+#exportPanel { position: sticky; bottom: 0; z-index: 2; background: var(--sheet); border-top: 1px solid var(--rule); box-shadow: 0 -8px 20px color-mix(in srgb, var(--sheet) 80%, transparent); }
+.canvas[data-vmode="split"] .vp-b, .canvas[data-vmode="vector"] .vp-b, .canvas[data-vmode="outline"] .vp-b, .canvas[data-vmode="original"] .vp-b { display: none; }
+.canvas[data-vmode="side"] .vp-a .after, .canvas[data-vmode="side"] .vp-a .handle { display: none; }
+.canvas[data-vmode="vector"] .vp-a .before, .canvas[data-vmode="vector"] .vp-a .handle { display: none; }
+.canvas[data-vmode="vector"] .vp-a .after { clip-path: none; }
+.canvas[data-vmode="original"] .vp-a .after, .canvas[data-vmode="original"] .vp-a .handle { display: none; }
+.canvas[data-vmode="outline"] .vp-a .after, .canvas[data-vmode="outline"] .vp-a .handle { display: none; }
+.canvas[data-vmode="outline"] .vp-a .before { opacity: 0.32; }
+.canvas:not([data-vmode="outline"]) .outline-layer { display: none; }
+.canvas-hint { position: absolute; left: 14px; bottom: 12px; z-index: 3; font: 400 12px var(--mono); color: var(--ink-3); background: color-mix(in srgb, var(--paper) 80%, transparent); padding: 4px 8px; border-radius: 6px; pointer-events: none; }
+.overlay { position: absolute; inset: 0; z-index: 6; display: grid; place-items: center; padding: 24px; background: var(--scrim); }
+.overlay .box { width: min(440px, 100%); background: var(--sheet); border: 1px solid var(--rule); box-shadow: var(--shadow); padding: 26px; display: grid; gap: 14px; }
+.overlay h3 { font-size: 22px; }
+.progress { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 10px; }
+.progress li { display: flex; gap: 10px; align-items: center; font-size: 14.5px; }
+.progress .st { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid var(--rule-2); flex: none; }
+.progress .done .st { background: var(--ok); border-color: var(--ok); color: #fff; }
+.progress .now .st { border-color: var(--cyan); border-top-color: transparent; animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.scanline { position: absolute; left: 0; right: 0; height: 2px; background: var(--cyan); box-shadow: 0 0 18px var(--cyan); animation: scan 2.4s ease-in-out infinite; z-index: 5; }
+@keyframes scan { 0%, 100% { top: 8%; } 50% { top: 92%; } }
+.empty { position: absolute; inset: 0; z-index: 5; display: grid; place-items: center; padding: 24px; overflow: auto; background: var(--paper); }
+.dropzone { width: min(560px, 100%); border: 1.5px dashed var(--rule-2); background: var(--sheet); padding: 36px 28px; display: grid; justify-items: center; gap: 12px; text-align: center; transition: border-color 0.15s, background 0.15s; }
+.dropzone.is-over { border-color: var(--cyan); background: var(--cyan-soft); }
+.dropzone .big { width: 56px; height: 56px; border-radius: 14px; display: grid; place-items: center; background: var(--cyan-soft); color: var(--cyan); }
+.dropzone h3 { font-size: 22px; }
+.sample-strip { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 8px; }
+.sample-strip button { width: 64px; height: 64px; padding: 6px; background: #fff; border: 1px solid var(--rule); cursor: pointer; }
+.sample-strip button:hover { border-color: var(--cyan); }
+.drop-overlay { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; background: color-mix(in srgb, var(--cyan) 14%, var(--scrim)); border: 3px dashed var(--cyan); font: 600 28px var(--display); color: var(--ink); pointer-events: none; }
+
+.inspector { border-left: 1px solid var(--rule); background: var(--sheet); overflow: auto; }
+.panel { padding: 18px; border-bottom: 1px solid var(--rule); display: grid; gap: 12px; }
+.panel > h2 { font: 500 11.5px var(--mono); text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-3); }
+.mode-opt { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 12px; align-items: start; text-align: left; padding: 14px; border: 1px solid var(--rule); border-radius: 12px; background: var(--sheet); cursor: pointer; width: 100%; }
+.mode-opt:hover { border-color: var(--ink-3); }
+.mode-opt[aria-pressed="true"] { border-color: var(--cyan); box-shadow: 0 0 0 1px var(--cyan); background: color-mix(in srgb, var(--cyan-soft) 50%, var(--sheet)); }
+.mode-opt .ic { grid-row: span 2; width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; background: var(--sheet-2); }
+.mode-opt[aria-pressed="true"] .ic { background: var(--cyan); color: #fff; }
+.mode-opt b { font-weight: 600; font-size: 15px; }
+.mode-opt .c { font: 500 12px var(--mono); color: var(--ink-2); white-space: nowrap; }
+.mode-opt .d { grid-column: 2 / 4; font-size: 13px; color: var(--ink-2); line-height: 1.45; }
+.note { font-size: 12.5px; color: var(--ink-3); line-height: 1.5; }
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--rule); border: 1px solid var(--rule); }
+.stats div { background: var(--sheet); padding: 10px 12px; display: grid; gap: 2px; }
+.stats dt { font: 500 11px var(--mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); }
+.stats dd { margin: 0; font: 600 18px var(--display); letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.swatches { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
+.swatches span { aspect-ratio: 1; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12); }
+.btn-block { width: 100%; }
+.proto-states { display: flex; flex-wrap: wrap; gap: 6px; }
+.proto-states button { min-height: 30px; padding: 0 10px; border-radius: 6px; border: 1px dashed var(--rule-2); background: none; font: 500 12px var(--mono); cursor: pointer; color: var(--ink-2); }
+.proto-states button[aria-pressed="true"] { border-style: solid; border-color: var(--magenta); color: var(--magenta); }
+.alert { display: flex; gap: 10px; padding: 12px; border-radius: 10px; background: var(--cyan-soft); color: var(--ink); font-size: 13.5px; line-height: 1.45; }
+.alert svg { color: var(--cyan); margin-top: 1px; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; font-size: 14px; }
+.kv dt { color: var(--ink-3); }
+.kv dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+@media (max-width: 1180px) {
+  .ws { grid-template-columns: 220px minmax(0, 1fr) 300px; }
+}
+@media (max-width: 980px) {
+  .ws { grid-template-columns: minmax(0, 1fr); height: auto; }
+  .rail { border-right: 0; border-bottom: 1px solid var(--rule); }
+  .rail h2, .rail .foot-note { display: none; }
+  .rail .pad { padding: 10px 12px 0; }
+  .files { display: flex; overflow-x: auto; padding: 10px 12px 12px; gap: 8px; }
+  .files li { flex: none; }
+  .files button { grid-template-columns: 40px auto; width: auto; border-color: var(--rule); }
+  .files .th { width: 40px; height: 40px; }
+  .canvas-col { height: min(72vh, 640px); min-height: 420px; }
+  .inspector { border-left: 0; }
+  .app-tabs .lbl, .crumbs .hide-s { display: none; }
+}
+@media (max-width: 560px) {
+  .canvas-bar .seg button span { display: none; }
+  .app-right .hide-s { display: none; }
+  .crumbs { display: none; }
+  .app-top { gap: 8px; }
+  .app-tabs { margin-left: 0; }
+  .app-tabs a { padding: 0 9px; }
+  .canvas-bar { padding: 8px 10px; gap: 6px; }
+  .canvas-bar .seg button { padding: 0 8px; }
+  .canvas-bar .icon-btn { width: 36px; height: 36px; }
+  .zoom output { min-width: 42px; }
+}
+
+/* History */
+.hist { padding: 32px 0 64px; }
+.hist-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 24px; align-items: start; }
+.hist h1 { font-size: clamp(32px, 4vw, 48px); }
+.hist .head { display: flex; justify-content: space-between; align-items: end; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+.example-banner { display: flex; gap: 10px; align-items: center; padding: 10px 14px; border: 1px dashed var(--rule-2); background: var(--sheet); font-size: 13.5px; color: var(--ink-2); margin-bottom: 16px; }
+.table-wrap { background: var(--sheet); border: 1px solid var(--rule); overflow-x: auto; }
+table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
+.tbl th { text-align: left; font: 500 11px var(--mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-3); padding: 12px 14px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+.tbl td { padding: 12px 14px; border-bottom: 1px solid var(--rule); vertical-align: middle; }
+.tbl tr:last-child td { border-bottom: 0; }
+.tbl .th { width: 52px; height: 52px; background: #fff; border: 1px solid var(--rule); }
+.tbl .th img { width: 100%; height: 100%; object-fit: contain; padding: 4px; }
+.tbl .file b { display: block; font-weight: 500; }
+.tbl .file span { font: 400 12px var(--mono); color: var(--ink-3); }
+.tbl .r { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tbl .acts { display: flex; gap: 6px; justify-content: flex-end; }
+.ledger-card { background: var(--sheet); border: 1px solid var(--rule); display: grid; }
+.ledger-card .bal { padding: 22px; border-bottom: 1px solid var(--rule); display: grid; gap: 10px; }
+.ledger-card .big { font: 600 64px/1 var(--display); letter-spacing: -0.04em; }
+.meter { height: 8px; background: var(--sheet-2); border-radius: 99px; overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--yellow); border-radius: 99px; }
+.ledger { list-style: none; margin: 0; padding: 6px 0; }
+.ledger li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 10px 22px; }
+.ledger li + li { border-top: 1px solid var(--rule); }
+.ledger .amt { font: 600 15px var(--mono); }
+.ledger .plus { color: var(--ok); }
+.ledger .sub { font-size: 12.5px; color: var(--ink-3); }
+@media (max-width: 1040px) { .hist-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 680px) {
+  .tbl thead { display: none; }
+  .tbl, .tbl tbody, .tbl tr, .tbl td { display: block; }
+  .tbl tr { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 4px 12px; padding: 12px 14px; border-bottom: 1px solid var(--rule); }
+  .tbl td { padding: 0; border: 0; }
+  .tbl td.thc { grid-row: span 3; }
+  .tbl td.hide-m { display: none; }
+  .tbl .acts { grid-column: 2 / 4; justify-content: flex-start; }
+}
+
+/* Prototype bar */
+.proto-bar { position: fixed; left: max(12px, env(safe-area-inset-left, 0px)); bottom: max(12px, env(safe-area-inset-bottom, 0px)); z-index: 60; display: flex; gap: 4px; align-items: center; padding: 5px; border-radius: 12px; background: var(--ink); color: var(--paper); box-shadow: var(--shadow); font: 500 12px var(--mono); }
+.proto-bar span { padding: 0 8px; opacity: 0.75; }
+.proto-bar a { color: inherit; text-decoration: none; padding: 6px 9px; border-radius: 8px; }
+.proto-bar a:hover, .proto-bar a[aria-current="page"] { background: color-mix(in srgb, var(--paper) 18%, transparent); }
+.is-shot .proto-bar { display: none; }
+.is-shot *, .is-shot *::before, .is-shot *::after { animation: none !important; transition: none !important; }
+@media (max-width: 560px) { .proto-bar span { display: none; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<a class="skip" href="#main" data-i18n="ui.skip">Skip to content</a>
+<div class="drop-overlay" data-drop-overlay hidden><span data-i18n="upload.release">Release to upload</span></div>
+
+<!-- ============ LANDING ============ -->
+<div data-view="home">
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="#" aria-label="Vectorla">
+        <svg viewBox="0 0 28 28" aria-hidden="true"><path d="M5 6.5 14 22 23 6.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/><path d="M5 6.5c3 0 5.5 2 6.5 5" fill="none" stroke="var(--cyan)" stroke-width="1.2"/><rect x="2.5" y="4" width="5" height="5" fill="var(--sheet)" stroke="var(--cyan)" stroke-width="1.4"/><rect x="20.5" y="4" width="5" height="5" fill="var(--sheet)" stroke="var(--cyan)" stroke-width="1.4"/><rect x="11.5" y="19.5" width="5" height="5" fill="var(--magenta)"/></svg>
+        Vectorla
+      </a>
+      <nav class="nav" aria-label="Main">
+        <a href="#examples" data-i18n="nav.examples">Examples</a>
+        <a href="#modes" data-i18n="nav.modes">Modes</a>
+        <a href="#pricing" data-i18n="nav.pricing">Pricing</a>
+        <a href="#faq" data-i18n="nav.faq">FAQ</a>
+      </nav>
+      <div class="top-actions">
+        <div class="seg seg-sm lang hide-m" role="group" data-i18n-attr="aria-label:ui.language">
+          <button type="button" data-lang="en">EN</button><button type="button" data-lang="uz">UZ</button><button type="button" data-lang="ru">RU</button>
+        </div>
+        <button class="icon-btn" type="button" data-theme-toggle data-i18n-attr="aria-label:ui.theme"><svg class="i i-sun"><use href="#i-sun"/></svg><svg class="i i-moon"><use href="#i-moon"/></svg></button>
+        <a class="btn btn-ghost hide-m" href="#app" data-i18n="nav.signIn">Sign in</a>
+        <a class="btn btn-primary hide-m" href="#app" data-i18n="nav.startFree">Start free</a>
+        <button class="icon-btn menu-btn" type="button" aria-expanded="false" aria-controls="mmenu" data-i18n-attr="aria-label:nav.menu"><svg class="i"><use href="#i-menu"/></svg></button>
+      </div>
+    </div>
+    <div class="mobile-menu wrap" id="mmenu" hidden>
+      <nav aria-label="Main">
+        <a href="#examples" data-i18n="nav.examples">Examples</a>
+        <a href="#modes" data-i18n="nav.modes">Modes</a>
+        <a href="#pricing" data-i18n="nav.pricing">Pricing</a>
+        <a href="#faq" data-i18n="nav.faq">FAQ</a>
+      </nav>
+      <div class="row">
+        <div class="seg seg-sm lang" role="group" data-i18n-attr="aria-label:ui.language"><button type="button" data-lang="en">EN</button><button type="button" data-lang="uz">UZ</button><button type="button" data-lang="ru">RU</button></div>
+        <a class="btn" href="#app" data-i18n="nav.signIn">Sign in</a>
+        <a class="btn btn-primary" href="#app" data-i18n="nav.startFree">Start free</a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div>
+          <p class="eyebrow" data-i18n="c.heroEyebrow">Raster → vector · SVG</p>
+          <h1 data-focus tabindex="-1"><span data-i18n="c.heroTitleA">Pixels in.</span> <em data-i18n="c.heroTitleB">Precise vectors out.</em></h1>
+          <p class="lede" data-i18n="c.heroSub">Vectorla traces logos, emblems and artwork into clean SVG.</p>
+          <div class="cta-row" data-dropzone>
+            <input type="file" accept="image/png,image/jpeg,image/webp" hidden>
+            <button class="btn btn-primary btn-lg" type="button" data-browse><svg class="i"><use href="#i-upload"/></svg><span data-i18n="c.heroCta">Upload an image</span></button>
+            <a class="btn btn-lg" href="#app"><span data-i18n="upload.samples">Or open a sample</span></a>
+          </div>
+          <p class="drop-hint" style="margin-top:12px" data-i18n="c.heroDrop">PNG, JPG or WebP up to 5 MB. Drop it anywhere on this page, or paste with Ctrl+V.</p>
+          <p class="upload-error" role="alert" data-upload-error hidden><svg class="i-sm"><use href="#i-alert"/></svg><span></span></p>
+          <div class="facts">
+            <span><svg class="i-sm"><use href="#i-coin"/></svg><b data-i18n="c.factFree">10 free credits</b></span>
+            <span><span data-i18n="mode.quickShort">Quick</span> <b data-i18n="mode.cost1">1 credit</b></span>
+            <span><span data-i18n="mode.proShort">Professional</span> <b data-i18n="mode.cost2">2 credits</b></span>
+            <span><svg class="i-sm"><use href="#i-file"/></svg><b>SVG</b></span>
+          </div>
+        </div>
+
+        <div class="specimen">
+          <span class="cm tl"></span><span class="cm tr"></span><span class="cm bl"></span><span class="cm br"></span>
+          <div class="spec-bar">
+            <div class="seg seg-sm" role="group" id="heroMode" data-i18n-attr="aria-label:c.viewLabel">
+              <button type="button" data-hmode="split" aria-pressed="true"><svg class="i-sm"><use href="#i-split"/></svg><span data-i18n="views.split">Split</span></button>
+              <button type="button" data-hmode="outline" aria-pressed="false"><svg class="i-sm"><use href="#i-outline"/></svg><span data-i18n="views.outline">Outlines</span></button>
+            </div>
+            <div class="seg seg-sm" role="group" id="heroZoom" data-i18n-attr="aria-label:zoom.level">
+              <button type="button" data-z="1" aria-pressed="false">1×</button>
+              <button type="button" data-z="3" aria-pressed="true">3×</button>
+              <button type="button" data-z="8" aria-pressed="false">8×</button>
+            </div>
+          </div>
+          <div class="cmp cmp-sq is-pixels" id="heroCmp" data-mode="split" style="--pos:50%">
+            <div class="zoombox" id="heroBox">
+              <img class="before" src="samples/crest/source.jpg" alt="" width="1200" height="1200" fetchpriority="high">
+              <img class="after" src="samples/crest/pro.svg" alt="" width="1200" height="1200">
+              <div class="layer outline-layer" id="heroOutline"></div>
+            </div>
+            <span class="tag tag-l" data-i18n="cmp.before">Original</span>
+            <span class="tag tag-r" data-i18n="cmp.after">Vector</span>
+            <div class="handle" data-compare-handle><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 7l-5 5 5 5M15 7l5 5-5 5"/></svg></div>
+            <input class="sr-only" type="range" min="0" max="100" value="50" data-i18n-attr="aria-label:cmp.label">
+          </div>
+          <div class="spec-cap mono">
+            <span>crest.jpg · <span data-i18n="samples.crestSrc"></span></span>
+            <span class="arrow">→</span>
+            <span id="heroStats"></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" id="zoom">
+      <div class="wrap">
+        <div class="sec-head">
+          <div><p class="eyebrow" data-i18n="c.zoomEyebrow">Zoom test</p><h2 data-i18n="c.zoomTitle">Look closer. The edges hold.</h2></div>
+          <p data-i18n="c.zoomSub">The same logo at 8× zoom.</p>
+        </div>
+        <div class="zoomtest">
+          <figure class="zt" style="margin:0">
+            <div class="frame"><img class="px" src="samples/summit-logo/source.jpg" alt="" loading="lazy" width="512" height="512"></div>
+            <figcaption class="mono"><span data-i18n="cmp.before">Original</span><span>JPEG q40 · 512 px · 8×</span></figcaption>
+          </figure>
+          <figure class="zt" style="margin:0">
+            <div class="frame"><img src="samples/summit-logo/pro.svg" alt="" loading="lazy" width="512" height="512"></div>
+            <figcaption class="mono"><span data-i18n="cmp.after">Vector</span><span id="ztStats"></span></figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" id="modes">
+      <div class="wrap">
+        <div class="sec-head">
+          <div><p class="eyebrow" data-i18n="nav.modes">Modes</p><h2 data-i18n="c.modesTitle">Two modes. One clear difference.</h2></div>
+          <p data-i18n="c.modesSub">Quick keeps colors flat. Professional rebuilds shading as real gradients.</p>
+        </div>
+        <div class="modes">
+          <article class="mode-card">
+            <div class="art"><img src="samples/globe/quick.svg" alt="" loading="lazy" width="256" height="256"></div>
+            <div class="body">
+              <h3><svg class="i"><use href="#i-bolt"/></svg><span data-i18n="mode.quick">Quick Trace</span><span class="cost" data-i18n="mode.cost1">1 credit</span></h3>
+              <p class="muted" data-i18n="mode.quickDesc"></p>
+              <dl class="spec">
+                <dt data-i18n="c.thisImage">This image</dt><dd class="mono" id="mqStats"></dd>
+                <dt data-i18n="stats.gradients">Gradients</dt><dd data-i18n="mode.flat">Flat colors</dd>
+              </dl>
+            </div>
+          </article>
+          <article class="mode-card">
+            <div class="art"><img src="samples/globe/pro.svg" alt="" loading="lazy" width="256" height="256"></div>
+            <div class="body">
+              <h3><svg class="i"><use href="#i-spark"/></svg><span data-i18n="mode.pro">Professional Trace</span><span class="cost" data-i18n="mode.cost2">2 credits</span></h3>
+              <p class="muted" data-i18n="mode.proDesc"></p>
+              <dl class="spec">
+                <dt data-i18n="c.thisImage">This image</dt><dd class="mono" id="mpStats"></dd>
+                <dt data-i18n="stats.gradients">Gradients</dt><dd data-i18n="mode.gradients">Real gradients</dd>
+              </dl>
+            </div>
+          </article>
+        </div>
+        <p class="credit-line" data-i18n="c.modesNote"></p>
+      </div>
+    </section>
+
+    <section class="band" id="examples">
+      <div class="wrap">
+        <div class="sec-head">
+          <div><p class="eyebrow" data-i18n="nav.examples">Examples</p><h2 data-i18n="c.examplesTitle">Real traces, measured.</h2></div>
+          <p data-i18n="c.examplesSub"></p>
+        </div>
+        <div class="gallery" id="gallery"></div>
+        <p class="credit-line" data-i18n="samples.credits"></p>
+      </div>
+    </section>
+
+    <section class="band" id="how">
+      <div class="wrap">
+        <div class="sec-head">
+          <div><p class="eyebrow" data-i18n="c.howEyebrow">Workflow</p><h2 data-i18n="c.howTitle">From upload to SVG.</h2></div>
+          <p></p>
+        </div>
+        <ol class="steps" style="list-style:none;margin:0;padding:0">
+          <li class="step"><span class="n">01</span><h3 data-i18n="steps.s1">Upload</h3><p class="muted" data-i18n="steps.s1d"></p></li>
+          <li class="step"><span class="n">02</span><h3 data-i18n="steps.s2">Choose a mode</h3><p class="muted" data-i18n="steps.s2d"></p></li>
+          <li class="step"><span class="n">03</span><h3 data-i18n="steps.s3">Compare and download</h3><p class="muted" data-i18n="steps.s3d"></p></li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="band" id="pricing">
+      <div class="wrap">
+        <div class="sec-head">
+          <div><p class="eyebrow" data-i18n="nav.pricing">Pricing</p><h2 data-i18n="pricing.title">Pay per image, in credits</h2></div>
+          <p></p>
+        </div>
+        <div class="pricing">
+          <div class="price main">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px"><h3 style="font-size:24px" data-i18n="pricing.free">Free</h3><span class="amount" data-i18n="pricing.freePrice">$0</span></div>
+            <ul id="freeItems"></ul>
+            <a class="btn btn-primary btn-lg" href="#app" data-i18n="pricing.cta">Start free</a>
+          </div>
+          <div class="price">
+            <h3 style="font-size:24px" data-i18n="pricing.paid">Paid plans</h3>
+            <span class="badge-soon" data-i18n="pricing.paidSoon">Coming soon</span>
+            <p class="muted" data-i18n="pricing.paidDesc"></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" id="faq">
+      <div class="wrap">
+        <div class="sec-head"><div><p class="eyebrow">FAQ</p><h2 data-i18n="faq.title">Questions</h2></div><p></p></div>
+        <div class="faq">
+          <details><summary data-i18n="faq.q1"></summary><p data-i18n="faq.a1"></p></details>
+          <details><summary data-i18n="faq.q2"></summary><p data-i18n="faq.a2"></p></details>
+          <details><summary data-i18n="faq.q3"></summary><p data-i18n="faq.a3"></p></details>
+          <details><summary data-i18n="faq.q4"></summary><p data-i18n="faq.a4"></p></details>
+        </div>
+      </div>
+    </section>
+
+    <section class="cta-band">
+      <div class="wrap">
+        <h2 data-i18n="c.ctaTitle">Start with 10 free credits.</h2>
+        <a class="btn btn-primary btn-lg" href="#app"><svg class="i"><use href="#i-upload"/></svg><span data-i18n="c.heroCta">Upload an image</span></a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="wrap">
+      <div class="cols">
+        <div style="display:grid;gap:10px;max-width:40ch">
+          <span class="brand" style="font-size:17px">Vectorla</span>
+          <p class="muted" style="font-size:14px" data-i18n="footer.tagline"></p>
+        </div>
+        <nav aria-label="Footer"><a href="#examples" data-i18n="nav.examples">Examples</a><a href="#pricing" data-i18n="nav.pricing">Pricing</a><a href="#faq" data-i18n="nav.faq">FAQ</a><a href="#top" data-i18n="footer.privacy">Privacy</a><a href="#top" data-i18n="footer.terms">Terms</a></nav>
+      </div>
+      <div class="cols" style="align-items:center">
+        <p class="mono muted" data-i18n="footer.proto"></p>
+        <div class="colorbar" aria-hidden="true"><i style="background:#00a3e0"></i><i style="background:#e5007e"></i><i style="background:#ffe600"></i><i style="background:#1a1a1a"></i></div>
+      </div>
+    </div>
+  </footer>
+</div>
+
+<!-- ============ WORKSPACE ============ -->
+<div class="app" data-view="app" hidden>
+  <header class="app-top">
+    <a class="brand" href="#" aria-label="Vectorla"><svg viewBox="0 0 28 28" aria-hidden="true"><path d="M5 6.5 14 22 23 6.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/><rect x="2.5" y="4" width="5" height="5" fill="var(--sheet)" stroke="var(--cyan)" stroke-width="1.4"/><rect x="20.5" y="4" width="5" height="5" fill="var(--sheet)" stroke="var(--cyan)" stroke-width="1.4"/><rect x="11.5" y="19.5" width="5" height="5" fill="var(--magenta)"/></svg></a>
+    <nav class="app-tabs" aria-label="App">
+      <a href="#app" aria-current="page"><svg class="i-sm"><use href="#i-layers"/></svg><span class="lbl" data-i18n="nav.workspace">Workspace</span></a>
+      <a href="#history"><svg class="i-sm"><use href="#i-clock"/></svg><span class="lbl" data-i18n="nav.history">History</span></a>
+    </nav>
+    <div class="crumbs"><span class="hide-s">/</span><b id="crumbName">crest.jpg</b></div>
+    <div class="app-right">
+      <a class="credit-pill" href="#history" data-i18n-attr="aria-label:credits.balance"><span class="dot" aria-hidden="true"></span><span data-credit-text>2 credits</span></a>
+      <div class="seg seg-sm lang hide-s" role="group" data-i18n-attr="aria-label:ui.language"><button type="button" data-lang="en">EN</button><button type="button" data-lang="uz">UZ</button><button type="button" data-lang="ru">RU</button></div>
+      <button class="icon-btn" type="button" data-theme-toggle data-i18n-attr="aria-label:ui.theme"><svg class="i i-sun"><use href="#i-sun"/></svg><svg class="i i-moon"><use href="#i-moon"/></svg></button>
+      <span class="avatar" aria-hidden="true">RA</span>
+    </div>
+  </header>
+  <div class="ws">
+    <aside class="rail" data-i18n-attr="aria-label:ws.files">
+      <div class="pad" data-dropzone>
+        <input type="file" accept="image/png,image/jpeg,image/webp" hidden>
+        <button class="btn btn-primary btn-block" type="button" data-browse><svg class="i"><use href="#i-upload"/></svg><span data-i18n="ws.newUpload">New upload</span></button>
+      </div>
+      <h2 data-i18n="ws.files">Recent files</h2>
+      <ul class="files" id="fileList"></ul>
+      <p class="foot-note" data-i18n="ws.retention"></p>
+    </aside>
+
+    <section class="canvas-col" aria-labelledby="canvasTitle">
+      <h1 class="sr-only" id="canvasTitle" data-focus tabindex="-1" data-i18n="nav.workspace">Workspace</h1>
+      <div class="canvas-bar">
+        <div class="seg seg-sm" role="group" id="viewSeg" data-i18n-attr="aria-label:c.viewLabel">
+          <button type="button" data-v="split" aria-pressed="true"><svg class="i-sm"><use href="#i-split"/></svg><span data-i18n="views.split">Split</span></button>
+          <button type="button" data-v="side" aria-pressed="false"><svg class="i-sm"><use href="#i-side"/></svg><span data-i18n="views.side">Side by side</span></button>
+          <button type="button" data-v="vector" aria-pressed="false"><svg class="i-sm"><use href="#i-vector"/></svg><span data-i18n="views.vector">Vector</span></button>
+          <button type="button" data-v="outline" aria-pressed="false"><svg class="i-sm"><use href="#i-outline"/></svg><span data-i18n="views.outline">Outlines</span></button>
+          <button type="button" data-v="original" aria-pressed="false"><svg class="i-sm"><use href="#i-image"/></svg><span data-i18n="views.original">Original</span></button>
+        </div>
+        <div class="zoom">
+          <button class="icon-btn" type="button" data-zoom="out" data-i18n-attr="aria-label:zoom.out"><svg class="i"><use href="#i-zoom-out"/></svg></button>
+          <output id="zoomOut" aria-live="polite">100%</output>
+          <button class="icon-btn" type="button" data-zoom="in" data-i18n-attr="aria-label:zoom.in"><svg class="i"><use href="#i-zoom-in"/></svg></button>
+          <button class="icon-btn" type="button" data-zoom="fit" data-i18n-attr="aria-label:zoom.fit"><svg class="i"><use href="#i-fit"/></svg></button>
+        </div>
+      </div>
+      <div class="canvas" id="canvas" data-vmode="split">
+        <div class="vp vp-a" tabindex="0" data-i18n-attr="aria-label:c.canvasLabel">
+          <div class="stage-content" id="contentA" style="--pos:50%">
+            <img class="before" id="srcA" alt="" draggable="false">
+            <img class="after" id="vecA" alt="" draggable="false">
+            <div class="layer outline-layer" id="outlineA"></div>
+            <div class="handle" data-compare-handle data-no-pan></div>
+            <input class="sr-only" type="range" min="0" max="100" value="50" data-i18n-attr="aria-label:cmp.label">
+          </div>
+          <span class="chip vp-label" id="labelA" data-i18n="cmp.before">Original</span>
+          <span class="chip vp-label vp-label-r chip-pro" data-i18n="cmp.after">Vector</span>
+        </div>
+        <div class="vp vp-b" tabindex="0" data-i18n-attr="aria-label:c.canvasLabel">
+          <div class="stage-content"><img class="after" id="vecB" alt="" draggable="false" style="clip-path:none"></div>
+          <span class="chip vp-label chip-pro" data-i18n="cmp.after">Vector</span>
+        </div>
+        <p class="canvas-hint" data-i18n="c.canvasHint">Scroll or pinch to zoom · drag to pan</p>
+
+        <div class="overlay" id="stProcessing" hidden>
+          <div class="scanline" aria-hidden="true"></div>
+          <div class="box" role="status">
+            <h3 data-i18n="ws.processing">Tracing your image…</h3>
+            <p class="muted" data-i18n="ws.processingHint"></p>
+            <ol class="progress">
+              <li class="done"><span class="st"><svg class="i-sm"><use href="#i-check"/></svg></span><span data-i18n="c.stUploaded">Uploaded</span></li>
+              <li class="done"><span class="st"><svg class="i-sm"><use href="#i-check"/></svg></span><span data-i18n="ws.statusQueued">Queued</span></li>
+              <li class="now"><span class="st"></span><span data-i18n="ws.statusTracing">Tracing</span></li>
+              <li><span class="st"></span><span data-i18n="ws.statusReady">Ready</span></li>
+            </ol>
+          </div>
+        </div>
+        <div class="overlay" id="stError" hidden>
+          <div class="box" role="alert">
+            <svg class="i" style="color:var(--bad);width:28px;height:28px"><use href="#i-alert"/></svg>
+            <h3 data-i18n="ws.failed">This trace failed</h3>
+            <p class="muted" data-i18n="ws.failedHint"></p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" type="button" data-state-go="result"><svg class="i"><use href="#i-refresh"/></svg><span data-i18n="ws.retrace">Trace again</span></button></div>
+          </div>
+        </div>
+        <div class="empty" id="stEmpty" hidden>
+          <div class="dropzone" data-dropzone>
+            <input type="file" accept="image/png,image/jpeg,image/webp" hidden>
+            <span class="big"><svg class="i" style="width:26px;height:26px"><use href="#i-upload"/></svg></span>
+            <h3 data-i18n="upload.title">Drop an image to trace</h3>
+            <p class="muted" data-i18n="upload.sub"></p>
+            <button class="btn btn-primary" type="button" data-browse data-i18n="upload.browse">Choose a file</button>
+            <p class="note" data-i18n="upload.paste"></p>
+            <p class="note" style="margin-top:6px" data-i18n="upload.samples"></p>
+            <div class="sample-strip" id="sampleStrip"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="inspector" data-i18n-attr="aria-label:ws.inspector">
+      <div class="panel" id="filePanel" hidden>
+        <h2 data-i18n="ws.file">File</h2>
+        <dl class="kv" id="fileKv"></dl>
+        <div class="alert"><svg class="i-sm"><use href="#i-info"/></svg><span data-i18n="upload.protoNote"></span></div>
+      </div>
+      <div class="panel">
+        <h2 data-i18n="mode.title">Trace mode</h2>
+        <button class="mode-opt" type="button" data-mode="quick" aria-pressed="false">
+          <span class="ic"><svg class="i"><use href="#i-bolt"/></svg></span><b data-i18n="mode.quick">Quick Trace</b><span class="c" data-i18n="mode.cost1">1 credit</span>
+          <span class="d" data-i18n="mode.quickDesc"></span>
+        </button>
+        <button class="mode-opt" type="button" data-mode="pro" aria-pressed="true">
+          <span class="ic"><svg class="i"><use href="#i-spark"/></svg></span><b data-i18n="mode.pro">Professional Trace</b><span class="c" data-i18n="mode.cost2">2 credits</span>
+          <span class="d" data-i18n="mode.proDesc"></span>
+        </button>
+        <p class="note" data-i18n="mode.switchNote"></p>
+      </div>
+      <div class="panel" id="resultPanel">
+        <h2 data-i18n="ws.result">Result</h2>
+        <dl class="stats" id="stats"></dl>
+        <p class="note" data-i18n="stats.measured"></p>
+      </div>
+      <div class="panel" id="palettePanel">
+        <h2 data-i18n="ws.palette">Palette</h2>
+        <div class="swatches" id="swatches"></div>
+      </div>
+      <div class="panel" id="exportPanel">
+        <h2 data-i18n="ws.export">Export</h2>
+        <a class="btn btn-primary btn-lg btn-block" id="dl" href="samples/crest/pro.svg" download><svg class="i"><use href="#i-download"/></svg><span data-i18n="ws.downloadSvg">Download SVG</span></a>
+        <p class="note" data-i18n="ws.retention"></p>
+      </div>
+      <div class="panel">
+        <h2 data-i18n="ws.states">Prototype states</h2>
+        <div class="proto-states" id="protoStates">
+          <button type="button" data-state="result" aria-pressed="true" data-i18n="ws.stateResult">Result</button>
+          <button type="button" data-state="processing" aria-pressed="false" data-i18n="ws.stateProcessing">Processing</button>
+          <button type="button" data-state="error" aria-pressed="false" data-i18n="ws.stateError">Error</button>
+          <button type="button" data-state="empty" aria-pressed="false" data-i18n="ws.stateEmpty">Empty</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- ============ HISTORY ============ -->
+<div class="app" data-view="history" hidden>
+  <header class="app-top">
+    <a class="brand" href="#" aria-label="Vectorla"><svg viewBox="0 0 28 28" aria-hidden="true"><path d="M5 6.5 14 22 23 6.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/><rect x="2.5" y="4" width="5" height="5" fill="var(--sheet)" stroke="var(--cyan)" stroke-width="1.4"/><rect x="20.5" y="4" width="5" height="5" fill="var(--sheet)" stroke="var(--cyan)" stroke-width="1.4"/><rect x="11.5" y="19.5" width="5" height="5" fill="var(--magenta)"/></svg></a>
+    <nav class="app-tabs" aria-label="App">
+      <a href="#app"><svg class="i-sm"><use href="#i-layers"/></svg><span class="lbl" data-i18n="nav.workspace">Workspace</span></a>
+      <a href="#history" aria-current="page"><svg class="i-sm"><use href="#i-clock"/></svg><span class="lbl" data-i18n="nav.history">History</span></a>
+    </nav>
+    <div class="app-right">
+      <a class="credit-pill" href="#history" data-i18n-attr="aria-label:credits.balance"><span class="dot" aria-hidden="true"></span><span data-credit-text>2 credits</span></a>
+      <div class="seg seg-sm lang hide-s" role="group" data-i18n-attr="aria-label:ui.language"><button type="button" data-lang="en">EN</button><button type="button" data-lang="uz">UZ</button><button type="button" data-lang="ru">RU</button></div>
+      <button class="icon-btn" type="button" data-theme-toggle data-i18n-attr="aria-label:ui.theme"><svg class="i i-sun"><use href="#i-sun"/></svg><svg class="i i-moon"><use href="#i-moon"/></svg></button>
+      <span class="avatar" aria-hidden="true">RA</span>
+    </div>
+  </header>
+  <main class="hist wrap">
+    <div class="head">
+      <div><h1 data-focus tabindex="-1" data-i18n="history.title">History</h1><p class="muted" style="margin-top:8px" data-i18n="history.sub"></p></div>
+      <div class="seg seg-sm" role="group" id="histFilter" data-i18n-attr="aria-label:history.mode">
+        <button type="button" data-f="all" aria-pressed="true" data-i18n="history.all">All</button>
+        <button type="button" data-f="quick" aria-pressed="false" data-i18n="mode.quickShort">Quick</button>
+        <button type="button" data-f="pro" aria-pressed="false" data-i18n="mode.proShort">Professional</button>
+      </div>
+    </div>
+    <p class="example-banner"><svg class="i-sm"><use href="#i-info"/></svg><span data-i18n="history.exampleNote"></span></p>
+    <div class="hist-grid">
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead><tr><th><span class="sr-only" data-i18n="c.preview">Preview</span></th><th data-i18n="history.file">File</th><th data-i18n="history.mode">Mode</th><th data-i18n="history.date">Date</th><th class="r" data-i18n="history.size">SVG</th><th class="r" data-i18n="history.credits">Credits</th><th><span class="sr-only" data-i18n="c.actions">Actions</span></th></tr></thead>
+          <tbody id="histBody"></tbody>
+        </table>
+      </div>
+      <aside class="ledger-card" data-i18n-attr="aria-label:credits.balance">
+        <div class="bal">
+          <span class="eyebrow" data-i18n="credits.balance">Credit balance</span>
+          <span class="big num" id="balBig">2</span>
+          <div class="meter" aria-hidden="true"><i id="balMeter" style="width:20%"></i></div>
+          <p class="muted" style="font-size:14px" id="balBuys"></p>
+          <p class="note" data-i18n="credits.soon"></p>
+        </div>
+        <h2 class="eyebrow" style="padding:16px 22px 0;color:var(--ink-3)" data-i18n="credits.ledger">Credit activity</h2>
+        <ul class="ledger" id="ledger"></ul>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<nav class="proto-bar" aria-label="Prototype">
+  <span>A · Contour</span>
+  <a href="#" data-pb="home" data-i18n="ui.landing">Landing</a>
+  <a href="#app" data-pb="app" data-i18n="nav.workspace">Workspace</a>
+  <a href="#history" data-pb="history" data-i18n="nav.history">History</a>
+  <a href="index.html" data-i18n="ui.overview">All concepts</a>
+</nav>
+
+<script src="shared/i18n.js"></script>
+<script src="shared/samples.js"></script>
+<script src="shared/demo.js"></script>
+<script src="shared/icons.js"></script>
+<script src="shared/proto.js"></script>
+<script>
+;(function () {
+  'use strict'
+  const P = window.Proto
+  const D = window.VL_DEMO
+  const $ = (s, r) => (r || document).querySelector(s)
+  const $$ = (s, r) => [...(r || document).querySelectorAll(s)]
+
+  P.extend({
+    en: { meta: { title: 'Vectorla · Contour' }, c: {
+      heroEyebrow: 'Raster → vector · SVG', heroTitleA: 'Pixels in.', heroTitleB: 'Precise vectors out.',
+      heroSub: 'Vectorla traces logos, emblems and artwork into clean SVG: smooth curves, crisp corners and exact colors, ready to edit, print and cut.',
+      heroCta: 'Upload an image', heroDrop: 'PNG, JPG or WebP up to 5 MB. Drop it anywhere on this page, or paste with Ctrl+V.',
+      factFree: '10 free credits', viewLabel: 'View', zoomEyebrow: 'Zoom test', zoomTitle: 'Look closer. The edges hold.',
+      zoomSub: 'A 512 px logo saved as a quality-40 JPEG, and its Vectorla trace, both at 8× zoom.',
+      modesTitle: 'Two modes. One clear difference.', modesSub: 'Quick keeps colors flat. Professional rebuilds shading as real SVG gradients. The same 3D emoji, traced both ways:',
+      thisImage: 'This image', modesNote: 'Not sure? Start with Quick. You can trace the same image again in Professional; the first trace is refunded.',
+      examplesTitle: 'Real traces, measured.', examplesSub: 'Every example is an actual Vectorla output. Switch between the original and the vector, or open one in the workspace.',
+      howEyebrow: 'Workflow', howTitle: 'From upload to SVG in three steps.', ctaTitle: 'Start with 10 free credits.',
+      canvasLabel: 'Image canvas. Use + and − to zoom, arrow keys to pan, 0 to fit.', canvasHint: 'Scroll or pinch to zoom · drag to pan',
+      stUploaded: 'Uploaded', preview: 'Preview', actions: 'Actions', openWs: 'Open in workspace',
+    } },
+    uz: { meta: { title: 'Vectorla · Contour' }, c: {
+      heroEyebrow: 'Rastr → vektor · SVG', heroTitleA: 'Pikselni bering.', heroTitleB: 'Aniq vektor oling.',
+      heroSub: 'Vectorla logotip, gerb va grafikani toza SVG ga aylantiradi: silliq egri chiziqlar, o‘tkir burchaklar va aniq ranglar — tahrirlash, chop etish va kesishga tayyor.',
+      heroCta: 'Rasm yuklash', heroDrop: '5 MB gacha PNG, JPG yoki WebP. Faylni sahifaning istalgan joyiga tashlang yoki Ctrl+V bilan qo‘ying.',
+      factFree: '10 bepul kredit', viewLabel: 'Ko‘rinish', zoomEyebrow: 'Masshtab sinovi', zoomTitle: 'Yaqinroq qarang. Chegaralar aniq qoladi.',
+      zoomSub: '40 sifatli JPEG sifatida saqlangan 512 px logotip va uning Vectorla trassirovkasi, ikkalasi ham 8× masshtabda.',
+      modesTitle: 'Ikki rejim. Bitta aniq farq.', modesSub: 'Tezkor rejim ranglarni tekis qoldiradi. Professional rejim soyalarni haqiqiy SVG gradientlar sifatida tiklaydi. Bitta 3D emoji, ikki usulda:',
+      thisImage: 'Shu rasm', modesNote: 'Ikkilanyapsizmi? Tezkor rejimdan boshlang. Shu rasmni professional rejimda qayta trassirovka qilsangiz, birinchisi uchun kredit qaytariladi.',
+      examplesTitle: 'Haqiqiy trassirovkalar, o‘lchangan.', examplesSub: 'Har bir namuna — Vectorla ning haqiqiy natijasi. Asl rasm va vektor o‘rtasida almashing yoki ish maydonida oching.',
+      howEyebrow: 'Jarayon', howTitle: 'Yuklashdan SVG gacha uch qadam.', ctaTitle: '10 bepul kredit bilan boshlang.',
+      canvasLabel: 'Rasm maydoni. Masshtab uchun + va −, siljitish uchun strelkalar, moslash uchun 0.', canvasHint: 'Masshtab: g‘ildirak yoki ikki barmoq · siljitish: torting',
+      stUploaded: 'Yuklandi', preview: 'Ko‘rinish', actions: 'Amallar', openWs: 'Ish maydonida ochish',
+    } },
+    ru: { meta: { title: 'Vectorla · Contour' }, c: {
+      heroEyebrow: 'Растр → вектор · SVG', heroTitleA: 'На входе пиксели.', heroTitleB: 'На выходе точный вектор.',
+      heroSub: 'Vectorla трассирует логотипы, гербы и графику в чистый SVG: плавные кривые, чёткие углы и точные цвета — готово к правке, печати и резке.',
+      heroCta: 'Загрузить изображение', heroDrop: 'PNG, JPG или WebP до 5 МБ. Перетащите файл в любое место страницы или вставьте через Ctrl+V.',
+      factFree: '10 бесплатных кредитов', viewLabel: 'Вид', zoomEyebrow: 'Тест увеличения', zoomTitle: 'Посмотрите ближе. Края держатся.',
+      zoomSub: 'Логотип 512 px, сохранённый в JPEG с качеством 40, и его трассировка Vectorla — оба при увеличении 8×.',
+      modesTitle: 'Два режима. Одна понятная разница.', modesSub: 'Быстрый режим оставляет цвета плоскими. Профессиональный восстанавливает тени настоящими SVG-градиентами. Одно и то же 3D-эмодзи в двух режимах:',
+      thisImage: 'Это изображение', modesNote: 'Сомневаетесь? Начните с быстрого режима. Если потом трассировать то же изображение в профессиональном, кредиты за первую трассировку вернутся.',
+      examplesTitle: 'Настоящие трассировки с замерами.', examplesSub: 'Каждый пример — реальный результат Vectorla. Переключайтесь между оригиналом и вектором или откройте пример в рабочей области.',
+      howEyebrow: 'Процесс', howTitle: 'От загрузки до SVG за три шага.', ctaTitle: 'Начните с 10 бесплатных кредитов.',
+      canvasLabel: 'Холст изображения. + и − — масштаб, стрелки — перемещение, 0 — по размеру.', canvasHint: 'Колесо или щипок — масштаб · перетаскивание — сдвиг',
+      stUploaded: 'Загружено', preview: 'Превью', actions: 'Действия', openWs: 'Открыть в рабочей области',
+    } },
+  })
+
+  const statLine = (s, mode) => {
+    const r = s[mode]
+    return `${P.t('stats.paths')} ${r.paths} · ${P.t('stats.colors')} ${r.colors} · ${P.t('stats.gradients')} ${r.gradients} · ${P.kb(r.bytes)}`
+  }
+
+  // ---------- landing ----------
+  const crest = P.sample('crest')
+  const heroCmp = $('#heroCmp')
+  P.compare(heroCmp)
+  const heroBox = $('#heroBox')
+  // Zoom targets on the crest: the motto banner (3×) and one letter of it (8×).
+  const FOCUS = { 1: [0.5, 0.5], 3: [0.38, 0.84], 8: [0.31, 0.875] }
+  const setHeroZoom = (z) => {
+    heroBox.style.setProperty('--z', z)
+    heroBox.style.setProperty('--fx', FOCUS[z][0])
+    heroBox.style.setProperty('--fy', FOCUS[z][1])
+    heroCmp.classList.toggle('is-pixels', z > 1)
+    $$('#heroZoom button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.z === String(z))))
+  }
+  $$('#heroZoom button').forEach((b) => b.addEventListener('click', () => setHeroZoom(Number(b.dataset.z))))
+  setHeroZoom(3)
+  let heroOutlineReady = null
+  const setHeroMode = async (mode) => {
+    heroCmp.dataset.mode = mode
+    $$('#heroMode button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.hmode === mode)))
+    if (mode === 'outline' && !heroOutlineReady) {
+      heroOutlineReady = P.inlineSvg(P.svgUrl('crest', 'pro'), 'h-').then((svg) => {
+        const anchors = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+        anchors.setAttribute('class', 'anchors')
+        anchors.setAttribute('d', P.anchorPath(svg))
+        svg.append(anchors)
+        $('#heroOutline').append(svg)
+      }).catch(() => {})
+    }
+  }
+  $$('#heroMode button').forEach((b) => b.addEventListener('click', () => setHeroMode(b.dataset.hmode)))
+
+  const gallery = $('#gallery')
+  const GALLERY = ['summit-logo', 'alpine-patch', 'crest', 'rocket', 'horse', 'ornament', 'wordmark', 'coffee']
+  const renderGallery = () => {
+    gallery.replaceChildren(...GALLERY.map((id) => {
+      const s = P.sample(id)
+      const mode = id === 'horse' || id === 'ornament' || id === 'wordmark' || id === 'summit-logo' ? 'quick' : 'pro'
+      const card = P.h('article', { class: 'card' })
+      const toggle = (showSrc) => {
+        card.classList.toggle('show-src', showSrc)
+        b1.setAttribute('aria-pressed', String(showSrc))
+        b2.setAttribute('aria-pressed', String(!showSrc))
+      }
+      const b1 = P.h('button', { type: 'button', 'aria-pressed': 'false', text: P.t('cmp.before'), onclick: () => toggle(true) })
+      const b2 = P.h('button', { type: 'button', 'aria-pressed': 'true', text: P.t('cmp.after'), onclick: () => toggle(false) })
+      card.append(
+        P.h('div', { class: 'thumb' },
+          P.h('img', { class: 'src', src: s.src, alt: '', loading: 'lazy', width: s.w, height: s.h }),
+          P.h('img', { class: 'vec', src: P.svgUrl(id, mode), alt: '', loading: 'lazy', width: s.w, height: s.h }),
+          P.h('div', { class: 'seg seg-sm', role: 'group', 'aria-label': P.sampleName(id) }, b1, b2)),
+        P.h('div', { class: 'meta' },
+          P.h('h3', { text: P.sampleName(id) }),
+          P.h('p', { class: 'mono muted', text: P.sampleSource(id) }),
+          P.h('div', { class: 'row' },
+            P.h('span', { class: `chip ${mode === 'pro' ? 'chip-pro' : 'chip-quick'}`, text: P.t(mode === 'pro' ? 'mode.proShort' : 'mode.quickShort') }),
+            P.h('span', { class: 'chip', text: `${P.t('stats.paths')} ${s[mode].paths}` }),
+            P.h('span', { class: 'chip', text: P.kb(s[mode].bytes) })),
+          id === 'coffee' ? P.h('p', { class: 'note', text: P.t('samples.photoNote') }) : null,
+          P.h('a', { class: 'open', href: `#app`, 'data-open': id, 'data-mode': mode, text: P.t('c.openWs') }, ' →')),
+      )
+      return card
+    }))
+  }
+  gallery.addEventListener('click', (event) => {
+    const link = event.target.closest('[data-open]')
+    if (link) {
+      state.sample = link.dataset.open
+      state.mode = link.dataset.mode
+      state.state = 'result'
+      state.file = null
+    }
+  })
+
+  // ---------- workspace ----------
+  const state = { sample: 'crest', mode: 'pro', view: 'split', state: 'result', file: null }
+  const canvas = $('#canvas')
+  const contentA = $('#contentA')
+  const vpA = $('.vp-a')
+  const vpB = $('.vp-b')
+  P.compare(contentA, { handleOnly: true })
+  const stage = P.stage([vpA, vpB], {
+    onZoom: (scale) => {
+      $('#zoomOut').textContent = `${Math.round(scale * 100)}%`
+    },
+  })
+  $$('[data-zoom]').forEach((b) => b.addEventListener('click', () => {
+    if (b.dataset.zoom === 'in') stage.zoomAt(1.4)
+    else if (b.dataset.zoom === 'out') stage.zoomAt(1 / 1.4)
+    else stage.fit()
+  }))
+  const outlineCache = new Map()
+  const showOutline = async () => {
+    const key = `${state.sample}-${state.mode}`
+    const host = $('#outlineA')
+    if (host.dataset.key === key) return
+    host.dataset.key = key
+    host.replaceChildren()
+    if (!outlineCache.has(key)) {
+      outlineCache.set(key, P.inlineSvg(P.svgUrl(state.sample, state.mode), `o${outlineCache.size}-`).then((svg) => {
+        const anchors = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+        anchors.setAttribute('class', 'anchors')
+        anchors.setAttribute('d', P.anchorPath(svg))
+        svg.append(anchors)
+        return svg
+      }))
+    }
+    try {
+      const svg = await outlineCache.get(key)
+      if (host.dataset.key === key) host.replaceChildren(svg)
+    } catch {
+      host.dataset.key = ''
+    }
+  }
+  const paletteOf = async (url) => {
+    const text = await P.svgText(url)
+    const counts = new Map()
+    for (const m of text.matchAll(/(?:fill|stop-color)="(#[0-9a-fA-F]{3,6})"/g)) counts.set(m[1].toLowerCase(), (counts.get(m[1].toLowerCase()) || 0) + 1)
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 16).map(([c]) => c)
+  }
+  const fileName = (id) => {
+    const s = P.sample(id)
+    return `${id}.${s.format === 'png' ? 'png' : 'jpg'}`
+  }
+
+  const renderFiles = () => {
+    const ids = [...D.conversions.map((c) => c.sample), ...['rocket', 'ornament', 'wordmark']]
+    $('#fileList').replaceChildren(...ids.map((id, i) => {
+      const conv = D.conversions.find((c) => c.sample === id)
+      const mode = conv ? conv.mode : 'quick'
+      const sub = conv ? `${P.t(mode === 'pro' ? 'mode.proShort' : 'mode.quickShort')} · ${P.date(conv.date)}` : P.t('ui.example')
+      return P.h('li', null, P.h('button', {
+        type: 'button', 'aria-current': String(!state.file && state.sample === id), 'data-i': i,
+        onclick: () => { state.sample = id; state.mode = mode; state.state = 'result'; state.file = null; renderWs(true) },
+      }, P.h('span', { class: 'th' }, P.h('img', { src: P.svgUrl(id, mode), alt: '', loading: 'lazy' })), P.h('span', null, P.h('span', { class: 'nm', text: fileName(id) }), P.h('span', { class: 'sub', text: sub }))))
+    }))
+    $('#sampleStrip').replaceChildren(...['crest', 'summit-logo', 'alpine-patch', 'rocket', 'horse'].map((id) => P.h('button', {
+      type: 'button', 'aria-label': P.sampleName(id), onclick: () => { state.sample = id; state.mode = id === 'horse' || id === 'summit-logo' ? 'quick' : 'pro'; state.state = 'result'; state.file = null; renderWs(true) },
+    }, P.h('img', { src: P.svgUrl(id, 'pro'), alt: '', loading: 'lazy' }))))
+  }
+
+  const renderWs = async (refit) => {
+    const s = P.sample(state.sample)
+    const own = state.file
+    const srcUrl = own ? own.url : s.src
+    const vecUrl = P.svgUrl(state.sample, state.mode)
+    $('#srcA').src = srcUrl
+    for (const img of [$('#vecA'), $('#vecB')]) {
+      if (own) img.removeAttribute('src')
+      else img.src = vecUrl
+    }
+    $('#crumbName').textContent = own ? own.name : fileName(state.sample)
+    $$('.mode-opt').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === state.mode)))
+    canvas.dataset.vmode = own ? 'original' : state.view
+    $$('#viewSeg button').forEach((b) => {
+      b.setAttribute('aria-pressed', String(b.dataset.v === (own ? 'original' : state.view)))
+      b.disabled = Boolean(own) && b.dataset.v !== 'original'
+    })
+    $('#labelA').textContent = P.t(state.view === 'vector' && !own ? 'cmp.after' : state.view === 'outline' && !own ? 'views.outline' : 'cmp.before')
+    // Overlays for prototype states.
+    $('#stProcessing').hidden = state.state !== 'processing'
+    $('#stError').hidden = state.state !== 'error'
+    $('#stEmpty').hidden = state.state !== 'empty'
+    $$('#protoStates button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.state === state.state)))
+    $('#filePanel').hidden = !own
+    const showResult = !own && state.state === 'result'
+    $('#resultPanel').hidden = !showResult
+    $('#palettePanel').hidden = !showResult
+    $('#exportPanel').hidden = !showResult
+    if (own) {
+      $('#fileKv').replaceChildren(
+        P.h('dt', { text: P.t('history.file') }), P.h('dd', { text: own.name }),
+        P.h('dt', { text: P.t('stats.dims') }), P.h('dd', { text: own.w ? `${own.w} × ${own.h}` : '…' }),
+        P.h('dt', { text: P.t('history.size') }), P.h('dd', { text: own.size < 1048576 ? P.kb(own.size) : P.mb(own.size) }),
+        P.h('dt', { text: P.t('ws.cost') }), P.h('dd', { text: P.t(state.mode === 'pro' ? 'mode.cost2' : 'mode.cost1') }))
+    } else {
+      const r = s[state.mode]
+      const cells = [
+        ['stats.paths', P.num(r.paths)], ['stats.colors', P.num(r.colors)], ['stats.gradients', P.num(r.gradients)],
+        ['stats.size', P.kb(r.bytes)], ['stats.time', P.sec(r.ms)], ['stats.source', `${s.w} × ${s.h}`],
+      ]
+      $('#stats').replaceChildren(...cells.map(([k, v]) => P.h('div', null, P.h('dt', { text: P.t(k) }), P.h('dd', { text: v }))))
+      const dl = $('#dl')
+      dl.href = vecUrl
+      dl.setAttribute('download', `${state.sample}-vectorla-${state.mode === 'pro' ? 'professional' : 'quick'}.svg`)
+      paletteOf(vecUrl).then((colors) => {
+        $('#swatches').replaceChildren(...colors.map((c) => P.h('span', { style: `background:${c}`, title: c })))
+      }).catch(() => {})
+      if (state.view === 'outline') showOutline()
+    }
+    renderFiles()
+    if (refit) {
+      const w = own ? own.w || 800 : s.w
+      const h = own ? own.h || 800 : s.h
+      requestAnimationFrame(() => stage.setSize(w, h))
+    }
+  }
+  $$('#viewSeg button').forEach((b) => b.addEventListener('click', () => {
+    state.view = b.dataset.v
+    renderWs(false)
+    requestAnimationFrame(() => stage.fit())
+  }))
+  $$('.mode-opt').forEach((b) => b.addEventListener('click', () => {
+    state.mode = b.dataset.mode
+    renderWs(false)
+  }))
+  $$('#protoStates button').forEach((b) => b.addEventListener('click', () => {
+    state.state = b.dataset.state
+    if (b.dataset.state !== 'empty') state.file = null
+    renderWs(false)
+  }))
+  $$('[data-state-go]').forEach((b) => b.addEventListener('click', () => {
+    state.state = b.dataset.stateGo
+    renderWs(false)
+  }))
+
+  // Files dropped or chosen anywhere: shown locally, never uploaded (prototype).
+  P.onFile((file, error) => {
+    $$('[data-upload-error]').forEach((el) => {
+      el.hidden = !error
+      if (error) el.querySelector('span').textContent = P.t(error)
+    })
+    if (error) return
+    const url = URL.createObjectURL(file)
+    const own = { url, name: file.name || 'pasted-image.png', size: file.size, w: 0, h: 0 }
+    const img = new Image()
+    img.onload = () => {
+      own.w = img.naturalWidth
+      own.h = img.naturalHeight
+      if (state.file === own) renderWs(true)
+    }
+    img.src = url
+    state.file = own
+    state.state = 'result'
+    if (location.hash !== '#app') location.hash = 'app'
+    else renderWs(true)
+  })
+
+  // ---------- history ----------
+  let histFilter = 'all'
+  const renderHistory = () => {
+    const rows = D.conversions.filter((c) => histFilter === 'all' || c.mode === histFilter)
+    $('#histBody').replaceChildren(...rows.map((c) => {
+      const s = P.sample(c.sample)
+      const r = s[c.mode]
+      return P.h('tr', null,
+        P.h('td', { class: 'thc' }, P.h('div', { class: 'th' }, P.h('img', { src: P.svgUrl(c.sample, c.mode), alt: '', loading: 'lazy' }))),
+        P.h('td', { class: 'file' }, P.h('b', { text: fileName(c.sample) }), P.h('span', { text: P.t('history.expires', { d: D.daysLeft(c.date) }) })),
+        P.h('td', null, P.h('span', { class: `chip ${c.mode === 'pro' ? 'chip-pro' : 'chip-quick'}`, text: P.t(c.mode === 'pro' ? 'mode.proShort' : 'mode.quickShort') })),
+        P.h('td', { class: 'hide-m', text: P.date(c.date) }),
+        P.h('td', { class: 'r mono', text: P.kb(r.bytes) }),
+        P.h('td', { class: 'r mono hide-m', text: `−${c.mode === 'pro' ? 2 : 1}` }),
+        P.h('td', null, P.h('div', { class: 'acts' },
+          P.h('a', { class: 'btn btn-ghost', href: '#app', text: P.t('ui.open'), onclick: () => { state.sample = c.sample; state.mode = c.mode; state.state = 'result'; state.file = null } }),
+          P.h('a', { class: 'icon-btn', href: P.svgUrl(c.sample, c.mode), download: `${c.sample}-vectorla.svg`, 'aria-label': `${P.t('ui.download')} ${fileName(c.sample)}` }, svgIcon('download')))))
+    }))
+    $('#balBig').textContent = String(D.balance)
+    $('#balMeter').style.width = `${(D.balance / 10) * 100}%`
+    $('#balBuys').textContent = P.t('credits.buys', { q: D.balance, p: Math.floor(D.balance / 2) })
+    $('#ledger').replaceChildren(...D.ledger.map((e) => {
+      const kind = e.reason === 'signup' ? 'added' : e.amount > 0 ? 'refunded' : 'used'
+      const what = e.reason === 'trace' ? `${P.t('credits.trace')} · ${fileName(e.sample)} · ${P.t(e.mode === 'pro' ? 'mode.proShort' : 'mode.quickShort')}` : e.reason === 'switchRefund' ? `${P.t('credits.switchRefund')} · ${fileName(e.sample)}` : P.t('credits.signup')
+      return P.h('li', null,
+        P.h('span', null, P.h('span', { text: P.t(`credits.${kind}`) }), P.h('span', { class: 'sub', style: 'display:block', text: `${what} · ${P.date(e.date)}` })),
+        P.h('span', { class: `amt ${e.amount > 0 ? 'plus' : ''}`, text: `${e.amount > 0 ? '+' : '−'}${Math.abs(e.amount)}` }))
+    }))
+  }
+  function svgIcon(name) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    svg.setAttribute('class', 'i')
+    svg.setAttribute('aria-hidden', 'true')
+    const use = document.createElementNS('http://www.w3.org/2000/svg', 'use')
+    use.setAttribute('href', `#i-${name}`)
+    svg.append(use)
+    return svg
+  }
+  $$('#histFilter button').forEach((b) => b.addEventListener('click', () => {
+    histFilter = b.dataset.f
+    $$('#histFilter button').forEach((o) => o.setAttribute('aria-pressed', String(o === b)))
+    renderHistory()
+  }))
+
+  // ---------- chrome ----------
+  const menuBtn = $('.menu-btn')
+  menuBtn.addEventListener('click', () => {
+    const open = menuBtn.getAttribute('aria-expanded') !== 'true'
+    menuBtn.setAttribute('aria-expanded', String(open))
+    $('#mmenu').hidden = !open
+  })
+  $$('#mmenu a').forEach((a) => a.addEventListener('click', () => {
+    menuBtn.setAttribute('aria-expanded', 'false')
+    $('#mmenu').hidden = true
+  }))
+
+  const renderText = () => {
+    $('#heroStats').textContent = statLine(crest, 'pro')
+    $('#heroCmp .before').alt = `${P.t('cmp.before')}: ${P.sampleName('crest')} (${P.sampleSource('crest')})`
+    $('#heroCmp .after').alt = `${P.t('cmp.after')}: Vectorla SVG, ${P.t('mode.pro')}`
+    const logo = P.sample('summit-logo')
+    $('#ztStats').textContent = `SVG · ${P.t('stats.paths')} ${logo.pro.paths} · ${P.kb(logo.pro.bytes)} · 8×`
+    const globe = P.sample('globe')
+    $('#mqStats').textContent = statLine(globe, 'quick')
+    $('#mpStats').textContent = statLine(globe, 'pro')
+    $('#freeItems').replaceChildren(...P.t('pricing.freeItems').map((item) => P.h('li', null, svgIcon('check'), P.h('span', { text: item }))))
+    $$('[data-credit-text]').forEach((el) => (el.textContent = P.credits(D.balance)))
+    renderGallery()
+    renderHistory()
+    if (P.view === 'app') renderWs(false)
+  }
+  P.onLang(renderText)
+  P.onRoute((view, changed) => {
+    $$('.proto-bar a[data-pb]').forEach((a) => (a.dataset.pb === view ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current')))
+    if (view === 'app' && changed) renderWs(true)
+    if (view === 'history') renderHistory()
+  })
+  P.init()
+})()
+</script>
+</body>
+</html>
