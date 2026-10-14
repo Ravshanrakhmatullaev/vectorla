@@ -26,6 +26,7 @@ import type { OklabSource, LabelMap, PaletteColor } from './palette'
 import { TRANSPARENT_LABEL } from './palette'
 import type { RgbaImage } from './raster'
 import { checkpoint } from './memoryCheckpoint'
+import { rgbToOklabInto } from './color'
 
 export interface ShadingRefineOptions {
   /** OKLab distance between refined levels. */
@@ -330,4 +331,70 @@ export function refineShading(
     labels[p] = binLabel[cand.offset + binOf(cand, p)]!
   }
   return refined
+}
+
+/**
+ * Region color refit: a region's fill becomes the mean color of its
+ * interior pixels (the pixels one and two steps away in all four directions
+ * are in the same region) when that differs from its palette color by at
+ * least `minShift` OKLab (and at most `maxShift`). Shaded and textured regions then carry their own local
+ * color instead of the nearest shared level; flat artwork keeps its exact
+ * palette colors (their interiors are the palette color). Gradient-filled
+ * regions (labels from palette.length) are left alone and renumbered past
+ * the added colors. Returns the number of refitted regions.
+ */
+export function refitRegionColors(
+  ids: Int32Array,
+  width: number,
+  height: number,
+  count: number,
+  regionLabels: Int32Array,
+  image: RgbaImage,
+  palette: PaletteColor[],
+  options: { minShift: number; maxShift: number; minInterior: number },
+): number {
+  const flatLimit = palette.length
+  const data = image.data
+  const sums = new Float64Array(count * 3)
+  const interior = new Int32Array(count)
+  const w2 = 2 * width
+  for (let y = 2; y + 2 < height; y++) {
+    for (let x = 2; x + 2 < width; x++) {
+      const p = y * width + x
+      const r = ids[p]!
+      const label = regionLabels[r]!
+      if (label < 0 || label >= flatLimit) continue
+      // Two pixels inside: boundary pixels carry the neighbours' blend.
+      if (ids[p - 1] !== r || ids[p + 1] !== r || ids[p - width] !== r || ids[p + width] !== r) continue
+      if (ids[p - 2] !== r || ids[p + 2] !== r || ids[p - w2] !== r || ids[p + w2] !== r) continue
+      sums[r * 3] = sums[r * 3]! + data[p * 4]!
+      sums[r * 3 + 1] = sums[r * 3 + 1]! + data[p * 4 + 1]!
+      sums[r * 3 + 2] = sums[r * 3 + 2]! + data[p * 4 + 2]!
+      interior[r] = interior[r]! + 1
+    }
+  }
+  let refitted = 0
+  const lab = new Float32Array(3)
+  for (let r = 0; r < count; r++) {
+    const k = interior[r]!
+    const label = regionLabels[r]!
+    if (k < options.minInterior || label < 0 || label >= flatLimit) continue
+    const red = Math.round(sums[r * 3]! / k)
+    const green = Math.round(sums[r * 3 + 1]! / k)
+    const blue = Math.round(sums[r * 3 + 2]! / k)
+    rgbToOklabInto(red, green, blue, lab, 0)
+    const color = palette[label]!
+    const shift = Math.hypot(lab[0]! - color.L, lab[1]! - color.A, lab[2]! - color.B)
+    if (shift < options.minShift || shift > options.maxShift) continue
+    palette.push({ r: red, g: green, b: blue, L: lab[0]!, A: lab[1]!, B: lab[2]!, weight: k })
+    regionLabels[r] = -2 - (palette.length - 1)
+    refitted++
+  }
+  const added = palette.length - flatLimit
+  for (let r = 0; r < count; r++) {
+    const label = regionLabels[r]!
+    if (label <= -2) regionLabels[r] = -2 - label
+    else if (label >= flatLimit) regionLabels[r] = label + added
+  }
+  return refitted
 }

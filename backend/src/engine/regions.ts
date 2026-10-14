@@ -449,3 +449,177 @@ export function regularizeLabels(
   }
   return changed
 }
+
+/**
+ * Greedy region merging down to `budget` regions: repeatedly merges the
+ * region whose merge costs least into its most similar neighbour (shared
+ * border breaks ties), the cost being the region's area × its color
+ * distance to that neighbour² (about the visible error it adds, weighted
+ * towards contrast). Fragments of near-identical shading levels go first;
+ * small contrasting detail (letters, strokes, dots) last: a letter part of
+ * 40 px at 0.3 costs as much as a shading fragment of 3,600 px at 0.03.
+ * Same-label neighbours that a merge connects cost nothing and join at
+ * once.
+ *
+ * On a regular dense pattern (a fine checkerboard) every merge connects
+ * same-color neighbours through the recolored region, and the pattern
+ * would dissolve into blobs: when such joins are most of the merges, the
+ * merging stops and `labels` is left as it was (returns false). Otherwise
+ * `labels` is updated in place (returns true).
+ */
+export function mergeToRegionBudget(
+  labels: LabelMap,
+  width: number,
+  height: number,
+  palette: PaletteColor[],
+  budget: number,
+  scratch?: Int32Array,
+): boolean {
+  const comps = connectedComponents(labels, width, height, scratch)
+  const { ids, count } = comps
+  if (count <= budget) return true
+  const label = comps.labels
+  const area = Int32Array.from(comps.areas)
+  const adjacency: (Map<number, number> | null)[] = new Array(count)
+  for (let c = 0; c < count; c++) adjacency[c] = new Map()
+  const addBorder = (a: number, b: number) => {
+    const ma = adjacency[a]!
+    ma.set(b, (ma.get(b) ?? 0) + 1)
+    const mb = adjacency[b]!
+    mb.set(a, (mb.get(a) ?? 0) + 1)
+  }
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const p = y * width + x
+      const a = ids[p]!
+      if (x + 1 < width && ids[p + 1] !== a) addBorder(a, ids[p + 1]!)
+      if (y + 1 < height && ids[p + width] !== a) addBorder(a, ids[p + width]!)
+    }
+  }
+  checkpoint('mergeToRegionBudget')
+
+  const parent = new Int32Array(count)
+  for (let i = 0; i < count; i++) parent[i] = i
+  const find = (x: number): number => {
+    let r = x
+    while (parent[r] !== r) r = parent[r]!
+    while (parent[x] !== r) {
+      const next = parent[x]!
+      parent[x] = r
+      x = next
+    }
+    return r
+  }
+
+  // Min-heap of (cost, region, version); stale entries are skipped.
+  const version = new Int32Array(count)
+  const target = new Int32Array(count).fill(-1)
+  let heapCost = new Float64Array(count * 2)
+  let heapId = new Int32Array(count * 2)
+  let heapVersion = new Int32Array(count * 2)
+  let heapSize = 0
+  const swap = (i: number, j: number) => {
+    const c = heapCost[i]!
+    heapCost[i] = heapCost[j]!
+    heapCost[j] = c
+    const d = heapId[i]!
+    heapId[i] = heapId[j]!
+    heapId[j] = d
+    const v = heapVersion[i]!
+    heapVersion[i] = heapVersion[j]!
+    heapVersion[j] = v
+  }
+  const push = (cost: number, id: number) => {
+    if (heapSize === heapCost.length) {
+      const grow = <T extends Float64Array | Int32Array>(a: T): T => {
+        const b = new (a.constructor as new (n: number) => T)(a.length * 2)
+        b.set(a)
+        return b
+      }
+      heapCost = grow(heapCost)
+      heapId = grow(heapId)
+      heapVersion = grow(heapVersion)
+    }
+    let i = heapSize++
+    heapCost[i] = cost
+    heapId[i] = id
+    heapVersion[i] = version[id]!
+    while (i > 0) {
+      const up = (i - 1) >> 1
+      if (heapCost[up]! <= heapCost[i]!) break
+      swap(i, up)
+      i = up
+    }
+  }
+  const pop = () => {
+    heapSize--
+    swap(0, heapSize)
+    let i = 0
+    for (;;) {
+      const l = 2 * i + 1
+      const r = l + 1
+      let m = i
+      if (l < heapSize && heapCost[l]! < heapCost[m]!) m = l
+      if (r < heapSize && heapCost[r]! < heapCost[m]!) m = r
+      if (m === i) break
+      swap(i, m)
+      i = m
+    }
+  }
+  const evaluate = (c: number) => {
+    const m = adjacency[c]!
+    let best = -1
+    let bestDistance = Infinity
+    let bestLength = -1
+    for (const [q, length] of m) {
+      const distance = colorDistance(palette, label[c]!, label[q]!)
+      if (distance < bestDistance || (distance === bestDistance && length > bestLength)) {
+        best = q
+        bestDistance = distance
+        bestLength = length
+      }
+    }
+    target[c] = best
+    version[c] = version[c]! + 1
+    if (best < 0) return
+    push(area[c]! * bestDistance * bestDistance, c)
+  }
+  for (let c = 0; c < count; c++) evaluate(c)
+
+  let alive = count
+  let merges = 0
+  let joins = 0
+  while (alive > budget && heapSize > 0) {
+    const c = heapId[0]!
+    const v = heapVersion[0]!
+    pop()
+    if (parent[c] !== c || v !== version[c]) continue
+    const t = target[c]!
+    if (t < 0 || parent[t] !== t) {
+      evaluate(c)
+      continue
+    }
+    merges++
+    if (label[c] === label[t]) joins++
+    if ((merges & 511) === 0 && joins * 2 > merges) return false
+    // Merge c into t: t keeps its label; c's borders become t's.
+    parent[c] = t
+    area[t] = area[t]! + area[c]!
+    const mc = adjacency[c]!
+    const mt = adjacency[t]!
+    mt.delete(c)
+    for (const [q, length] of mc) {
+      if (q === t) continue
+      const mq = adjacency[q]!
+      mq.delete(c)
+      mq.set(t, (mq.get(t) ?? 0) + length)
+      mt.set(q, (mt.get(q) ?? 0) + length)
+    }
+    adjacency[c] = null
+    alive--
+    evaluate(t)
+    for (const q of mc.keys()) if (q !== t) evaluate(q)
+  }
+  for (let p = 0; p < labels.length; p++) labels[p] = label[find(ids[p]!)]!
+  return true
+}

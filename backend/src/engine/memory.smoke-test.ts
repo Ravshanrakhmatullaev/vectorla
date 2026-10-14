@@ -160,8 +160,8 @@ const BUDGET_SHADED_4MP_MB = 50
 // rings, stroke lettering and line art on a plain background. Photo-like by
 // flat fraction, but classified as an emblem, so it is traced at full
 // resolution instead of the 1.2 MP photo cap (traceImage.ts classifyContent),
-// with the texture path (label regularization) and the region budget's
-// detail-first passes. Measured 39.4 MB (Quick), 43.3 MB (Professional);
+// with the texture path (label regularization) and cheapest-first region
+// budget merging. Measured 39.4 MB (Quick), 37.7 MB (Professional);
 // before the emblem class it was traced at 1000² (photo cap). Its own
 // budget; the artwork budget above is unchanged.
 const BUDGET_TEXTURED_EMBLEM_4MP_MB = 54
@@ -202,7 +202,8 @@ const BUDGET_TEXTURED_EMBLEM_4MP_MB = 54
 // Dense regular pattern: a 2000² checkerboard of 16 px squares has 15,625
 // regions per colour, above the soft region budget. The budget pass no longer
 // collapses it (traceImage.ts maxRegionsHard), so every square is kept, at a
-// higher peak than ordinary artwork. Measured 58.8 MB.
+// higher peak than ordinary artwork. Measured 49.9 MB (46.9 MB with
+// area-pass budget merging).
 const BUDGET_CHECKER_16_MB = 68
 {
   const checker = () => {

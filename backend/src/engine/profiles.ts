@@ -5,13 +5,16 @@
  *  - Quick Trace: a 32-color palette; colors stay flat (good for print and cutting).
  *  - Professional Trace: a 64-color palette, a finer color-merge distance,
  *    gradient reconstruction (smooth ramps become real SVG gradients, radial
- *    centers searched, grouped only across posterization cuts) and shading
- *    refinement (shaded regions that are no clean ramp get finer levels).
+ *    centers searched, grouped only across posterization cuts), shading
+ *    refinement (shaded regions that are no clean ramp get finer levels) and
+ *    region color refit (textured and shaded regions take their interior's
+ *    mean color; at native working resolution).
  *  Both keep small high-contrast details through speckle cleanup, seed flat
  *  inks separately (a pale tint next to white), keep line art and metal
- *  coherent in textured, compressed artwork (textureDetail) and share the
- *  same working-resolution caps (memory-bound, see below). BENCHMARKS.md
- *  "Emblems" and "Customer emblem".
+ *  coherent in textured, compressed artwork (textureDetail), merge down to
+ *  the region budget cheapest-first (traceImage.ts) and share the same
+ *  working-resolution caps (memory-bound, see below). BENCHMARKS.md
+ *  "Emblems", "Customer emblem" and "Region budget".
  */
 import { DEFAULT_ENGINE_OPTIONS, type TraceEngineOptions } from './traceImage'
 
@@ -63,6 +66,7 @@ export const PROFESSIONAL_ENGINE_OPTIONS: Partial<TraceEngineOptions> = {
   gradientBoundaryStep: 0.03,
   radialCenterSearch: true,
   shadingStep: 0.02,
+  regionRefit: 0.01,
   ...DETAIL_OPTIONS,
 }
 

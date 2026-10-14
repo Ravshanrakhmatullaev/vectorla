@@ -1253,6 +1253,208 @@ the customer emblem (2000 px: 3.58 vs 3.25; 1280 px: 3.80 vs 3.76): its
 finer palette fills the region budget sooner. Budget merging by contrast ×
 area (rather than area with a contrast guard) is the next step.
 
+## Region budget (2026-10-14)
+
+After the content-class round, Professional still lost to Quick on large,
+detailed emblems: on the customer emblem enlarged to 2000 px, ΔE 3.58 vs
+3.25 (1280 px: 3.80 vs 3.76). This round worked only on that.
+
+### Diagnosis
+
+On the 2000 px copy, Quick's 32-color palette leaves 5,855 regions after
+speckle cleanup, under the 6,000 budget; Professional's 64-color palette
+leaves 9,845. Only Professional hit the budget, and its passes (three, up to
+480 px) merged every region under a size into the neighbour sharing the
+longest border, whatever its color: gray feather fragments went into black
+strokes, and shading refinement then re-split the merged areas into ~300
+extra shading colors. With the budget lifted, Professional scored 3.18.
+
+What the 9,845 regions are (color distance to the most similar neighbour):
+
+| Distance | Professional | Quick |
+|---|---:|---:|
+| < 0.04 (near-identical shading levels) | 2,372 | 165 |
+| 0.04–0.15 | 2,645 | 2,340 |
+| ≥ 0.15 (structure: letters, strokes, outlines) | 4,828 | 3,350 |
+
+So the budget was spent on the wrong regions: Professional's extra regions are
+mostly fragments of near-identical shading levels, but the area passes merged
+small structure first.
+
+Even unbudgeted, Professional was only 0.07 ΔE ahead at 2000 px. Its finer
+palette wins on smooth shading (ΔE 1.65 vs 1.95 on smooth pixels, 38% of the
+emblem) and loses on edges (5.05 vs 4.81, 39%): textured areas such as the
+black lettering band are quantized into patches of different near-black
+levels, each filled with the nearest shared palette color.
+
+### Variants tested
+
+Customer emblem at 2000 px, Professional: ΔE / coat-of-arms edge recall,
+without region color refit unless noted.
+
+| Direction | Variant | Result |
+|---|---|---|
+| (before) | Area passes into the longest-border neighbour (8b37472) | 3.58 / 0.921, 3.4 MB |
+| Larger limit | No budget (12,000 or 40,000 regions) | 3.18 / 0.939, 4.7 MB |
+| Contrast × area priority | **Greedy merging by area × contrast² into the most similar neighbour** | **3.21 / 0.941**, 3.9 MB |
+| | Greedy, area × contrast or area × contrast³ | 3.21 / 0.938–0.943 |
+| Protect structure | Greedy with thin-stroke protection (×4 cost for elongated, contrasting regions) | unchanged: such regions are never the cheapest |
+| Low-information fragments first | Greedy plus merging low-information fragments below the budget | worse (3.33–3.71): the fragments carry real shading |
+| | Finer palettes for Professional (96–128 colors, unbudgeted) | worse (3.25–3.35): more texture fragments |
+| Gradient bands after structure | Gradients or shading refinement off | no change at 2000 px |
+| | Wider blend-sliver dissolving | worse at every size |
+| Simplify after segmentation | No budget plus region color refit | 3.09 / 0.941, 4.7 MB |
+| | Same, curves fitted 2.5× coarser (`optTolerance` 0.5, `alphaMax` 1.2) | 3.09 / 0.941, 4.6–4.7 MB: path count, not node count, sets the size |
+| Region colors | **Greedy plus region color refit** (interior mean, 2 px inside the region) | **3.09 / 0.943**, 3.9 MB; 2.98 at 1280 px |
+| | Refit on upsampled working images (640, 480 px) | worse edge recall (0.952 → 0.936): the upsampler's blur reaches the interiors |
+| | Refit up to a 0.12 shift instead of 0.08 | `wreath-emblem@2000` 1.01 → 1.03 (two regions spanning two inks took their blend) |
+| | Quick's coarse palette for Professional plus refit | 3.07 at 2000 px, but 4.12–4.31 at 640 px |
+
+Cheapest-first merging spends the budget as well as no budget at all: with
+refit both score 3.09, but the budgeted SVG is 18% smaller (3.9 vs 4.7 MB,
+6,053 vs 9,941 paths), and region count also bounds memory and time.
+Simplifying curves after segmentation does not replace it. Professional keeps
+the same limits as Quick (6,000 regions, 40,000 hard); the budget is
+hierarchical instead: area passes far over it (no region graph), greedy
+merging within reach.
+
+### Changes
+
+- **Greedy region budget** (both modes, `mergeToRegionBudget` in regions.ts).
+  Within 4× the budget, regions merge one at a time, cheapest first, until
+  exactly `maxRegions` are left. A merge costs the region's area × its color
+  distance² to its most similar neighbour, so a 40 px letter part at 0.3
+  costs as much as a 3,600 px shading fragment at 0.03; shading and texture
+  fragments go first, letters, strokes and outlines last. Far over budget,
+  plain area passes first bring the count within reach (bounded memory).
+  Regular dense patterns (fine checkerboards): when most merges only join
+  same-color neighbours through a recolored region, the merging stops and
+  the detailed result is kept, as before (a 2000² 16 px checkerboard keeps
+  its 31,249 paths). With the budget exactly full, shading refinement has no
+  room for new levels, so it no longer re-splits merged areas.
+- **Region color refit** (Professional, `refitRegionColors` in refine.ts):
+  a region whose interior (2 px inside) mean differs from its palette color
+  by 0.01–0.08 OKLab takes that mean. Textured areas (the black lettering
+  band, gray feathers, the metal shield) get their own color instead of the
+  nearest shared palette level. Only at native working resolution (no
+  upsampling: the upsampler's blur would reach the interiors), only in
+  stacked output; flat artwork keeps its exact palette colors (its interiors
+  are already the palette color, a shift under 0.01).
+
+### Before and after: the customer emblem
+
+ΔE×100 against the original 640 px file (Quick / Professional):
+
+| Upload | 8b37472 | Now |
+|---|---:|---:|
+| 640 px WebP (the file) | 4.61 / 4.21 | 4.50 / **4.06** |
+| 640 px JPEG q80 | 4.73 / 4.28 | 4.73 / 4.28 |
+| 480 px | 5.20 / 5.04 | 5.20 / 5.04 |
+| 1280 px | 3.76 / 3.80 | 3.24 / **2.98** |
+| 2000 px JPEG q90 | 3.25 / 3.58 | 3.25 / **3.09** |
+| 1920 px (3× bilinear, in the gate) | 3.59 / 3.83 | 3.37 / **3.03** |
+
+At 2000 px, by region (ΔE×100 / edge recall / thin lines kept):
+
+| Region | Quick | Professional, 8b37472 | Professional, now |
+|---|---|---|---|
+| Whole emblem | 3.25 / 0.969 / 0.979 | 3.58 / 0.959 / 0.952 | **3.09** / 0.972 / 0.972 |
+| Coat of arms | 5.09 / 0.957 / 0.956 | 5.85 / 0.921 / 0.896 | **4.78** / 0.943 / 0.944 |
+| Top text | 2.81 / 0.973 / 0.979 | 3.27 / 0.965 / 0.969 | 2.81 / 0.975 / 0.979 |
+| Bottom text | 3.16 / 0.976 / 0.987 | 3.72 / 0.977 / 0.982 | 3.20 / 0.980 / 0.988 |
+| Side text | 2.90 / 0.980 / 0.985 | 3.26 / 0.969 / 0.969 | 2.87 / 0.984 / 0.978 |
+| Hazard symbols | 3.66 / 0.984 / 0.982 | 3.62 / 0.979 / 0.974 | **3.30** / 0.983 / 0.977 |
+| Wreath | 4.52 / 0.954 / 0.967 | 5.02 / 0.928 / 0.917 | **4.16** / 0.948 / 0.956 |
+| Metal shield | 3.46 / 0.985 / 0.985 | 3.40 / 0.984 / 0.979 | **3.11** / 0.985 / 0.978 |
+
+At 1280 px Professional leads in every region (coat of arms 4.80 / 0.972 /
+0.959 vs Quick 5.43 / 0.971 / 0.949; top text 2.74 vs 2.76). At 640 px the
+greedy budget alone improves both modes (coat of arms, Professional: 7.13 /
+0.932 → 6.86 / 0.943; lines kept 0.941 → 0.953); Professional is upsampled
+there, so it gets no refit. The 480 px and 640 px JPEG uploads stay under the
+budget and are byte-identical.
+Visually, Professional at 2000 px now draws the eagle's feathers as gray
+strokes instead of gray blotches, and the black lettering band as one even
+black.
+
+### Other corpora
+
+- **Photo-like emblems** (21, the 7-emblem degraded set): 0 regressions, 6
+  Professional variants better (`seal-embossed@2000` 0.98 → 0.94,
+  `crest-gold@2000` 0.78 → 0.76, `badge-metal@2000` 0.66 → 0.64, three at
+  1200 px); Professional means 1.243 / 0.907 / 0.751 → 1.243 / 0.900 / 0.740
+  at 640 / 1200 / 2000 px. Quick unchanged. None reach the region budget, so
+  geometry and SVG sizes are byte-identical; only refit fill colors differ.
+  At 2000 px, in the text and center crops (mean of the 7; ΔE×100 / edge
+  recall): text 0.779 / 0.980 → 0.749 / 0.983, center 0.567 / 0.978 →
+  0.561 / 0.978 (Quick: 1.048 / 0.979 and 0.997 / 0.979); no emblem worse
+  by more than 0.004.
+- **Emblems** (28): 0 regressions, 9 Professional variants better by
+  0.01–0.03 (refit only; e.g. `crest-gold@2000` 0.20 → 0.17); means 0.75
+  (Quick) / 0.48 (Professional), unchanged at two decimals.
+- **Core** (25) and **real-world** (55): no variant changed.
+- **Photos** (24 photos, textures and scans in both modes: the real-world
+  corpus's 8 plus 16 kept out of the repository): 11 of 48 runs changed, 10 better (Professional
+  refit: chelsea 1.95 → 1.75, astronaut 2.31 → 2.18; budget-bound textures in
+  both modes: grass 5.22 → 4.94, gravel 3.67 → 3.57), one 0.004 worse (Hubble
+  deep field at 1000 px, Professional).
+
+### SVG size, runtime and memory
+
+Images over the budget now keep exactly `maxRegions` regions; area passes
+overshot to fewer:
+
+| Upload | SVG, Quick | SVG, Professional |
+|---|---:|---:|
+| Customer emblem, 640 px | 942 → 1,094 KB | 1,853 → 1,956 KB |
+| Same, 1280 px | 1,603 → 2,191 KB | 2,257 → 2,458 KB |
+| Same, 2000 px JPEG | 3,288 KB (unchanged) | 3,446 → 3,881 KB |
+| Budget-bound photos and textures | +4–9% | +5–12% |
+
+Same machine, one trace at a time, median of three (Quick / Professional):
+
+| Upload | Before | After | Live peak before → after |
+|---|---:|---:|---:|
+| Customer emblem, 640 px | 2.74 / 8.37 s | 2.61 / 8.38 s | 15.9 / 24.9 → 19.4 / 27.2 MB |
+| Same, 2000 px JPEG copy | 17.4 / 25.8 s | 18.5 / 21.6 s | 39.7 / 46.3–47.4 → 39.7 / 47.2–48.3 MB |
+
+Greedy merging is cheaper than repeated area passes with their undo copies
+(Professional at 2000 px: three passes before, one greedy run now). Quick at
+2000 px runs the same code as before (under budget); its difference is noise.
+The 640 px peaks are the larger SVG strings at the end of the trace; the
+2000 px Professional peak moved from the budget passes to chain extraction.
+`memory.smoke-test.ts` passes with unchanged budgets: the textured 4 MP
+emblem peaks at 39.4 / 37.7 MB (37.7 before), the 4 MP artwork at
+39.5 / 39.5 MB (39.5 / 40.0), photos and shaded artwork unchanged; the 2000²
+16 px checkerboard, which keeps its 31,249 paths, at 49.9 MB (46.9 before,
+budget 68). No CPU, memory or region limit was raised.
+
+Live peaks above are measured with a forced GC at every engine checkpoint and
+`--no-concurrent-array-buffer-sweeping`, as `memory.smoke-test.ts` does;
+without that flag freed buffers can still be counted (single runs read up to
+56 MB for the same trace).
+
+### Regression tests
+
+- `customerEmblemGate.smoke-test.ts`: budgets follow the new measurements
+  (Professional ΔE 4.35, lines kept 0.93; Quick ΔE 4.75, SVG 1,250 KB, up
+  from 1,100: the budget is now filled exactly). New: the emblem enlarged 3×
+  (1920 px, bilinear) in both modes; Professional must beat Quick by 0.2 ΔE,
+  beat its coat of arms (edge recall ≥ 0.89) and match its top text (lines
+  kept ≥ 0.97). 8b37472 fails it (3.83 vs 3.59, coat-of-arms recall 0.832).
+- `baseline-emblem.json` and `baseline-emblem-photo.json` refreshed.
+
+### What still differs
+
+- At 2000 px Professional's coat of arms has a lower ΔE than Quick's (4.78 vs
+  5.09) but still slightly lower edge recall and line retention (0.943 vs
+  0.957, 0.944 vs 0.956); its bottom text is 0.04 ΔE behind. Its wider
+  palette still quantizes some feather texture into patches.
+- Refit needs native resolution, so uploads Professional upsamples (up to
+  0.5 MP, e.g. the 640 px file) do not get it.
+- Vectorizer.AI's shapes are still cleaner and smoother at every size
+  ("Customer emblem").
+
 ## Against professional expectations
 
 What a professional tool such as Vectorizer.ai is expected to deliver, and where
@@ -1268,7 +1470,7 @@ Vectorla stands on this benchmark:
 | Small text and hairlines preserved | ✅ Mostly met | Real-world corpus: hairlines down to 0.5 px keep 94–104% of their length; small serif text is legible but serifs still break. The detail-color pass recovers 12 px subtitle text in its exact color `#2563eb`; the first engine version dropped it. |
 | Clean output from JPEG sources | ✅ Mostly met | Luma-guided chroma restoration, blend-sliver dissolve and edge-aware labeling. JPEG variants are now within 0.9–1.6× the nodes of PNG and 1.0–1.4× the edge error (e.g. flat-logo JPEG: 77 segments, 0.11 px). Heavy low-quality JPEGs are not in the corpus yet. |
 | Gradients reproduced as gradients | ✅ Met (Professional) | Linear and radial gradients are reconstructed as SVG gradients: ΔE 0.04–0.23 vs 0.58–1.06 posterized. Off-center radial fills are found by a center search (emblems: metal badge ΔE 1.06 → 0.49). Other shading gets finer flat levels. Quick keeps flat bands for print and cut work. Multi-stop metallic ramps, conic and mesh-like shading are not modeled as one gradient. |
-| Complex emblems, seals and crests | ⚠️ Partial | Emblem corpus (28 rasters): Professional ΔE 0.66 → 0.50, Quick 0.93 → 0.76; Professional 20–57% below Quick on shaded designs. The customer's own emblem: Professional ΔE 5.13 → 4.21 (Vectorizer.AI 4.18), thin lines kept 0.845 → 0.941 (0.978). Shaded, compressed emblems are their own content class: full resolution instead of the photo cap (2000 px uploads: Professional 4.86 → 3.58 on the customer emblem, 0.91 → 0.75 on photo-like emblems; see "Content classes"). Still weak: noisy line art and small symbols on textured sources, 1 px outlines around small text at ≤ 600 px, metallic multi-stop ramps (see "Emblems" and "Customer emblem"). |
+| Complex emblems, seals and crests | ⚠️ Partial | Emblem corpus (28 rasters): Professional ΔE 0.66 → 0.50, Quick 0.93 → 0.76; Professional 20–57% below Quick on shaded designs. The customer's own emblem: Professional ΔE 5.13 → 4.21 (Vectorizer.AI 4.18), thin lines kept 0.845 → 0.941 (0.978). Shaded, compressed emblems are their own content class: full resolution instead of the photo cap (2000 px uploads: Professional 4.86 → 3.58 on the customer emblem, 0.91 → 0.75 on photo-like emblems; see "Content classes"). Cheapest-first region budget merging and region color refit make Professional better than Quick on large uploads too (customer emblem at 2000 px: 3.09 vs 3.25, 1280 px: 2.98 vs 3.24; see "Region budget"). Still weak: noisy line art and small symbols on textured sources, 1 px outlines around small text at ≤ 600 px, metallic multi-stop ramps (see "Emblems" and "Customer emblem"). |
 | Corner-to-corner touching shapes (QR, pixel art, checkerboards) | ⚠️ Partial | Corners are sharp; diagonal "pinch" points still produce slight tilts near them (QR ΔE 0.57, down from 1.11). |
 | Tangent-continuous curves through 3-color junctions | ⚠️ Partial | Junction positions are least-squares refined; tangents are not yet matched across junctions. |
 | Photos / continuous tone | ⚠️ Posterized only | Bounded and clean, but not a photo-realistic vectorization. 6 real photos: ΔE 2.7–3.3 vs the source. |
@@ -1291,3 +1493,4 @@ Vectorla stands on this benchmark:
 | 2026-10-10 | Emblems: shading refinement, radial center search, gradients only across band cuts (Professional); flat-ink seeding, detail-aware speckle cleanup, photo cap only when it saves memory (both) | Emblems 0.50 (Pro) / 0.76 (Quick), was 0.66 / 0.93; core 0.16 / 0.29 unchanged; real-world 0.64 / 0.69 | 0.23 emblems; 0.11–0.13 others | 0 |
 | 2026-10-10 | Customer emblem: regression case scored against its source and Vectorizer.AI; line art in textured artwork (hairlines, ink/paper blend candidates, label regularization) | Customer emblem 4.27 (Pro) / 4.68 (Quick), was 5.13 / 4.98, Vectorizer.AI 4.18; emblems 0.49 / 0.76; core unchanged; real-world 0.62 / 0.67 | 0.23 emblems; 0.11–0.13 others | 0 |
 | 2026-10-10 | Content classes: emblem class (no photo cap for shaded, compressed emblems), detail-first region budget, large-JPEG memory fix | Customer emblem 4.21 (Pro) / 4.61 (Quick), 2000 px copy 3.58 / 3.25 (was 4.86 / 3.69); photo-like emblems at 2000 px 0.75 / 0.97 (was 0.91 / 1.17); other corpora unchanged except budget-bound textures | unchanged | 0 |
+| 2026-10-14 | Region budget: cheapest-first (area × contrast²) merging to the budget (both); region color refit at native resolution (Professional) | Customer emblem 4.06 (Pro) / 4.50 (Quick), was 4.21 / 4.61; 2000 px copy 3.09 / 3.25 (was 3.58 / 3.25); photo-like emblems at 2000 px 0.74 / 0.97; emblems 0.48 / 0.75; core and real-world unchanged | unchanged | 0 |

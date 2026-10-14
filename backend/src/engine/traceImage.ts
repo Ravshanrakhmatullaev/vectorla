@@ -14,9 +14,9 @@ import { PathBuilder } from './svgWriter'
 import { toShortHex } from './color'
 import { bilateralDenoise, downscaleBox, gaussianBlur, restoreJpegChroma, restoreRidges, ridgeMask, upscaleBilinear, upscaleMaskStrict, type RgbaImage } from './raster'
 import { computeFlatMask, OklabSource, extractDetailColors, extractPalette, labelPixels, TRANSPARENT_LABEL, type PaletteColor } from './palette'
-import { connectedComponents, dissolveBlendSlivers, mergeSmallRegions, regularizeLabels } from './regions'
+import { connectedComponents, dissolveBlendSlivers, mergeSmallRegions, mergeToRegionBudget, regularizeLabels } from './regions'
 import { detectGradients, validateGradientGroups, type GradientFill } from './gradients'
-import { refineShading } from './refine'
+import { refineShading, refitRegionColors } from './refine'
 import { buildRegionBoundaries, extractChains, OUTSIDE, type RegionLoop } from './planarMap'
 import { buildCurve, buildPolygon, refineJunctions, reverseFitted, type FittedChain } from './curveFit'
 import { checkpoint } from './memoryCheckpoint'
@@ -99,6 +99,13 @@ export interface TraceEngineOptions {
    * 'photo' gets the photo working-size cap (photoMaxWorkingPixels).
    */
   contentClass: 'auto' | ContentClass
+  /**
+   * Region color refit (refitRegionColors): a region whose interior mean
+   * color differs from its palette color by at least this much (OKLab) is
+   * filled with that mean. 0 = off. Only at native working resolution: an
+   * upsampled working image is blurred, so its interiors carry blends.
+   */
+  regionRefit: number
   /** Search radial gradient centers instead of using the bands' centroid (gradients.ts). */
   radialCenterSearch: boolean
   /** Gradient grouping only across borders with a mean pixel step (sRGB 0-1) up to this; 0 = any border. */
@@ -162,6 +169,7 @@ export const DEFAULT_ENGINE_OPTIONS: TraceEngineOptions = {
   radialCenterSearch: false,
   textureDetail: false,
   contentClass: 'auto',
+  regionRefit: 0,
   inkSeedFraction: 1,
   maxRegions: 6000,
   maxRegionsHard: 40_000,
@@ -205,6 +213,8 @@ export interface TraceDiagnostics {
   gradientGroupsFound: number
   /** Regions re-quantized by shading refinement. */
   shadedRegions: number
+  /** Regions whose fill became their interior's mean color (refitRegionColors). */
+  refittedRegions: number
 }
 
 export interface TraceEngineResult {
@@ -259,8 +269,11 @@ const REGULARIZE_MAX_SWITCH = 0.12
 /** Working size from which a JPEG's colors are read after its light blur (traceWith, memory). */
 const LAB_FROM_WORKING_PIXELS = 2_500_000
 
-/** Detail-protected region-budget passes go up to this multiple of the speckle area (traceWith). */
-const BUDGET_DETAIL_FACTOR = 16
+/** Region color refit leaves regions whose interior mean is further than this from their color (a mislabeled region, not shading). */
+const REFIT_MAX_SHIFT = 0.08
+
+/** Greedy region-budget merging takes over within this multiple of maxRegions (traceWith; area passes above). */
+const BUDGET_GREEDY_REACH = 4
 
 /** Palette colors shading refinement may add (refine.ts). */
 const MAX_SHADING_COLORS = 512
@@ -592,7 +605,7 @@ function traceWith(source: { image: RgbaImage | null }, overrides: Partial<Trace
     const refine = options.shadingStep > 0
     if (!refine) {
       lab = null
-      if (!options.gradients) image = NO_IMAGE
+      if (!options.gradients && !(options.regionRefit > 0 && upscale === 1)) image = NO_IMAGE
     }
     labels = mergeSmallRegions(labels, width, height, palette, minArea, scratch, protect)
     let regions = connectedComponents(labels, width, height, scratch)
@@ -600,41 +613,50 @@ function traceWith(source: { image: RgbaImage | null }, overrides: Partial<Trace
     let budgetPasses = 0
     // Region budget: pathological inputs (pure noise, dithering, halftones)
     // would otherwise produce tens of thousands of paths and megabyte SVGs.
-    // Coarsen speckle removal until the region count is sane.
     //
-    // On regular dense patterns (a fine checkerboard, pinstripes) one pass
+    // Within reach of the budget (BUDGET_GREEDY_REACH × maxRegions), regions
+    // merge one at a time, cheapest first, until exactly maxRegions are left
+    // (mergeToRegionBudget): a merge costs the region's area × its color
+    // distance² to its most similar neighbour, so fragments of near-identical
+    // shading levels go first and small contrasting detail (letters, strokes,
+    // dots) last. Area passes merged every region under a size alike, into
+    // the neighbour sharing the longest border: a shaded emblem's gray
+    // feathers went into the black strokes (Professional at 2000 px: ΔE 3.58
+    // vs 3.21, coat-of-arms edge recall 0.92 vs 0.94; BENCHMARKS.md "Region
+    // budget").
+    //
+    // Far over budget, plain area passes first coarsen speckle removal until
+    // the count is within reach; they need no region graph (memory).
+    //
+    // On regular dense patterns (a fine checkerboard, pinstripes) merging
     // cascades instead: recoloring a small square joins the neighbours of
-    // the new color through it, until the image is a single shape. Such a
-    // pass (from over budget to under a quarter of it at once) is undone,
-    // and the detailed result is kept, up to maxRegionsHard regions: a
+    // the new color through it, until the image is a single shape. Such
+    // merging (an area pass from over budget to under a quarter of it at
+    // once, or greedy merges that are mostly such joins) is undone or
+    // stopped, and the detailed result is kept, up to maxRegionsHard regions: a
     // 2000² 16 px checkerboard (31k regions) peaks at ~51 MB live, an 8 px
     // one (125k) at ~122 MB, so beyond the hard cap the cascade is accepted.
-    //
-    // Detail first: passes up to BUDGET_DETAIL_FACTOR × the speckle area keep
-    // small regions that contrast with their neighbour (detail protection),
-    // so texture and shading fragments go before text and line art; only if
-    // that misses the budget do plain passes restart from the speckle area.
-    // Merging every small region alike erased the eagle of a shaded emblem
-    // at 2000 px (BENCHMARKS.md "Content classes").
     let budgetArea = minArea
-    let detailFirst = protect !== undefined
-    while (regions.count > options.maxRegions && budgetArea < n / 50) {
+    let collapsed = false
+    while (regions.count > options.maxRegions * BUDGET_GREEDY_REACH && budgetArea < n / 50) {
       budgetArea *= 2
-      if (detailFirst && budgetArea > minArea * BUDGET_DETAIL_FACTOR) {
-        detailFirst = false
-        budgetArea = minArea * 2
-      }
       budgetPasses++
       const undo = regions.count <= options.maxRegionsHard ? labels.slice() : null
       const countBefore = regions.count
-      labels = mergeSmallRegions(labels, width, height, palette, budgetArea, scratch, detailFirst ? protect : undefined)
+      labels = mergeSmallRegions(labels, width, height, palette, budgetArea, scratch)
       regions = connectedComponents(labels, width, height, scratch)
       if (undo && regions.count < options.maxRegions / 4) {
         labels = undo
         regions = connectedComponents(labels, width, height, scratch)
         console.warn(`Region budget: a merge pass collapsed ${countBefore} regions to fewer than ${Math.ceil(options.maxRegions / 4)}; kept the detailed result`)
+        collapsed = true
         break
       }
+    }
+    if (!collapsed && regions.count > options.maxRegions) {
+      budgetPasses++
+      if (mergeToRegionBudget(labels, width, height, palette, options.maxRegions, scratch)) regions = connectedComponents(labels, width, height, scratch)
+      else console.warn(`Region budget: merging ${regions.count} regions would dissolve a regular pattern; kept the detailed result`)
     }
     lap('regions')
 
@@ -719,6 +741,12 @@ function traceWith(source: { image: RgbaImage | null }, overrides: Partial<Trace
     }
     if (shadedRegions > 0 || (gradientFills.length > 0 && refine)) regions = connectedComponents(labels, width, height, scratch)
     lap('shading')
+    // 5d. Region color refit (Professional): textured and shaded regions take
+    //     their interior's mean color instead of the nearest shared level.
+    let refitted = 0
+    if (options.regionRefit > 0 && upscale === 1 && options.mode === 'stacked' && image.data.length > 0) {
+      refitted = refitRegionColors(regions.ids, width, height, regions.count, regions.labels, image, palette, { minShift: options.regionRefit, maxShift: REFIT_MAX_SHIFT, minInterior: Math.max(4, minArea) })
+    }
 
     image = NO_IMAGE
     labels = NO_POINTS
@@ -728,7 +756,7 @@ function traceWith(source: { image: RgbaImage | null }, overrides: Partial<Trace
     regions.ids = NO_POINTS
     const boundaries = buildRegionBoundaries(chains, regions.count)
     lap('chains')
-    const diagnostics: TraceDiagnostics = { flatFraction: inputFlatFraction, contentClass, photoCap, minArea, regionsAfterSpeckle, budgetPasses, budgetArea, gradientGroupsFound, shadedRegions }
+    const diagnostics: TraceDiagnostics = { flatFraction: inputFlatFraction, contentClass, photoCap, minArea, regionsAfterSpeckle, budgetPasses, budgetArea, gradientGroupsFound, shadedRegions, refittedRegions: refitted }
     return { width, height, upscale, denoise, noiseSigma, sourceToWorking, coordinateScale: baseScale / upscale, palette, regionLabels: regions.labels, regionCount: regions.count, chains, boundaries, gradientFills, diagnostics }
   })()
   const { width, height, upscale, denoise, noiseSigma, sourceToWorking, coordinateScale, palette, chains, boundaries, gradientFills, diagnostics } = seg

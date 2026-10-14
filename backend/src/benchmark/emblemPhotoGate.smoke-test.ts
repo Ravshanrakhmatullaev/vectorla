@@ -17,8 +17,9 @@ function assertTrue(condition: boolean, message: string): void {
 
 const VARIANTS = ['2000jpgq90blur0.7n7']
 
-// Measured: Professional ΔE 0.75, Quick 0.97 (with the photo cap, before the
-// emblem class: 0.91 and 1.17; text edge recall 0.95 -> 0.98).
+// Measured: Professional ΔE 0.74, Quick 0.97 (0.75 before region color
+// refit; with the photo cap, before the emblem class: 0.91 and 1.17; text
+// edge recall 0.95 -> 0.98).
 const BUDGETS = { professional: 0.85, quick: 1.08 }
 
 const mean = (rows: BenchmarkRow[], pick: (r: BenchmarkRow) => number) => rows.reduce((s, r) => s + pick(r), 0) / Math.max(1, rows.length)
