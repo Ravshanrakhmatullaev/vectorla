@@ -26,6 +26,18 @@ export type TraceMode = 'quick' | 'professional'
 /** Mirrors backend/src/pipeline/ProfessionalTracePipeline.ts's PROFESSIONAL_TRACE_JOB_PRESET. */
 export const PROFESSIONAL_TRACE_PRESET = 'professional'
 
+/**
+ * What each mode bills. Mirrors the backend: a Quick job costs the base
+ * credit, a Professional job PROFESSIONAL_TRACE_CREDIT_MULTIPLIER (2) times
+ * that (backend/src/pipeline/ProfessionalTracePipeline.ts,
+ * ConversionService.processJob).
+ */
+export const TRACE_MODE_CREDITS: Record<TraceMode, number> = { quick: 1, professional: 2 }
+
+function presetFor(mode: TraceMode): string | undefined {
+  return mode === 'professional' ? PROFESSIONAL_TRACE_PRESET : undefined
+}
+
 /** Real upload → job → poll flow against the backend API (see backend/API.md). Replaces the old fake "showDemo" toggle. */
 export function useUploadFlow() {
   const [state, setState] = useState<UploadFlowState>({ status: 'idle' })
@@ -33,13 +45,19 @@ export function useUploadFlow() {
   // WorkspacePreview.tsx's analysis card) — not part of UploadFlowState since
   // it doesn't change across queued/processing/completed for the same upload.
   const [analysis, setAnalysis] = useState<ImageAnalysisResult | null>(null)
-  const [traceMode, setTraceMode] = useState<TraceMode>('quick')
+  const [traceMode, setTraceModeState] = useState<TraceMode>('quick')
+  // Read by upload(), which must see a mode chosen just before it is called.
+  const traceModeRef = useRef<TraceMode>('quick')
+  const setTraceMode = useCallback((mode: TraceMode) => {
+    traceModeRef.current = mode
+    setTraceModeState(mode)
+  }, [])
   const lastFileRef = useRef<File | null>(null)
   const pollJobIdRef = useRef<string | null>(null)
-  // Quick Trace's job is always the one uploadImage auto-creates (see
-  // backend/README.md's Job Queue section) — never re-created here.
-  // Professional Trace's job is created on demand, the first time it's
-  // selected, and reused after that (see selectTraceMode).
+  // The mode chosen before uploading is sent with the upload, so its job is
+  // the one uploadImage auto-creates (see backend/API.md's POST /uploads).
+  // The other mode's job is created on demand, the first time it's selected
+  // after that, and reused after that (see selectTraceMode).
   const uploadIdRef = useRef<string | null>(null)
   const jobIdsRef = useRef<{ quick: string | null; professional: string | null }>({ quick: null, professional: null })
 
@@ -54,32 +72,37 @@ export function useUploadFlow() {
   }, [])
 
   const upload = useCallback(async (file: File) => {
+    const mode = traceModeRef.current
     lastFileRef.current = file
     uploadIdRef.current = null
     jobIdsRef.current = { quick: null, professional: null }
-    setTraceMode('quick')
     setState({ status: 'uploading' })
     setAnalysis(null)
     try {
       // Large photos are shrunk to the API's pixel limit first (no quality
       // loss: the engine works at ~1.2 MP).
-      const { upload: storedUpload, job, analysis: uploadAnalysis } = await uploadImage(await fitImageForUpload(file))
+      const { upload: storedUpload, job, analysis: uploadAnalysis } = await uploadImage(await fitImageForUpload(file), presetFor(mode))
       uploadIdRef.current = storedUpload.id
-      jobIdsRef.current.quick = job.id
+      // The job's own preset says which mode it really is (a server that
+      // ignored the field would have made a Quick job).
+      const jobMode: TraceMode = job.preset === PROFESSIONAL_TRACE_PRESET ? 'professional' : 'quick'
+      jobIdsRef.current[jobMode] = job.id
+      setTraceMode(jobMode)
       setAnalysis(uploadAnalysis)
       applyJob(job)
     } catch (error) {
       setState({ status: 'failed', stage: 'upload', kind: classifyError(error), message: describeError(error) })
     }
-  }, [applyJob])
+  }, [applyJob, setTraceMode])
 
   /**
-   * Switches the active trace mode. Quick Trace's job already exists (it's
-   * the one uploadImage auto-created), so this only ever re-syncs state to
-   * it. Professional Trace's job is created — with preset:
-   * PROFESSIONAL_TRACE_PRESET, billing the backend's Professional Trace
-   * credit rate — the first time it's selected for this upload, then just
-   * re-synced on subsequent selections (no duplicate job/charge).
+   * Switches the active trace mode. Before anything is uploaded this only
+   * records the choice: upload() sends it, so the image is traced (and
+   * billed) once, in that mode. Afterwards, a mode whose job already exists
+   * for this upload is just re-synced; the other mode's job is created —
+   * with preset: PROFESSIONAL_TRACE_PRESET for Professional, billing the
+   * backend's Professional Trace credit rate — the first time it's
+   * selected, then re-synced on later selections (no duplicate job/charge).
    *
    * No-ops while the current job is still uploading/queued/processing: the
    * backend's active-job dedup (JobService.createJob) would just hand back
@@ -95,10 +118,10 @@ export function useUploadFlow() {
    */
   const selectTraceMode = useCallback(
     async (mode: TraceMode) => {
-      const uploadId = uploadIdRef.current
-      if (!uploadId) return
       if (state.status === 'uploading' || state.status === 'queued' || state.status === 'processing') return
+      const uploadId = uploadIdRef.current
       setTraceMode(mode)
+      if (!uploadId) return
       try {
         const existingJobId = jobIdsRef.current[mode]
         if (existingJobId) {
@@ -106,7 +129,7 @@ export function useUploadFlow() {
           return
         }
         const supersedesJobId = state.status === 'completed' ? state.jobId : undefined
-        const job = await createJob(uploadId, mode === 'professional' ? PROFESSIONAL_TRACE_PRESET : undefined, supersedesJobId)
+        const job = await createJob(uploadId, presetFor(mode), supersedesJobId)
         // The superseded job was refunded and its result deleted, so it must
         // not be reused when switching back: that mode starts a new job.
         if (supersedesJobId) {
@@ -120,7 +143,7 @@ export function useUploadFlow() {
         setState({ status: 'failed', stage: 'processing', kind: classifyError(error), message: describeError(error) })
       }
     },
-    [applyJob, state],
+    [applyJob, setTraceMode, state],
   )
 
   const retry = useCallback(() => {
@@ -128,11 +151,11 @@ export function useUploadFlow() {
     if (file) void upload(file)
   }, [upload])
 
+  // The chosen mode is kept for the next image.
   const reset = useCallback(() => {
     lastFileRef.current = null
     uploadIdRef.current = null
     jobIdsRef.current = { quick: null, professional: null }
-    setTraceMode('quick')
     setState({ status: 'idle' })
     setAnalysis(null)
   }, [])

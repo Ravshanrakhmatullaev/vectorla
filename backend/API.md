@@ -78,6 +78,12 @@ rejected anything with the wrong magic bytes), `analysis` is `null` and the
 upload/job still succeed as normal; the queue consumer still runs the same
 decode for real when it processes the job.
 
+Optional `preset` field: `professional` creates the auto job with the
+Professional preset (same engine profile and billing as `POST /jobs` with
+`preset: "professional"`, below), so a user who chooses Professional before
+uploading gets one job and one charge. Any other value, or none, creates the
+default Quick job.
+
 `data: { upload: Upload, job: Job, analysis: ImageAnalysis | null }` · `201`
 
 ### `POST /jobs`

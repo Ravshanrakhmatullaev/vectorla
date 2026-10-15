@@ -1,4 +1,5 @@
 import type { ImageType, EstimatedQuality, VectorizationProviderName } from '@/lib/api/types'
+import type { TraceSampleId } from '@/data/traceSamples'
 
 export type Language = 'en' | 'uz' | 'ru'
 
@@ -209,11 +210,46 @@ export interface Translation {
       }
       recommendedBadge: string
       quickTraceTitle: string
-      quickTraceDescription: string
       professionalTraceTitle: string
-      professionalTraceDescription: string
-      qualityImprovement: Record<EstimatedQuality, string>
-      professionalTraceNote: string
+    }
+    /** Quick / Professional selector. Every point must match the engine profiles (backend/src/engine/profiles.ts). */
+    modes: {
+      title: string
+      quickPoints: string[]
+      professionalPoints: string[]
+      nextUploadNote: string
+      switchNote: string
+      retraceNote: string
+      busyNote: string
+      sampleNote: string
+      notEnoughCredits: string
+    }
+    /** Result viewer: compare slider, zoom, outline view and magnifier. */
+    viewer: {
+      stageLabel: string
+      toolbarLabel: string
+      preview: string
+      outline: string
+      anchors: string
+      magnifier: string
+      zoomIn: string
+      zoomOut: string
+      zoomFit: string
+      hint: string
+      magnifierHint: string
+      keyboardHint: string
+      lensOriginal: string
+      lensVector: string
+      /** {shapes} and {anchors} are replaced with counts. */
+      outlineStats: string
+      outlineUnavailable: string
+    }
+    samples: {
+      title: string
+      badge: string
+      items: Record<TraceSampleId, string>
+      loadError: string
+      uploadOwn: string
     }
   }
   features: {
@@ -416,15 +452,48 @@ export const translations: Record<Language, Translation> = {
         },
         recommendedBadge: 'Recommended',
         quickTraceTitle: 'Quick Trace',
-        quickTraceDescription: 'Fast, for most images',
         professionalTraceTitle: 'Professional Trace ⭐',
-        professionalTraceDescription: 'More colors · smooth gradients',
-        qualityImprovement: {
-          high: 'Minor quality improvement expected',
-          medium: 'Noticeable quality improvement expected',
-          low: 'Major quality improvement expected',
-        },
-        professionalTraceNote: 'Professional Trace keeps up to 64 colors, separates close shades more finely and turns smooth color ramps into real SVG gradients. It costs 2 credits and takes a little longer.',
+      },
+      modes: {
+        title: 'Trace mode',
+        quickPoints: ['Up to 32 colors', 'Flat colors, clean for print and cutting', 'Faster'],
+        professionalPoints: [
+          'Up to 64 colors, close shades kept apart',
+          'Smooth color ramps become real SVG gradients',
+          'Finer detail in shaded and textured areas',
+          'Takes a little longer',
+        ],
+        nextUploadNote: 'Choose before you upload: the mode applies to your next image.',
+        switchNote: 'Choosing the other mode traces this image again. The credits for the current result are refunded.',
+        retraceNote: 'Choosing a mode traces this image again.',
+        busyNote: 'You can change the mode when this trace finishes.',
+        sampleNote: 'Both results were traced in advance by the same engine. Switching is free.',
+        notEnoughCredits: 'Not enough credits',
+      },
+      viewer: {
+        stageLabel: 'Result viewer',
+        toolbarLabel: 'Result view',
+        preview: 'Preview',
+        outline: 'Outline',
+        anchors: 'Anchor points',
+        magnifier: 'Magnifier',
+        zoomIn: 'Zoom in',
+        zoomOut: 'Zoom out',
+        zoomFit: 'Fit to view',
+        hint: 'Drag the slider to compare. Pinch or Ctrl + scroll to zoom up to 8×, then drag to move.',
+        magnifierHint: 'Point at any area (on touch screens, drag): original pixels on the left, vector on the right.',
+        keyboardHint: 'Keys: + and − zoom, 0 fits the image, arrow keys move.',
+        lensOriginal: 'Original',
+        lensVector: 'Vector',
+        outlineStats: 'Shapes: {shapes} · Anchor points: {anchors}',
+        outlineUnavailable: 'The outline of this result could not be read.',
+      },
+      samples: {
+        title: 'No image at hand? Explore a real result:',
+        badge: 'Sample',
+        items: { logo: 'Logo', emblem: 'Emblem', emoji: '3D emoji' },
+        loadError: 'The sample could not be loaded.',
+        uploadOwn: 'Upload your own image',
       },
     },
     features: {
@@ -782,15 +851,48 @@ export const translations: Record<Language, Translation> = {
         },
         recommendedBadge: 'Tavsiya etiladi',
         quickTraceTitle: 'Tezkor trace',
-        quickTraceDescription: 'Tez, ko‘pchilik rasmlar uchun',
         professionalTraceTitle: 'Professional Trace ⭐',
-        professionalTraceDescription: 'Ko‘proq ranglar · silliq gradientlar',
-        qualityImprovement: {
-          high: 'Sifat kam darajada yaxshilanadi',
-          medium: 'Sifat sezilarli darajada yaxshilanadi',
-          low: 'Sifat sezilarli darajada oshadi',
-        },
-        professionalTraceNote: "Professional Trace 64 tagacha rangni saqlaydi, yaqin tuslarni aniqroq ajratadi va silliq rang o'tishlarini haqiqiy SVG gradientlariga aylantiradi. U 2 kredit turadi va biroz ko'proq vaqt oladi.",
+      },
+      modes: {
+        title: 'Trassirovka rejimi',
+        quickPoints: ['32 tagacha rang', 'Tekis ranglar — chop etish va kesish uchun qulay', 'Tezroq'],
+        professionalPoints: [
+          '64 tagacha rang, yaqin tuslar aniq ajratiladi',
+          'Silliq rang o‘tishlari haqiqiy SVG gradientlariga aylanadi',
+          'Soyali va teksturali joylar nozikroq chiqadi',
+          'Biroz ko‘proq vaqt oladi',
+        ],
+        nextUploadNote: 'Yuklashdan oldin tanlang: rejim keyingi rasmingizga qo‘llanadi.',
+        switchNote: 'Boshqa rejim tanlansa, rasm qayta trassirovka qilinadi. Joriy natija uchun sarflangan kreditlar qaytariladi.',
+        retraceNote: 'Rejim tanlansa, rasm qayta trassirovka qilinadi.',
+        busyNote: 'Rejimni joriy trassirovka tugagach o‘zgartirish mumkin.',
+        sampleNote: 'Ikkala natija ham shu dvigatel bilan oldindan trassirovka qilingan. Almashtirish bepul.',
+        notEnoughCredits: 'Kredit yetarli emas',
+      },
+      viewer: {
+        stageLabel: 'Natijani ko‘rish oynasi',
+        toolbarLabel: 'Natija ko‘rinishi',
+        preview: 'Ko‘rinish',
+        outline: 'Kontur',
+        anchors: 'Tayanch nuqtalar',
+        magnifier: 'Lupa',
+        zoomIn: 'Kattalashtirish',
+        zoomOut: 'Kichiklashtirish',
+        zoomFit: 'Oynaga moslash',
+        hint: 'Taqqoslash uchun slayderni suring. 8× gacha kattalashtirish: ikki barmoq bilan yoki Ctrl + g‘ildirak, so‘ng surib siljiting.',
+        magnifierHint: 'Istalgan joyga olib boring (sensorli ekranda suring): chapda asl piksellar, o‘ngda vektor.',
+        keyboardHint: 'Tugmalar: + va − masshtab, 0 rasmni oynaga moslaydi, strelkalar siljitadi.',
+        lensOriginal: 'Original',
+        lensVector: 'Vektor',
+        outlineStats: 'Shakllar: {shapes} · Tayanch nuqtalar: {anchors}',
+        outlineUnavailable: 'Bu natijaning konturini o‘qib bo‘lmadi.',
+      },
+      samples: {
+        title: 'Rasm yo‘qmi? Haqiqiy natijani ko‘ring:',
+        badge: 'Namuna',
+        items: { logo: 'Logotip', emblem: 'Emblema', emoji: '3D emoji' },
+        loadError: 'Namunani yuklab bo‘lmadi.',
+        uploadOwn: 'O‘z rasmingizni yuklang',
       },
     },
     features: {
@@ -1156,15 +1258,48 @@ export const translations: Record<Language, Translation> = {
         },
         recommendedBadge: 'Рекомендуется',
         quickTraceTitle: 'Быстрая трассировка',
-        quickTraceDescription: 'Быстро, для большинства изображений',
         professionalTraceTitle: 'Профессиональная трассировка ⭐',
-        professionalTraceDescription: 'Больше цветов · плавные градиенты',
-        qualityImprovement: {
-          high: 'Ожидается небольшое улучшение качества',
-          medium: 'Ожидается заметное улучшение качества',
-          low: 'Ожидается значительное улучшение качества',
-        },
-        professionalTraceNote: 'Профессиональная трассировка сохраняет до 64 цветов, точнее разделяет близкие оттенки и превращает плавные цветовые переходы в настоящие SVG-градиенты. Она стоит 2 кредита и занимает немного больше времени.',
+      },
+      modes: {
+        title: 'Режим трассировки',
+        quickPoints: ['До 32 цветов', 'Плоские цвета — удобно для печати и резки', 'Быстрее'],
+        professionalPoints: [
+          'До 64 цветов, близкие оттенки разделяются точнее',
+          'Плавные переходы цвета становятся настоящими SVG-градиентами',
+          'Тоньше передаёт тени и текстуры',
+          'Занимает немного больше времени',
+        ],
+        nextUploadNote: 'Выберите до загрузки: режим применится к следующему изображению.',
+        switchNote: 'При выборе другого режима изображение будет трассировано заново. Кредиты за текущий результат вернутся.',
+        retraceNote: 'При выборе режима изображение будет трассировано заново.',
+        busyNote: 'Режим можно сменить, когда текущая трассировка завершится.',
+        sampleNote: 'Оба результата заранее получены тем же движком. Переключение бесплатно.',
+        notEnoughCredits: 'Недостаточно кредитов',
+      },
+      viewer: {
+        stageLabel: 'Просмотр результата',
+        toolbarLabel: 'Вид результата',
+        preview: 'Просмотр',
+        outline: 'Контуры',
+        anchors: 'Опорные точки',
+        magnifier: 'Лупа',
+        zoomIn: 'Увеличить',
+        zoomOut: 'Уменьшить',
+        zoomFit: 'Вписать в окно',
+        hint: 'Перетащите ползунок для сравнения. Увеличение до 8× — щипком или Ctrl + колесо, затем перетаскивайте, чтобы двигать.',
+        magnifierHint: 'Наведите на любую область (на сенсорном экране — проведите): слева исходные пиксели, справа вектор.',
+        keyboardHint: 'Клавиши: + и − масштаб, 0 вписывает изображение, стрелки двигают.',
+        lensOriginal: 'Оригинал',
+        lensVector: 'Вектор',
+        outlineStats: 'Фигур: {shapes} · Опорных точек: {anchors}',
+        outlineUnavailable: 'Не удалось прочитать контуры этого результата.',
+      },
+      samples: {
+        title: 'Нет изображения под рукой? Посмотрите реальный результат:',
+        badge: 'Пример',
+        items: { logo: 'Логотип', emblem: 'Эмблема', emoji: '3D-эмодзи' },
+        loadError: 'Не удалось загрузить пример.',
+        uploadOwn: 'Загрузить своё изображение',
       },
     },
     features: {

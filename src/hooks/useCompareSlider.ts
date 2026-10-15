@@ -41,6 +41,7 @@ export function useCompareSlider(initialPct: number) {
 
   return {
     splitPct,
+    setSplitPct,
     containerHandlers: { onPointerDown, onPointerMove },
     onHandleKeyDown,
   }

@@ -109,6 +109,21 @@ async function run() {
   assertTrue(!('storageKey' in (body1.upload as Record<string, unknown>)), 'the storage key is never sent to the client')
   console.log('PASS: 201 Created on successful upload, with an auto-created queued job')
 
+  // Optional preset: "professional" creates the auto job with the
+  // Professional preset; any other value keeps the default Quick job.
+  const proFile = new File([pngBytes()], 'route-pro.png', { type: 'image/png' })
+  const resPro = await handleUploadsRoute(makeUploadRequest('route-user-preset', { file: proFile, preset: 'professional' }), env, TEST_REQUEST_ID)
+  assertEqual(resPro.status, 201, 'status for an upload with the professional preset')
+  const bodyPro = await readSuccessBody<{ job: { preset: string | null; status: string } }>(resPro)
+  assertEqual(bodyPro.job.preset, 'professional', 'the auto-created job carries the professional preset')
+  assertEqual(bodyPro.job.status, 'queued', 'the professional job is queued')
+  const otherFile = new File([pngBytes()], 'route-other.png', { type: 'image/png' })
+  const resOther = await handleUploadsRoute(makeUploadRequest('route-user-preset', { file: otherFile, preset: 'bogus' }), env, TEST_REQUEST_ID)
+  assertEqual(resOther.status, 201, 'status for an upload with an unknown preset')
+  assertEqual((await readSuccessBody<{ job: { preset: string | null } }>(resOther)).job.preset, null, 'an unknown preset keeps the default Quick job')
+  assertEqual(body1.job.status, 'queued', 'no preset still queues a job')
+  console.log('PASS: optional "preset" field: professional is applied to the auto job, other values are ignored')
+
   // 401 — no Authorization header and no test bypass header
   const res0 = await handleUploadsRoute(
     new Request('http://localhost/api/v1/uploads', { method: 'POST', body: new FormData() }),

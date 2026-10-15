@@ -77,9 +77,23 @@ multi-format export, batch workflows, and launch operations remain incomplete.
 - `WorkspacePreview` supports file input/drop, original preview, real analysis
   display, job status, classified failure states, trace-mode switching,
   vector result fetch, comparison, and browser download.
-- Quick Trace uses the automatically created upload job. Professional Trace
-  creates a replacement job with the `professional` preset and refunds a
-  completed superseded job so switching modes does not stack charges.
+- The trace mode is chosen before upload (`TraceModeSelector`: a radio group
+  with each mode's credit cost and the engine-profile differences from
+  `backend/src/engine/profiles.ts`) and sent as the upload's `preset`, so the
+  auto-created job is already in that mode: one job, one charge. Choosing the
+  other mode after a result exists creates a replacement job and refunds the
+  completed superseded one, so switching modes does not stack charges.
+- `ResultViewer` shows a result next to its original: the compare slider,
+  zoom up to 8× (buttons, pinch, Ctrl/⌘ + wheel, keyboard), an Outline view
+  drawn from the SVG's own paths and anchor points (`src/lib/svgOutline.ts`
+  reads only geometry; no SVG markup is injected), and a magnifier with
+  original pixels and the vector side by side, for mouse, touch and keyboard.
+  Zoom geometry is in `src/lib/zoomView.ts`; both libraries have unit tests
+  (`npm test`).
+- Three pre-traced samples (`public/samples/`, `src/data/traceSamples.ts`:
+  the engine's unedited Quick and Professional output for Vectorla test
+  designs and one MIT-licensed Fluent Emoji) open in the same viewer without
+  signing in or using credits.
 
 ### API platform
 
@@ -99,7 +113,9 @@ multi-format export, batch workflows, and launch operations remain incomplete.
   filename, MIME type, extension, size, content signature, emptiness, and
   duplicate filenames, then stores bytes in R2 and metadata in a repository.
 - Storage keys exclude the caller-supplied filename and use randomized IDs.
-- Every successful upload automatically creates and enqueues a job.
+- Every successful upload automatically creates and enqueues a job; an
+  optional `preset` form field (`professional` only) makes it a Professional
+  Trace job.
 - `POST /api/v1/jobs` supports reprocessing, presets/settings, active-job
   deduplication, and `supersedesJobId` refunds.
 - `GET /api/v1/jobs/:id` and `GET /api/v1/jobs/:id/conversion` expose

@@ -19,8 +19,12 @@ billing, non-SVG generation, and several product workflows remain.
 - Responsive React 19 landing page and workspace UI with English, Uzbek, and
   Russian translations, persisted light/dark themes, SEO/PWA assets, error
   boundaries, and below-the-fold code splitting.
-- Workspace upload flow when `VITE_API_BASE_URL` is configured: upload ->
-  automatic queued job -> polling -> real SVG preview/download.
+- Workspace upload flow when `VITE_API_BASE_URL` is configured: choose Quick
+  (1 credit) or Professional (2 credits) -> upload -> automatic queued job in
+  that mode -> polling -> real SVG preview/download.
+- Result viewer for real results and pre-traced samples: compare slider, zoom
+  up to 8×, Outline view with the SVG's real paths and anchor points, and a
+  before/after magnifier (mouse, touch and keyboard).
 - Honest Preview Mode when no backend URL is configured; files are not sent or
   processed in that mode.
 - Quick Trace using real bitmap tracing and Professional Trace using noise
@@ -145,6 +149,7 @@ Frontend:
 ```bash
 npm run build
 npm run lint
+npm test   # unit tests for the outline parser and zoom geometry (node --test)
 ```
 
 Backend type-check:

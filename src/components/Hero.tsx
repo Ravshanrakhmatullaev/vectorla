@@ -147,7 +147,7 @@ export function Hero() {
 
                 <div
                   className="absolute inset-0 flex items-center justify-center p-8"
-                  style={{ clipPath: `inset(0 ${100 - splitPct}% 0 0)` }}
+                  style={{ clipPath: `inset(0 0 0 ${splitPct}%)` }}
                 >
                   <div className="h-full w-full max-w-[200px]">
                     <BeforeAfterArt crisp />

@@ -10,6 +10,7 @@ import { jsonSuccess, jsonError, mapErrorToResponse } from '../api/response'
 import { UnauthorizedError } from '../errors'
 import { MAX_UPLOAD_BODY_BYTES, UPLOAD_ANALYSIS_MAX_BYTES } from '../config'
 import { readLimitedBody, parseMultipart } from '../api/readLimitedBody'
+import { PROFESSIONAL_TRACE_JOB_PRESET } from '../pipeline/ProfessionalTracePipeline'
 
 /** POST /api/v1/uploads is implemented. GET/DELETE /api/v1/uploads/:id are not yet (see UploadService). */
 export async function handleUploadsRoute(request: Request, env: Env, requestId: string): Promise<Response> {
@@ -60,6 +61,12 @@ export async function handleUploadsRoute(request: Request, env: Env, requestId: 
     return jsonError('VALIDATION_ERROR', 'Missing "file" field', 400, requestId)
   }
 
+  // Optional trace mode chosen before upload, so a Professional trace is one
+  // job and one charge instead of an automatic Quick job that is refunded and
+  // replaced. Only the Professional preset is accepted here; anything else
+  // keeps the default Quick trace.
+  const preset = formData.get('preset') === PROFESSIONAL_TRACE_JOB_PRESET ? PROFESSIONAL_TRACE_JOB_PRESET : undefined
+
   try {
     await limits.assertStorageAvailable(userId, plan, file.size)
     const buffer = await file.arrayBuffer()
@@ -76,7 +83,7 @@ export async function handleUploadsRoute(request: Request, env: Env, requestId: 
     // conversion job created and enqueued — no separate client call needed
     // (though POST /api/v1/jobs also exists for re-processing an existing upload).
     const jobService = createJobService(env)
-    const job = await jobService.createJob({ userId, uploadId: upload.id })
+    const job = await jobService.createJob({ userId, uploadId: upload.id, preset })
 
     // Phase 21: analysis is computed here so the frontend gets it immediately
     // (before the queue even picks the job up), and again inside

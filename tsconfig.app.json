@@ -28,5 +28,7 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Unit tests run in Node (npm test), which strips their types.
+  "exclude": ["src/**/*.test.ts"]
 }
