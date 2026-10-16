@@ -323,7 +323,7 @@ export function WorkspacePreview() {
                   vectorUrl={sampleUrl}
                   svgText={sampleText}
                   overlay={
-                    <div className="absolute inset-x-3 bottom-3 flex items-center justify-between gap-2 rounded-lg bg-black/55 px-3 py-2">
+                    <div className="absolute inset-x-3 bottom-3 flex items-center justify-between gap-2 rounded-lg bg-black/75 px-3 py-2">
                       <span className="flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-white">
                         <span className="flex-none rounded bg-white/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
                           {t.workspace.samples.badge}

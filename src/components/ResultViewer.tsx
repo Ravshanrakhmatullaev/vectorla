@@ -537,7 +537,7 @@ function SegmentButton({ pressed, onClick, children }: { pressed: boolean; onCli
       aria-pressed={pressed}
       onClick={onClick}
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors',
+        'inline-flex min-h-8 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors',
         'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]',
         pressed ? 'bg-[var(--bg-elevated)] text-[var(--ink)] shadow-sm' : 'text-[var(--ink-muted)] hover:text-[var(--ink)]',
       )}
@@ -554,7 +554,7 @@ function ToggleButton({ pressed, onClick, children }: { pressed: boolean; onClic
       aria-pressed={pressed}
       onClick={onClick}
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors',
+        'inline-flex min-h-8 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors',
         'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]',
         pressed
           ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]'
