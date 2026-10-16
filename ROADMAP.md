@@ -63,7 +63,7 @@ Legend: ✅ done · 🔜 next · ⏳ planned · 🧑 needs an owner decision, cr
 5. **High: queue config** (`max_batch_size=10`, no DLQ, no retry delay, no
    CPU limit) is unsuited to CPU-heavy tracing.
 6. **High: CSP blocks the workspace previews** (`img-src` lacks `blob:`).
-7. **High: duplicate filenames get 409 in production**, and Retry re-uploads the same name.
+7. **High (fixed 2026-10-16): duplicate filenames got 409 in staging and production**, and Retry re-uploaded the same name. A repeated name is now stored as a numbered copy (`logo (2).png`).
 8. **High: staging deploy would overwrite production** (same Worker, bucket, queue).
 9. **High: marketing copy contradicts reality.** "Runs in your browser",
    "Unlimited", PDF/DXF/EPS output and batch processing are not implemented.
@@ -181,7 +181,7 @@ Legend: ✅ done · 🔜 next · ⏳ planned · 🧑 needs an owner decision, cr
   `script-src 'unsafe-inline'`). The paid-plan file size limit is **15 MB**,
   measured at about 88 MB peak for a 15.5 MB 16-bit PNG in workerd (25 MB
   would reach about 110 MB). Remaining: `style-src 'unsafe-inline'` (React
-  inline styles); dropping the duplicate-filename unique index.
+  inline styles); dropping the (now unused for UX) duplicate-filename unique index.
 - ✅ **P7. Abuse limits.** Per-user upload rate (10 minutes and a day), storage
   quota (summed in Postgres, migration 0003) and an active-job limit, per plan
   (`PLAN_LIMITS`), all returning 429 with `Retry-After` and translated UI

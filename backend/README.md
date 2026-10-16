@@ -65,7 +65,7 @@ and writes an `Upload` row, returning it as JSON with `201`.
 | Status | Cause |
 |---|---|
 | 201 | Created — file stored, metadata saved |
-| 400 | Missing `file` field, empty file, or duplicate filename |
+| 400 | Missing `file` field or empty file (a repeated file name is accepted and stored as a numbered copy) |
 | 401 | Missing, invalid, or expired Supabase bearer token |
 | 403 | The authenticated user has no provisioned profile |
 | 413 | File exceeds the caller's plan's max size |

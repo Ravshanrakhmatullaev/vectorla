@@ -1,6 +1,5 @@
 import type { Upload, UserPlan } from '../types'
 import type { Env } from '../env'
-import { isLocalDevelopment } from '../env'
 import { StorageService } from './StorageService'
 import { createR2Client } from '../integrations/r2'
 import { createUploadsRepository } from '../repositories/createUploadsRepository'
@@ -28,19 +27,41 @@ export interface CreateUploadInput {
   mimeType: string
 }
 
+/** Numbered copies ("logo (2).png" … "logo (10).png") tried before a short random suffix is used. */
+const MAX_NUMBERED_COPIES = 10
+/** How many times a lost race for a stored name is retried with the next free name. */
+const MAX_NAME_RETRIES = 5
+
+/** "logo.png" → ["logo", ".png"]; a name without an extension keeps an empty one. */
+function splitFileName(fileName: string): [string, string] {
+  const dot = fileName.lastIndexOf('.')
+  return dot <= 0 ? [fileName, ''] : [fileName.slice(0, dot), fileName.slice(dot)]
+}
+
 export class UploadService {
   constructor(
     private readonly storage: StorageService,
     private readonly repository: UploadsRepository,
-    // Local development only (see env.ts's isLocalDevelopment) — never true
-    // in staging/production. Repeatedly re-uploading the same sample file
-    // while testing locally must not require picking a new filename every
-    // time; the (userId, originalFileName) uniqueness guarantee itself is
-    // untouched (still real, still enforced atomically by repository.create()
-    // below) — this only disambiguates the incoming name first so that
-    // guarantee is never actually hit locally.
-    private readonly allowDuplicateFilenames: boolean = false,
   ) {}
+
+  /**
+   * The name an upload is stored under. A user may upload the same file name
+   * again (re-tracing a logo in another mode, an edited file saved over the
+   * old name, a retry): the first free name among "name", "name (2)" …
+   * "name (10)" is used, then "name (<id prefix>)". The database's
+   * (user_id, original_file_name) uniqueness stays in force underneath; names
+   * already known to be taken (`taken`) are skipped without another lookup.
+   */
+  private async chooseStoredName(userId: string, fileName: string, id: string, taken: Set<string>): Promise<string> {
+    const [stem, extension] = splitFileName(fileName)
+    for (let copy = 1; copy <= MAX_NUMBERED_COPIES; copy++) {
+      const candidate = copy === 1 ? fileName : `${stem} (${copy})${extension}`
+      if (taken.has(candidate)) continue
+      if (!(await this.repository.findByUserAndFilename(userId, candidate))) return candidate
+      taken.add(candidate)
+    }
+    return `${stem} (${id.slice(0, 8)})${extension}`
+  }
 
   async createUpload(input: CreateUploadInput): Promise<Upload> {
     validateFileName(input.originalFileName)
@@ -51,15 +72,6 @@ export class UploadService {
     validateFileSignature(input.file, input.mimeType)
     assertDimensionsWithinLimits(input.file, input.mimeType)
 
-    // Fast path: avoids a wasted R2 write in the common (non-racing) case.
-    // The real guarantee is repository.create()'s atomic uniqueness check
-    // below (schema.sql's unique(user_id, original_file_name) index) — this
-    // pre-check alone has a TOCTOU window under concurrent identical requests.
-    const existing = await this.repository.findByUserAndFilename(input.userId, input.originalFileName)
-    if (existing && !this.allowDuplicateFilenames) {
-      throw new ConflictError(`A file named "${input.originalFileName}" has already been uploaded`)
-    }
-
     const id = crypto.randomUUID()
     // Deliberately excludes the caller-supplied originalFileName: keys must
     // be fully random with no user-controlled path segments (see Phase 17
@@ -67,34 +79,43 @@ export class UploadService {
     // mimeType, never from the raw filename.
     const storageKey = `uploads/${input.userId}/${id}${getCanonicalExtension(input.mimeType)}`
 
+    // Chosen before the R2 write, so no lookups happen after the file is stored
+    // in the common case.
+    const taken = new Set<string>()
+    let originalFileName = await this.chooseStoredName(input.userId, input.originalFileName, id, taken)
+
     await this.storage.storeFile(storageKey, input.file)
-
-    // Only reached when allowDuplicateFilenames is true and a same-named
-    // upload already exists — disambiguate so repository.create()'s real
-    // uniqueness guarantee (still fully active) is never hit locally.
-    const originalFileName = existing ? `${input.originalFileName} (${id.slice(0, 8)})` : input.originalFileName
-
-    const upload: Upload = {
-      id,
-      userId: input.userId,
-      originalFileName,
-      mimeType: input.mimeType,
-      sizeBytes: input.file.byteLength,
-      storageKey,
-      status: 'stored',
-      createdAt: new Date().toISOString(),
-    }
 
     // The file is stored before its row; if the row can't be written the
     // file is deleted right away. Should that delete fail too, the
     // scheduled OrphanSweeper removes it after its grace period.
-    try {
-      return await this.repository.create(upload)
-    } catch (error) {
-      await this.storage.deleteFile(storageKey).catch((cleanupError: unknown) => {
-        console.error(`Failed to delete ${storageKey} after its upload row failed; the orphan sweep will remove it:`, cleanupError)
-      })
-      throw error
+    for (let attempt = 0; ; attempt++) {
+      const upload: Upload = {
+        id,
+        userId: input.userId,
+        originalFileName,
+        mimeType: input.mimeType,
+        sizeBytes: input.file.byteLength,
+        storageKey,
+        status: 'stored',
+        createdAt: new Date().toISOString(),
+      }
+      try {
+        return await this.repository.create(upload)
+      } catch (error) {
+        // Another request took the same name between the lookup and the insert
+        // (the repository's uniqueness check is the atomic guarantee): store
+        // under the next free name instead of failing the user's upload.
+        if (error instanceof ConflictError && attempt < MAX_NAME_RETRIES) {
+          taken.add(originalFileName)
+          originalFileName = await this.chooseStoredName(input.userId, input.originalFileName, id, taken)
+          continue
+        }
+        await this.storage.deleteFile(storageKey).catch((cleanupError: unknown) => {
+          console.error(`Failed to delete ${storageKey} after its upload row failed; the orphan sweep will remove it:`, cleanupError)
+        })
+        throw error
+      }
     }
   }
 
@@ -111,5 +132,5 @@ export function createUploadService(env: Env): UploadService {
   const r2 = createR2Client(env.UPLOADS_BUCKET)
   const storage = new StorageService(r2, env.DOWNLOAD_URL_SECRET)
   const repository = createUploadsRepository(env)
-  return new UploadService(storage, repository, isLocalDevelopment(env))
+  return new UploadService(storage, repository)
 }

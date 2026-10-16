@@ -78,6 +78,14 @@ rejected anything with the wrong magic bytes), `analysis` is `null` and the
 upload/job still succeed as normal; the queue consumer still runs the same
 decode for real when it processes the job.
 
+A file name the user has already uploaded is accepted again: it is stored
+as a numbered copy (`logo.png` → `logo (2).png`, `logo (3).png` …; after
+ten copies a short id suffix), each upload with its own job. Until 2026-10-16 a
+repeated name returned `409 CONFLICT`, which the web app showed as the
+generic "Upload failed" (and Retry could never succeed). Uploads that are
+rejected (400/413/415/429) create no upload row, job, ledger entry or stored
+file.
+
 Optional `preset` field: `professional` creates the auto job with the
 Professional preset (same engine profile and billing as `POST /jobs` with
 `preset: "professional"`, below), so a user who chooses Professional before

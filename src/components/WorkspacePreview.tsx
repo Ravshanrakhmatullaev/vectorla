@@ -486,6 +486,11 @@ export function WorkspacePreview() {
                           <FailureIcon className="text-red-500" size={28} />
                           <p className="text-sm font-semibold text-[var(--ink)]">{failureTitle}</p>
                           <p className="max-w-[220px] text-xs text-[var(--ink-faint)]">{failureMessage}</p>
+                          {uploadState.kind === 'generic' && uploadState.requestId && (
+                            <p className="text-[11px] text-[var(--ink-muted)]">
+                              {t.workspace.referenceId}: <span className="font-mono select-all">{uploadState.requestId.slice(0, 8)}</span>
+                            </p>
+                          )}
                           <Button variant="secondary" size="sm" onClick={retry}>
                             <RefreshCcw size={14} />
                             {t.workspace.retry}

@@ -9,6 +9,9 @@ import { handleUploadsRoute } from './uploads'
 import { loadDecoderWasmModules } from '../testSupport/wasmTestFixtures'
 import { readSuccessBody, readErrorBody, TEST_REQUEST_ID } from '../testSupport/apiTestHelpers'
 import { MAX_UPLOAD_BODY_BYTES } from '../config'
+import { createUploadsRepository } from '../repositories/createUploadsRepository'
+import { createJobsRepository } from '../repositories/createJobsRepository'
+import { createCreditsRepository } from '../repositories/createCreditsRepository'
 import type { Env } from '../env'
 import type { R2Bucket, Queue } from '@cloudflare/workers-types'
 import type { ConversionQueueMessage } from '../integrations/queue'
@@ -38,6 +41,7 @@ function pngBytes(size = 16): ArrayBuffer {
 function createFakeBucket(shouldFail = false): R2Bucket {
   const store = new Map<string, ArrayBuffer>()
   return {
+    store,
     async put(key: string, value: ArrayBuffer) {
       if (shouldFail) throw new Error('simulated R2 outage')
       store.set(key, value)
@@ -99,8 +103,8 @@ async function run() {
   const res1 = await handleUploadsRoute(makeUploadRequest('route-user', { file: goodFile }), env, TEST_REQUEST_ID)
   assertEqual(res1.status, 201, 'status for valid upload')
   const body1 = await readSuccessBody<{
-    upload: { originalFileName: string; status: string }
-    job: { status: string; uploadId: string; retryCount: number }
+    upload: { id: string; originalFileName: string; status: string }
+    job: { id: string; status: string; uploadId: string; retryCount: number }
   }>(res1)
   assertEqual(body1.upload.originalFileName, 'route-test.png', 'response upload.originalFileName')
   assertEqual(body1.upload.status, 'stored', 'response upload.status')
@@ -141,20 +145,21 @@ async function run() {
   assertEqual((await readErrorBody(res2)).code, 'VALIDATION_ERROR', 'error code for missing file field')
   console.log('PASS: 400 Bad Request when "file" field is missing')
 
-  // Local development: a duplicate filename from the same user is no longer
-  // a conflict — re-uploading the same sample file while testing must not
-  // block the developer (createUploadsRepository caches one in-memory
-  // repository per env, so this route-level call does share state with res1
-  // above — see createUploadsRepository.ts). The name is disambiguated so
-  // the repository's real (userId, originalFileName) uniqueness guarantee,
-  // still fully active underneath, is never actually hit.
+  // Regression (staging bug, 2026-10-16): a repeated file name used to be a
+  // 409 outside development, shown by the web app as "Upload failed". The
+  // route now accepts it in every environment and stores a numbered copy, with
+  // its own upload and its own queued job (createUploadsRepository caches one
+  // in-memory repository per env, so these calls share state with res1 above).
+  const jobsRepo = createJobsRepository(env)
   const duplicateFile = new File([pngBytes()], 'route-test.png', { type: 'image/png' })
   const res3 = await handleUploadsRoute(makeUploadRequest('route-user', { file: duplicateFile }), env, TEST_REQUEST_ID)
-  assertEqual(res3.status, 201, 'a duplicate filename in development is accepted, not a conflict')
-  const body3 = await readSuccessBody<{ upload: { originalFileName: string } }>(res3)
-  assertTrue(body3.upload.originalFileName !== 'route-test.png', 'the duplicate name is disambiguated, not stored verbatim')
-  assertTrue(body3.upload.originalFileName.startsWith('route-test.png ('), 'the disambiguated name still starts with the original name')
-  console.log('PASS: a duplicate filename in development is accepted with a disambiguated name, not rejected as a conflict')
+  assertEqual(res3.status, 201, 'a repeated file name is accepted, not a 409')
+  const body3 = await readSuccessBody<{ upload: { id: string; originalFileName: string }; job: { id: string; uploadId: string; status: string } }>(res3)
+  assertEqual(body3.upload.originalFileName, 'route-test (2).png', 'the repeat is stored as a numbered copy')
+  assertEqual(body3.job.status, 'queued', 'the repeat gets its own queued job')
+  assertTrue(body3.job.id !== body1.job.id && body3.upload.id !== body1.upload.id, 'separate upload and job')
+  assertEqual((await jobsRepo.findByUploadId(body3.upload.id)).length, 1, 'exactly one job for the repeated upload')
+  console.log('PASS: a repeated file name is accepted with a numbered copy, its own upload and one queued job (no 409)')
 
   // 415 — unsupported mime type
   const badFile = new File([toArrayBuffer('x')], 'doc.pdf', { type: 'application/pdf' })
@@ -169,6 +174,34 @@ async function run() {
   assertEqual(res5.status, 413, 'status for oversized file')
   assertEqual((await readErrorBody(res5)).code, 'VALIDATION_ERROR', 'error code for oversized file')
   console.log('PASS: multipart plan spoof is ignored; the authenticated profile free-plan limit returns 413')
+
+  // Failed uploads cost nothing and leave nothing behind: no upload row, no
+  // job, no ledger entry, no stored file (the whole route, every rejection class).
+  const failUser = 'route-user-failures'
+  const failEnv = await createFakeEnv()
+  const failStore = (failEnv.UPLOADS_BUCKET as unknown as { store: Map<string, ArrayBuffer> }).store
+  const failBad: Array<[string, File | undefined, number]> = [
+    ['unsupported type', new File([toArrayBuffer('x')], 'doc.pdf', { type: 'application/pdf' }), 415],
+    ['wrong extension', new File([pngBytes()], 'pic.jpg', { type: 'image/png' }), 415],
+    ['content is not an image', new File([toArrayBuffer('#!/bin/sh')], 'shell.png', { type: 'image/png' }), 415],
+    ['empty file', new File([new ArrayBuffer(0)], 'empty.png', { type: 'image/png' }), 400],
+    ['over the plan limit', new File([pngBytes(6 * 1024 * 1024)], 'big.png', { type: 'image/png' }), 413],
+    ['no file field', undefined, 400],
+  ]
+  for (const [label, file, status] of failBad) {
+    const res = await handleUploadsRoute(makeUploadRequest(failUser, file ? { file } : {}), failEnv, TEST_REQUEST_ID)
+    assertEqual(res.status, status, `status for ${label}`)
+  }
+  assertEqual((await createUploadsRepository(failEnv).listAll()).length, 0, 'failed uploads create no upload rows')
+  assertEqual((await createJobsRepository(failEnv).findPageByUserId(failUser, 10, 0)).total, 0, 'failed uploads create no jobs')
+  assertEqual((await createCreditsRepository(failEnv).findTransactionsByUserId(failUser)).length, 0, 'failed uploads write no credit ledger entries')
+  assertEqual(failStore.size, 0, 'failed uploads store no files in R2')
+  // ...and a good upload afterwards still creates exactly one row, one job, one stored file.
+  const afterFail = await handleUploadsRoute(makeUploadRequest(failUser, { file: new File([pngBytes()], 'ok.png', { type: 'image/png' }) }), failEnv, TEST_REQUEST_ID)
+  assertEqual(afterFail.status, 201, 'a valid upload after the failures')
+  assertEqual((await createJobsRepository(failEnv).findPageByUserId(failUser, 10, 0)).total, 1, 'exactly one job after one good upload')
+  assertEqual(failStore.size, 1, 'exactly one stored file')
+  console.log('PASS: failed uploads create no row, job, ledger entry or stored file')
 
   // 405 — wrong HTTP method
   const res6 = await handleUploadsRoute(new Request('http://localhost/api/v1/uploads', { method: 'GET' }), env, TEST_REQUEST_ID)

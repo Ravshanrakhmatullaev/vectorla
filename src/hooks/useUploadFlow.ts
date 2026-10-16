@@ -19,7 +19,7 @@ export type UploadFlowState =
   | { status: 'uploading' }
   | { status: 'queued' | 'processing'; jobId: string }
   | { status: 'completed'; jobId: string; conversion: Conversion | null }
-  | { status: 'failed'; stage: 'upload' | 'processing'; kind: UploadFailureKind; message: string }
+  | { status: 'failed'; stage: 'upload' | 'processing'; kind: UploadFailureKind; message: string; requestId: string | null }
 
 export type TraceMode = 'quick' | 'professional'
 
@@ -53,6 +53,10 @@ export function useUploadFlow() {
     setTraceModeState(mode)
   }, [])
   const lastFileRef = useRef<File | null>(null)
+  // True from the moment an upload starts until its request settles. A second call
+  // in that window (double drop, double click) is ignored instead of creating a
+  // second upload, job and charge for the same file.
+  const uploadInFlightRef = useRef(false)
   const pollJobIdRef = useRef<string | null>(null)
   // The mode chosen before uploading is sent with the upload, so its job is
   // the one uploadImage auto-creates (see backend/API.md's POST /uploads).
@@ -63,7 +67,7 @@ export function useUploadFlow() {
 
   const applyJob = useCallback((job: Job) => {
     if (job.status === 'failed') {
-      setState({ status: 'failed', stage: 'processing', kind: classifyFailureMessage(job.errorMessage), message: job.errorMessage ?? 'Conversion failed' })
+      setState({ status: 'failed', stage: 'processing', kind: classifyFailureMessage(job.errorMessage), message: job.errorMessage ?? 'Conversion failed', requestId: null })
     } else if (job.status === 'completed') {
       setState({ status: 'completed', jobId: job.id, conversion: null })
     } else {
@@ -72,6 +76,8 @@ export function useUploadFlow() {
   }, [])
 
   const upload = useCallback(async (file: File) => {
+    if (uploadInFlightRef.current) return
+    uploadInFlightRef.current = true
     const mode = traceModeRef.current
     lastFileRef.current = file
     uploadIdRef.current = null
@@ -91,7 +97,9 @@ export function useUploadFlow() {
       setAnalysis(uploadAnalysis)
       applyJob(job)
     } catch (error) {
-      setState({ status: 'failed', stage: 'upload', kind: classifyError(error), message: describeError(error) })
+      setState({ status: 'failed', stage: 'upload', kind: classifyError(error), message: describeError(error), requestId: requestIdOf(error) })
+    } finally {
+      uploadInFlightRef.current = false
     }
   }, [applyJob, setTraceMode])
 
@@ -140,7 +148,7 @@ export function useUploadFlow() {
         jobIdsRef.current[mode] = job.id
         applyJob(job)
       } catch (error) {
-        setState({ status: 'failed', stage: 'processing', kind: classifyError(error), message: describeError(error) })
+        setState({ status: 'failed', stage: 'processing', kind: classifyError(error), message: describeError(error), requestId: requestIdOf(error) })
       }
     },
     [applyJob, setTraceMode, state],
@@ -189,9 +197,9 @@ export function useUploadFlow() {
           if (result.status === 'completed') {
             setState({ status: 'completed', jobId, conversion: result.conversion })
           } else if (result.status === 'failed') {
-            setState({ status: 'failed', stage: 'processing', kind: classifyFailureMessage(result.error), message: result.error ?? 'Conversion failed' })
+            setState({ status: 'failed', stage: 'processing', kind: classifyFailureMessage(result.error), message: result.error ?? 'Conversion failed', requestId: null })
           } else if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
-            setState({ status: 'failed', stage: 'processing', kind: 'generic', message: 'The conversion is taking too long. Please try again.' })
+            setState({ status: 'failed', stage: 'processing', kind: 'generic', message: 'The conversion is taking too long. Please try again.', requestId: null })
           } else {
             setState((previous) =>
               previous.status === result.status && 'jobId' in previous && previous.jobId === jobId ? previous : { status: result.status, jobId },
@@ -202,7 +210,7 @@ export function useUploadFlow() {
           consecutiveErrors++
           const kind = classifyError(error)
           if (kind !== 'generic' || consecutiveErrors >= MAX_CONSECUTIVE_POLL_ERRORS || Date.now() - startedAt > POLL_TIMEOUT_MS) {
-            setState({ status: 'failed', stage: 'processing', kind, message: describeError(error) })
+            setState({ status: 'failed', stage: 'processing', kind, message: describeError(error), requestId: requestIdOf(error) })
           }
         } finally {
           inFlight = false
@@ -234,6 +242,11 @@ function classifyError(error: unknown): UploadFailureKind {
 // only signal available here.
 function classifyFailureMessage(message: string | null | undefined): UploadFailureKind {
   return message && /credit/i.test(message) ? 'insufficient-credits' : 'generic'
+}
+
+/** The API's request id (also in the Worker's log line), for a failure the user reports. */
+function requestIdOf(error: unknown): string | null {
+  return error instanceof ApiError ? error.requestId : null
 }
 
 function describeError(error: unknown): string {

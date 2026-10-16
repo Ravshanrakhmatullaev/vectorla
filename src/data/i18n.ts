@@ -174,6 +174,8 @@ export interface Translation {
     statusFetchingResult: string
     statusFailedTitle: string
     uploadFailedTitle: string
+    /** Label before the short request id shown on a failure the user may report. */
+    referenceId: string
     authRequiredTitle: string
     insufficientCreditsTitle: string
     rateLimitedTitle: string
@@ -417,6 +419,7 @@ export const translations: Record<Language, Translation> = {
       statusFetchingResult: 'Fetching your result…',
       statusFailedTitle: 'Conversion failed',
       uploadFailedTitle: 'Upload failed',
+      referenceId: 'Reference ID',
       authRequiredTitle: 'Sign in required',
       insufficientCreditsTitle: 'Not enough credits',
       rateLimitedTitle: 'Too many requests',
@@ -816,6 +819,7 @@ export const translations: Record<Language, Translation> = {
       statusFetchingResult: 'Natija yuklab olinmoqda…',
       statusFailedTitle: 'Konvertatsiya muvaffaqiyatsiz tugadi',
       uploadFailedTitle: 'Yuklash muvaffaqiyatsiz tugadi',
+      referenceId: 'Murojaat kodi',
       authRequiredTitle: 'Tizimga kirish talab qilinadi',
       insufficientCreditsTitle: 'Kredit yetarli emas',
       rateLimitedTitle: 'So\'rovlar juda ko\'p',
@@ -1223,6 +1227,7 @@ export const translations: Record<Language, Translation> = {
       statusFetchingResult: 'Загрузка результата…',
       statusFailedTitle: 'Не удалось выполнить конвертацию',
       uploadFailedTitle: 'Не удалось загрузить файл',
+      referenceId: 'Код обращения',
       authRequiredTitle: 'Требуется вход в систему',
       insufficientCreditsTitle: 'Недостаточно кредитов',
       rateLimitedTitle: 'Слишком много запросов',
