@@ -478,6 +478,78 @@ editor. It deletes only those six accounts and aborts without deleting
 anything if any safety check fails. It was tested on Postgres 16 with the
 repo schema (happy path plus five failing checks).
 
+### Staging upload failure: "Upload failed" on a repeated file name (2026-10-16)
+
+**Report.** A user chose Quick Trace and uploaded the customer emblem; the
+workspace showed "Upload failed. The file could not be uploaded. Please try
+again." The account had 6 credits. (No account or row of that user was read
+for this investigation.)
+
+**Root cause.** `POST /api/v1/uploads` refused any file name the user had
+already uploaded with `409 CONFLICT` ("A file named "…" has already been
+uploaded"). The web app turns every non-specific API error into the generic
+upload message, and Retry re-sends the same file name, so the user could not get
+past it. Reproduced in Chromium on staging with the real emblem
+(`emblem-sanoat-radiatsiya-640.webp`, 126 KB, ICC profile) on a fresh account:
+the first upload returned 201 and traced; the second, same name, returned 409
+and showed exactly the reported text; Retry returned 409 again. The failed
+attempts created no upload row, job or charge (1 upload, 1 job, 1 debit,
+balance 9).
+
+**Why testing missed it.** Every automated account used a fresh file name. The
+route smoke tests ran with `ENVIRONMENT=development`, where the service renamed
+duplicates (an `allowDuplicateFilenames` flag that was only true locally), so
+the staging and production behavior was never exercised. The audit had listed
+it (ROADMAP "High: duplicate filenames get 409 in production") and the
+2026-10-09 table above recorded "duplicate name → 409" as a pass.
+
+**Not the cause.** The new mode selector: Quick sends no `preset` field, so the
+request is identical to the one before the redesign. There is no signed upload
+URL or direct R2 upload to fail: the browser posts multipart to the Worker, which
+writes to R2 (no R2 CORS involved). Authentication errors, 413, 415 and 429
+already have their own messages, and the emblem file itself uploads fine.
+Staging has no persisted Worker logs (`[observability]` is not enabled), so the
+user's own request could not be looked up afterwards; the reproduction and the
+code path are what identify the cause. Enabling Workers Logs and showing a
+request id (below) closes that gap.
+
+**Fix** (commit `bbf9106`). `UploadService` stores a repeated name as a numbered
+copy (`logo (2).png` … `(10)`, then a short id suffix) in every environment; the
+dev-only flag is gone. A request that loses the race for a name retries with the
+next free one; a name that can never be written fails cleanly and deletes the
+stored file. The database's `unique(user_id, original_file_name)` stays. The web
+app sends one upload at a time (a double drop sends one request) and a generic
+failure shows a "Reference ID" (the first 8 characters of the API request id,
+which is in the Worker's log line).
+
+**Regression tests** (`npm test`, run in CI): `UploadService.smoke-test.ts`
+(repeats, per user, dotted names, an existing "(2)", twelve repeats, four
+concurrent identical uploads, an unwinnable name, rejected uploads leave no
+row/file) and `routes/uploads.smoke-test.ts` (a repeat returns 201 with its
+own upload and one queued job; every rejection class creates no upload row, job,
+ledger entry or stored file). They fail on the previous code with the exact
+staging error (`ConflictError: A file named "logo.png" has already been uploaded`).
+
+**Staging verification** (Worker `vectorla-api-staging` version `ee6809b4`, web
+bundle `index-Tdxm8kH9.js`, real Chromium, two throwaway accounts):
+
+| Check | Result |
+|---|---|
+| Same real emblem name again (the failing case) | 201, stored as `… (2).webp`, traced to a real SVG (6,000 shapes, 46,475 anchor points), valid 1.1 MB SVG download, Quick charged 1 |
+| Third and fourth upload of the same name | `(3)` and `(4)`, one job and one charge each |
+| Retry after a network failure | The failed request charged nothing; Retry succeeded, one charge |
+| Double drop of one file | Exactly one upload request, one charge |
+| Reference ID | An empty file (API 400) shows "Reference ID: 4ff4d08d", equal to the response's request id |
+| Professional chosen before upload, same name twice | 2 jobs, charged 2 + 2, `(2)` copy |
+| Rejected: PDF, extension mismatch, non-image | 415 each, no charge |
+| Ledger | Per account: uploads = jobs = debits, balance = ledger sum, no job without a debit, no upload without a job, no job debited twice. Same aggregate check over the whole staging database: 0 violations |
+| Worker log (tail) | Upload 201 in 4.8 s wall, 112 ms CPU; the queue invocation `ok`, 4.4 s CPU; no exceptions |
+
+The four test accounts (tags `vectorla_e2e = 2026-10-16` and `2026-10-16b`) are
+banned (`banned_until = 2999-01-01`), not deleted (the connector holds `DELETE`
+for approval). `backend/supabase/cleanup/2026-10-16_staging_e2e_users.sql`
+removes exactly those four, with the same safety checks as the 2026-10-09 script.
+
 ### Memory on Cloudflare (staging, 2026-10-09)
 
 Method: a temporary, token-protected probe Worker
